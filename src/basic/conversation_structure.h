@@ -1,0 +1,9 @@
+#ifndef SINGLE_TURN_CONVERSATION_SRC_BASIC_CONVERSATION_STRUCTURE_H
+#define SINGLE_TURN_CONVERSATION_SRC_BASIC_CONVERSATION_STRUCTURE_H
+
+struct ConversationPair {
+  int post_id;
+  int response_id;
+};
+
+#endif
