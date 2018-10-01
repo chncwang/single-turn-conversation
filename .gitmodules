@@ -4,3 +4,6 @@
 [submodule "3rd/cxxopts"]
 	path = 3rd/cxxopts
 	url = https://github.com/jarro2783/cxxopts
+[submodule "3rd/inih"]
+	path = 3rd/inih
+	url = https://github.com/jtilly/inih

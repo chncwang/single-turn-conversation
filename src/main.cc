@@ -2,13 +2,26 @@
 #include "cxxopts.hpp"
 #include <algorithm>
 #include <random>
+#include "INIReader.h"
+#include <unordered_map>
+#include <string>
 
 using namespace std;
 using namespace cxxopts;
 
+void addWord(unordered_map<string, int> &word_counts, const std::string &word) {
+    auto it = word_counts.find(word);
+    if (it == word_counts.end()) {
+        word_counts.insert(make_pair<string, int>(word, 1));
+    } else {
+        it->second++;
+    }
+}
+
 int main(int argc, char *argv[]) {
     Options options("single-turn-conversation", "single turn conversation");
     options.add_options()
+        ("config", "config file name", cxxopts::value<string>())
         ("pair", "pair file name", cxxopts::value<string>())
         ("post", "post file name", cxxopts::value<string>())
         ("response", "response file name", cxxopts::value<string>());
@@ -47,6 +60,25 @@ int main(int argc, char *argv[]) {
 
     string response_filename = args["response"].as<string>();
     vector<vector<string>> response_sentences = readSentences(response_filename);
+
+    string configfilename = args["config"].as<string>();
+    INIReader ini_reader(configfilename);
+    if (ini_reader.ParseError() < 0) {
+        cerr << "parse ini failed" << endl;
+        abort();
+    }
+    int batchsize = ini_reader.Get("hyper", "batchsize", 0);
+    if (batchsize == 0) {
+        cout << "batchsize not found" << endl;
+        abort();
+    }
+
+    for (int epoch = 0; epoch<1000; ++epoch) {
+        std::shuffle(std::begin(train_conversation_pairs), std::end(train_conversation_pairs),
+                engine);
+        for (int batch_i = 0; batch_i < train_conversation_pairs.size() / batchsize; ++batch_i) {
+        }
+    }
 
     return 0;
 }
