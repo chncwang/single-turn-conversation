@@ -69,7 +69,8 @@ ELSE()
     ADD_DEFINITIONS(-DDEVICE_MEMORY=2)
 ENDIF()
 
-INCLUDE_DIRECTORIES(3rd/n3ldg/include 3rd/cxxopts/include src/basic)
+INCLUDE_DIRECTORIES(3rd/n3ldg/include 3rd/cxxopts/include
+    3rd/boost-algorithm/include src/basic)
 
 AUX_SOURCE_DIRECTORY(src SRCS)
 ADD_EXECUTABLE(main ${SRCS})
