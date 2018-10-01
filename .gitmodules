@@ -4,6 +4,3 @@
 [submodule "3rd/cxxopts"]
 	path = 3rd/cxxopts
 	url = https://github.com/jarro2783/cxxopts
-[submodule "3rd/boost-algorithm"]
-	path = 3rd/boost-algorithm
-	url = http://github.com/boostorg/algorithm

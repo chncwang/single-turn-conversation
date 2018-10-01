@@ -9,6 +9,11 @@ struct PostAndResponses {
 };
 
 struct ConversationPair {
+    ConversationPair() = default;
+
+    ConversationPair(int postid, int responseid) : post_id(postid),
+    response_id(responseid) {}
+
     int post_id;
     int response_id;
 };
