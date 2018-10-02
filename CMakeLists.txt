@@ -73,9 +73,10 @@ SET(Boost_USE_STATIC_LIBS OFF)
 SET(Boost_USE_MULTITHREADED ON)  
 SET(Boost_USE_STATIC_RUNTIME OFF) 
 FIND_PACKAGE(Boost REQUIRED COMPONENTS regex) 
-
 INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS}) 
-INCLUDE_DIRECTORIES(3rd/n3ldg/include 3rd/cxxopts/include src/basic)
+INCLUDE_DIRECTORIES(3rd/eigen)
+
+INCLUDE_DIRECTORIES(3rd/n3ldg/include 3rd/cxxopts/include src/basic src/encoder-decoder)
 INCLUDE_DIRECTORIES(3rd/inih)
 
 AUX_SOURCE_DIRECTORY(src SRCS)
