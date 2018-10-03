@@ -18,33 +18,50 @@ std::vector<Node*> toNodePointers(std::vector<std::shared_ptr<T>> &vec) {
 }
 
 struct GraphBuilder {
-    std::vector<std::shared_ptr<LookupNode>> lookups;
+    std::vector<std::shared_ptr<LookupNode>> input_lookups;
+    std::vector<std::shared_ptr<LookupNode>> output_lookups;
     DynamicLSTMBuilder encoder;
     DynamicLSTMBuilder decoder;
-    BucketNode bucket_node;
+    BucketNode hidden_bucket;
+    BucketNode word_bucket;
 
     void init(const HyperParams &hyper_params) {
-        bucket_node.init(hyper_params.hidden_dim, -1);
+        hidden_bucket.init(hyper_params.hidden_dim, -1);
+        word_bucket.init(hyper_params.word_dim, -1);
     }
 
     void forward(Graph &graph, const std::vector<std::string> &sentence,
             const HyperParams &hyper_params,
             ModelParams &model_params) {
         for (const std::string &word : sentence) {
-            std::shared_ptr<LookupNode> lookup(new LookupNode);
-            lookup->init(hyper_params.word_dim, hyper_params.dropout);
-            lookup->setParam(model_params.lookup_table);
-            lookups.push_back(lookup);
+            std::shared_ptr<LookupNode> input_lookup(new LookupNode);
+            input_lookup->init(hyper_params.word_dim, hyper_params.dropout);
+            input_lookup->setParam(model_params.lookup_table);
+            input_lookups.push_back(input_lookup);
         }
 
-        for (std::shared_ptr<LookupNode> &node : lookups) {
-            encoder.forward(graph, model_params.encoder_params, *node.get(), bucket_node,
-                    bucket_node);
+        for (std::shared_ptr<LookupNode> &node : input_lookups) {
+            encoder.forward(graph, model_params.encoder_params, *node, hidden_bucket,
+                    hidden_bucket);
         }
     }
 
-    void forwardDecoder(Graph &graph, int answer_len, const HyperParams &hyper_params,
+    void forwardDecoder(Graph &graph, const std::vector<std::string> &answer,
+            const HyperParams &hyper_params,
             ModelParams &model_params) {
+        decoder.forward(graph, model_params.decoder_params, word_bucket,
+                *encoder._hiddens.at(encoder._hiddens.size() - 1),
+                *encoder._cells.at(encoder._hiddens.size() - 1));
+
+        for (const std::string &word : answer) {
+            std::shared_ptr<LookupNode> output_lookup(new LookupNode);
+            output_lookup->init(hyper_params.word_dim, hyper_params.dropout);
+            output_lookup->setParam(model_params.lookup_table);
+            output_lookups.push_back(output_lookup);
+            decoder.forward(graph, model_params.decoder_params, *output_lookup, 
+                *encoder._hiddens.at(encoder._hiddens.size() - 1),
+                *encoder._cells.at(encoder._hiddens.size() - 1));
+        }
     }
 };
 
