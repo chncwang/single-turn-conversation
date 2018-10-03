@@ -37,17 +37,14 @@ struct GraphBuilder {
             lookups.push_back(lookup);
         }
 
-        encoder.init(sentence.size(), model_params.encoder_params);
-        std::vector<Node *> lookup_pointers = toNodePointers(lookups);
-        encoder.forward(graph, lookup_pointers, bucket_node, bucket_node);
+        for (std::shared_ptr<LookupNode> &node : lookups) {
+            encoder.forward(graph, model_params.encoder_params, *node.get(), bucket_node,
+                    bucket_node);
+        }
     }
 
     void forwardDecoder(Graph &graph, int answer_len, const HyperParams &hyper_params,
             ModelParams &model_params) {
-        std::vector<Node *> inputs;
-        inputs.push_back(&bucket_node);
-        for (int i = 1; i < answer_len + 1; ++i) {
-        }
     }
 };
 

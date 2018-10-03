@@ -6,6 +6,7 @@
 struct ModelParams {
     LookupTable lookup_table;
     LSTM1Params encoder_params;
+    LSTM1Params decoder_params;
 };
 
 #endif
