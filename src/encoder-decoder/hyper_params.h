@@ -2,7 +2,8 @@
 #define SINGLE_TURN_CONVERSATION_SRC_ENCODER_DECODER_HYPER_PARAMS_H
 
 struct HyperParams {
-    float word_dim;
+    int word_dim;
+    int hidden_dim;
     float dropout;
     float batchsize;
 };

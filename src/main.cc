@@ -38,6 +38,13 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
     }
     hyper_params.word_dim = word_dim;
 
+    int hidden_dim = ini_reader.GetInteger("hyper", "hidden_dim", 0);
+    if (hidden_dim <= 0) {
+        cerr << "hidden_dim wrong" << endl;
+        abort();
+    }
+    hyper_params.hidden_dim = hidden_dim;
+
     float dropout = ini_reader.GetReal("hyper", "dropout", 0.0);
     if (dropout <= 0.0f || dropout >=1.0f) {
         cerr << "dropout wrong" << endl;
