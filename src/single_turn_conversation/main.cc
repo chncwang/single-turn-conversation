@@ -1,14 +1,16 @@
-#include "data_manager.h"
 #include "cxxopts.hpp"
 #include <algorithm>
 #include <random>
 #include "INIReader.h"
 #include <unordered_map>
+#include <memory>
 #include <string>
 #include "N3LDG.h"
-#include "graph_builder.h"
-#include "hyper_params.h"
-#include "model_params.h"
+#include "single_turn_conversation/data_manager.h"
+#include "single_turn_conversation/def.h"
+#include "single_turn_conversation/encoder_decoder/graph_builder.h"
+#include "single_turn_conversation/encoder_decoder/hyper_params.h"
+#include "single_turn_conversation/encoder_decoder/model_params.h"
 
 using namespace std;
 using namespace cxxopts;
@@ -46,7 +48,7 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
     hyper_params.hidden_dim = hidden_dim;
 
     float dropout = ini_reader.GetReal("hyper", "dropout", 0.0);
-    if (dropout <= 0.0f || dropout >=1.0f) {
+    if (dropout < -1.0f || dropout >=1.0f) {
         cerr << "dropout wrong" << endl;
         abort();
     }
@@ -117,6 +119,7 @@ int main(int argc, char *argv[]) {
         addWord(word_counts, response_sentence);
     }
     word_counts[unknownkey] = 1000000;
+    word_counts[STOP_SYMBOL] = 1000000;
     Alphabet alphabet;
     alphabet.initial(word_counts, 0);
     ModelParams model_params;
@@ -128,14 +131,35 @@ int main(int argc, char *argv[]) {
         abort();
     }
     HyperParams hyper_params = parseHyperParams(ini_reader);
+    hyper_params.Print();
 
     model_params.lookup_table.initial(&alphabet, hyper_params.word_dim, true);
+    model_params.encoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
+    model_params.decoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
+    model_params.uni_params.initial(hyper_params.word_dim, hyper_params.hidden_dim);
 
     for (int epoch = 0; epoch<1000; ++epoch) {
-        std::shuffle(std::begin(train_conversation_pairs), std::end(train_conversation_pairs),
-                engine);
+        cout << "epoch:" << epoch << endl;
+        shuffle(std::begin(train_conversation_pairs), std::end(train_conversation_pairs), engine);
         for (int batch_i = 0; batch_i < train_conversation_pairs.size() / hyper_params.batchsize;
                 ++batch_i) {
+            cout << "batch_i:" << batch_i << endl;
+            Graph graph;
+            graph.train = true;
+            vector<shared_ptr<GraphBuilder>> graph_builders;
+            for (int i = 0; i < hyper_params.batchsize; ++i) {
+                shared_ptr<GraphBuilder> graph_builder(new GraphBuilder);
+                graph_builders.push_back(graph_builder);
+                graph_builder->init(hyper_params);
+                int instance_index = batch_i * hyper_params.batchsize + i;
+                int post_id = train_conversation_pairs.at(instance_index).post_id;
+                graph_builder->forward(graph, post_sentences.at(i), hyper_params, model_params);
+                int response_id = train_conversation_pairs.at(instance_index).response_id;
+                int response_size = response_sentences.at(response_id).size();
+                //graph_builder.forwardDecoder(graph, response_size, hyper_params, model_params);
+            }
+
+            graph.compute(false);
         }
     }
 

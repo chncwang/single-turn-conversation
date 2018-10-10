@@ -6,7 +6,7 @@
 #include <regex>
 #include <iostream>
 #include <utility>
-#include "conversation_structure.h"
+#include "single_turn_conversation/conversation_structure.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/regex.hpp>
 #include <boost/algorithm/string/regex.hpp>
