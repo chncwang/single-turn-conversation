@@ -57,11 +57,7 @@ struct GraphBuilder {
         for (int i = 0; i < answer_size + 1; ++i) {
             Node *last_input;
             if (i > 0) {
-                std::shared_ptr<LookupNode> output_lookup(new LookupNode);
-                output_lookup->init(hyper_params.word_dim, hyper_params.dropout);
-                output_lookup->setParam(model_params.lookup_table);
-                decoder_lookups.push_back(output_lookup);
-                last_input = output_lookup.get();
+                last_input = decoder_to_wordvectors.at(i - 1).get();
             } else {
                 last_input = &word_bucket;
             }

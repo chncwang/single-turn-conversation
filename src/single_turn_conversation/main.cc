@@ -156,10 +156,10 @@ int main(int argc, char *argv[]) {
                 graph_builder->forward(graph, post_sentences.at(i), hyper_params, model_params);
                 int response_id = train_conversation_pairs.at(instance_index).response_id;
                 int response_size = response_sentences.at(response_id).size();
-                //graph_builder.forwardDecoder(graph, response_size, hyper_params, model_params);
+                graph_builder->forwardDecoder(graph, response_size, hyper_params, model_params);
             }
 
-            graph.compute(false);
+            graph.compute();
         }
     }
 
