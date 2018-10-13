@@ -25,7 +25,9 @@ std::vector<PostAndResponses> readPostAndResponsesVector(const std::string &file
         PostAndResponses post_and_responses;
         post_and_responses.post_id = post_id;
         std::vector<std::string> strs2;
+//        std::cout << "response_ids:" << strs.at(1) << std::endl;
         boost::split(strs2, strs.at(1), boost::is_any_of(","));
+//        std::cout << "strs2 size:" << strs2.size() << std::endl;
         for (std::string &str : strs2) {
             post_and_responses.response_ids.push_back(stoi(str));
         }

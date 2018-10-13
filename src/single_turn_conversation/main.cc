@@ -15,6 +15,14 @@
 using namespace std;
 using namespace cxxopts;
 
+void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
+    model_params.decoder_params.exportAdaParams(model_update);
+    model_params.encoder_params.exportAdaParams(model_update);
+    model_params.hidden_to_wordvector_params.exportAdaParams(model_update);
+    model_params.wordvector_to_onehot_params.exportAdaParams(model_update);
+    model_params.lookup_table.exportAdaParams(model_update);
+}
+
 void addWord(unordered_map<string, int> &word_counts, const string &word) {
     auto it = word_counts.find(word);
     if (it == word_counts.end()) {
@@ -61,7 +69,22 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
     }
     hyper_params.batchsize = batchsize;
 
+    float learning_rate = ini_reader.GetReal("hyper", "learning_rate", 0.001f);
+    if (learning_rate <= 0.0f) {
+        cerr << "learning_rate wrong" << endl;
+        abort();
+    }
+    hyper_params.learning_rate = learning_rate;
+
     return hyper_params;
+}
+
+vector<int> toIds(const vector<string> &sentence, LookupTable &lookup_table) {
+    vector<int> ids;
+    for (const string &word : sentence) {
+        ids.push_back(lookup_table.getElemId(word));
+    }
+    return ids;
 }
 
 int main(int argc, char *argv[]) {
@@ -86,9 +109,9 @@ int main(int argc, char *argv[]) {
     vector<ConversationPair> train_conversation_pairs;
     int i = 0;
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
-        if (i < 100) {
+        if (i < 0) {
             dev_post_and_responses.push_back(post_and_responses);
-        } else if (i < 200) {
+        } else if (i < 0) {
             test_post_and_responses.push_back(post_and_responses);
         } else {
             train_post_and_responses.push_back(post_and_responses);
@@ -136,11 +159,17 @@ int main(int argc, char *argv[]) {
     model_params.lookup_table.initial(&alphabet, hyper_params.word_dim, true);
     model_params.encoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
     model_params.decoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
-    model_params.uni_params.initial(hyper_params.word_dim, hyper_params.hidden_dim);
+    model_params.hidden_to_wordvector_params.initial(hyper_params.word_dim,
+            hyper_params.hidden_dim);
+    model_params.wordvector_to_onehot_params.initial(alphabet.size(), hyper_params.word_dim);
 
-    for (int epoch = 0; epoch<1000; ++epoch) {
+    ModelUpdate model_update;
+    model_update._alpha = hyper_params.learning_rate;
+    exportToOptimizer(model_params, model_update);
+
+    for (int epoch = 0; epoch<100000; ++epoch) {
         cout << "epoch:" << epoch << endl;
-        shuffle(std::begin(train_conversation_pairs), std::end(train_conversation_pairs), engine);
+        shuffle(begin(train_conversation_pairs), end(train_conversation_pairs), engine);
         for (int batch_i = 0; batch_i < train_conversation_pairs.size() / hyper_params.batchsize;
                 ++batch_i) {
             cout << "batch_i:" << batch_i << endl;
@@ -160,6 +189,21 @@ int main(int argc, char *argv[]) {
             }
 
             graph.compute();
+
+            dtype loss_sum = 0.0f;
+            for (int i = 0; i < hyper_params.batchsize; ++i) {
+                int instance_index = batch_i * hyper_params.batchsize + i;
+                int response_id = train_conversation_pairs.at(instance_index).response_id;
+                vector<int> word_ids = toIds(response_sentences.at(response_id),
+                        model_params.lookup_table);
+                vector<Node*> result_nodes =
+                    toNodePointers(graph_builders.at(i)->wordvector_to_onehots);
+                dtype loss = MaxLogProbabilityLoss(result_nodes, word_ids, hyper_params.batchsize);
+                loss_sum += loss;
+            }
+            cout << "loss:" << loss_sum << endl;
+            graph.backward();
+            model_update.updateAdam(10.0f);
         }
     }
 
