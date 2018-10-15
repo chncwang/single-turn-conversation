@@ -8,6 +8,7 @@
 #include "N3LDG.h"
 #include "single_turn_conversation/data_manager.h"
 #include "single_turn_conversation/def.h"
+#include "single_turn_conversation/default_config.h"
 #include "single_turn_conversation/encoder_decoder/graph_builder.h"
 #include "single_turn_conversation/encoder_decoder/hyper_params.h"
 #include "single_turn_conversation/encoder_decoder/model_params.h"
@@ -23,6 +24,13 @@ void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
     model_params.lookup_table.exportAdaParams(model_update);
 }
 
+void exportToGradChecker(ModelParams &model_params, CheckGrad &grad_checker) {
+    grad_checker.add(model_params.lookup_table.E, "lookup_table");
+    grad_checker.add(model_params.hidden_to_wordvector_params.W, "hidden_to_wordvector_params W");
+    grad_checker.add(model_params.hidden_to_wordvector_params.b, "hidden_to_wordvector_params b");
+    grad_checker.add(model_params.encoder_params.cell_hidden.W, "encoder cell_hidden W");
+}
+
 void addWord(unordered_map<string, int> &word_counts, const string &word) {
     auto it = word_counts.find(word);
     if (it == word_counts.end()) {
@@ -36,6 +44,17 @@ void addWord(unordered_map<string, int> &word_counts, const vector<string> &sent
     for (const string &word : sentence) {
         addWord(word_counts, word);
     }
+}
+
+DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
+    DefaultConfig default_config;
+    default_config.check_grad = ini_reader.GetBoolean("default", "check_grad", false);
+    default_config.one_response = ini_reader.GetBoolean("default", "one_response", false);
+    default_config.max_sample_count = ini_reader.GetInteger("default", "max_sample_count",
+            1000000000);
+    default_config.dev_size = ini_reader.GetInteger("default", "dev_size", 0);
+    default_config.test_size = ini_reader.GetInteger("default", "test_size", 0);
+    return default_config;
 }
 
 HyperParams parseHyperParams(INIReader &ini_reader) {
@@ -87,7 +106,38 @@ vector<int> toIds(const vector<string> &sentence, LookupTable &lookup_table) {
     return ids;
 }
 
+void analyze(const vector<int> &results, const vector<int> &answers, Metric &metric) {
+    if (results.size() != answers.size()) {
+        cerr << "results size is not equal to answers size" << endl;
+        abort();
+    }
+
+    int size = results.size();
+    for (int i = 0; i < size; ++i) {
+        ++metric.overall_label_count;
+        if (results.at(i) == answers.at(i)) {
+            ++metric.correct_label_count;
+        }
+    }
+}
+
+void test(const HyperParams &hyper_params, ModelParams &model_params,
+        const vector<PostAndResponses> &post_and_responses_vector,
+        const vector<vector<string>> &post_sentences,
+        const vector<vector<string>> &response_sentences) {
+    for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
+        Graph graph;
+        graph.train = false;
+        GraphBuilder graph_builder;
+        graph_builder.init(hyper_params);
+        graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id), hyper_params,
+                model_params);
+    }
+}
+
 int main(int argc, char *argv[]) {
+    cout << "dtype size:" << sizeof(dtype) << endl;
+
     Options options("single-turn-conversation", "single turn conversation");
     options.add_options()
         ("config", "config file name", cxxopts::value<string>())
@@ -95,6 +145,23 @@ int main(int argc, char *argv[]) {
         ("post", "post file name", cxxopts::value<string>())
         ("response", "response file name", cxxopts::value<string>());
     auto args = options.parse(argc, argv);
+
+    string configfilename = args["config"].as<string>();
+    INIReader ini_reader(configfilename);
+    if (ini_reader.ParseError() < 0) {
+        cerr << "parse ini failed" << endl;
+        abort();
+    }
+
+    DefaultConfig &default_config = GetDefaultConfig();
+    default_config = parseDefaultConfig(ini_reader);
+    cout << "default_config:" << endl;
+    default_config.print();
+
+    HyperParams hyper_params = parseHyperParams(ini_reader);
+    cout << "hyper_params:" << endl;
+    hyper_params.print();
+
     string pair_filename = args["pair"].as<string>();
 
     vector<PostAndResponses> post_and_responses_vector = readPostAndResponsesVector(pair_filename);
@@ -109,9 +176,9 @@ int main(int argc, char *argv[]) {
     vector<ConversationPair> train_conversation_pairs;
     int i = 0;
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
-        if (i < 0) {
+        if (i < default_config.dev_size) {
             dev_post_and_responses.push_back(post_and_responses);
-        } else if (i < 0) {
+        } else if (i < default_config.dev_size + default_config.test_size) {
             test_post_and_responses.push_back(post_and_responses);
         } else {
             train_post_and_responses.push_back(post_and_responses);
@@ -147,15 +214,6 @@ int main(int argc, char *argv[]) {
     alphabet.initial(word_counts, 0);
     ModelParams model_params;
 
-    string configfilename = args["config"].as<string>();
-    INIReader ini_reader(configfilename);
-    if (ini_reader.ParseError() < 0) {
-        cerr << "parse ini failed" << endl;
-        abort();
-    }
-    HyperParams hyper_params = parseHyperParams(ini_reader);
-    hyper_params.Print();
-
     model_params.lookup_table.initial(&alphabet, hyper_params.word_dim, true);
     model_params.encoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
     model_params.decoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
@@ -167,22 +225,35 @@ int main(int argc, char *argv[]) {
     model_update._alpha = hyper_params.learning_rate;
     exportToOptimizer(model_params, model_update);
 
-    for (int epoch = 0; epoch<100000; ++epoch) {
+    CheckGrad grad_checker;
+    if (default_config.check_grad) {
+        exportToGradChecker(model_params, grad_checker);
+    }
+
+    dtype last_loss_sum = 1e10f;
+
+    for (int epoch = 0; ; ++epoch) {
         cout << "epoch:" << epoch << endl;
         shuffle(begin(train_conversation_pairs), end(train_conversation_pairs), engine);
+        unique_ptr<Metric> metric = unique_ptr<Metric>(new Metric);
+        dtype loss_sum = 0.0f;
+
         for (int batch_i = 0; batch_i < train_conversation_pairs.size() / hyper_params.batchsize;
                 ++batch_i) {
             cout << "batch_i:" << batch_i << endl;
             Graph graph;
             graph.train = true;
             vector<shared_ptr<GraphBuilder>> graph_builders;
+            vector<ConversationPair> conversation_pair_in_batch;
             for (int i = 0; i < hyper_params.batchsize; ++i) {
                 shared_ptr<GraphBuilder> graph_builder(new GraphBuilder);
                 graph_builders.push_back(graph_builder);
                 graph_builder->init(hyper_params);
                 int instance_index = batch_i * hyper_params.batchsize + i;
                 int post_id = train_conversation_pairs.at(instance_index).post_id;
-                graph_builder->forward(graph, post_sentences.at(i), hyper_params, model_params);
+                conversation_pair_in_batch.push_back(train_conversation_pairs.at(instance_index));
+                graph_builder->forward(graph, post_sentences.at(post_id), hyper_params,
+                        model_params);
                 int response_id = train_conversation_pairs.at(instance_index).response_id;
                 int response_size = response_sentences.at(response_id).size();
                 graph_builder->forwardDecoder(graph, response_size, hyper_params, model_params);
@@ -190,7 +261,6 @@ int main(int argc, char *argv[]) {
 
             graph.compute();
 
-            dtype loss_sum = 0.0f;
             for (int i = 0; i < hyper_params.batchsize; ++i) {
                 int instance_index = batch_i * hyper_params.batchsize + i;
                 int response_id = train_conversation_pairs.at(instance_index).response_id;
@@ -198,13 +268,52 @@ int main(int argc, char *argv[]) {
                         model_params.lookup_table);
                 vector<Node*> result_nodes =
                     toNodePointers(graph_builders.at(i)->wordvector_to_onehots);
-                dtype loss = MaxLogProbabilityLoss(result_nodes, word_ids, hyper_params.batchsize);
-                loss_sum += loss;
+                auto result = MaxLogProbabilityLoss(result_nodes,
+                        word_ids, hyper_params.batchsize);
+                loss_sum += result.first;
+
+                analyze(result.second, word_ids, *metric);
             }
             cout << "loss:" << loss_sum << endl;
+            metric->print();
+
             graph.backward();
+
+            if (default_config.check_grad) {
+                auto loss_function = [&](const ConversationPair &conversation_pair) -> dtype {
+                    GraphBuilder graph_builder;
+                    graph_builder.init(hyper_params);
+                    Graph graph;
+                    graph.train = true;
+
+                    graph_builder.forward(graph, post_sentences.at(conversation_pair.post_id),
+                            hyper_params, model_params);
+                    int response_size = response_sentences.at(
+                            conversation_pair.response_id).size();
+                    graph_builder.forwardDecoder(graph, response_size, hyper_params, model_params);
+
+                    graph.compute();
+
+                    vector<int> word_ids = toIds(response_sentences.at(
+                                conversation_pair.response_id), model_params.lookup_table);
+                    vector<Node*> result_nodes = toNodePointers(
+                            graph_builder.wordvector_to_onehots);
+                    return MaxLogProbabilityLoss(result_nodes, word_ids, 1).first;
+                };
+                grad_checker.check<ConversationPair>(loss_function, conversation_pair_in_batch,
+                        "");
+            }
+
             model_update.updateAdam(10.0f);
         }
+
+        if (last_loss_sum < loss_sum) {
+            model_update._alpha *= 0.5;
+            cout << "learning_rate:" << model_update._alpha << endl;
+        }
+
+        last_loss_sum = loss_sum;
+
     }
 
     return 0;

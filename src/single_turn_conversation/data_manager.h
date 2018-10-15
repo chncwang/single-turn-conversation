@@ -7,14 +7,18 @@
 #include <iostream>
 #include <utility>
 #include "single_turn_conversation/conversation_structure.h"
+#include "single_turn_conversation/def.h"
+#include "single_turn_conversation/default_config.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/regex.hpp>
 #include <boost/algorithm/string/regex.hpp>
 
 std::vector<PostAndResponses> readPostAndResponsesVector(const std::string &filename) {
+    DefaultConfig &default_config = GetDefaultConfig();
     std::vector<PostAndResponses> results;
     std::string line;
     std::ifstream ifs(filename);
+    int i = 0;
     while (std::getline(ifs, line)) {
         std::vector<std::string> strs;
         boost::split(strs, line, boost::is_any_of(":"));
@@ -25,13 +29,17 @@ std::vector<PostAndResponses> readPostAndResponsesVector(const std::string &file
         PostAndResponses post_and_responses;
         post_and_responses.post_id = post_id;
         std::vector<std::string> strs2;
-//        std::cout << "response_ids:" << strs.at(1) << std::endl;
         boost::split(strs2, strs.at(1), boost::is_any_of(","));
-//        std::cout << "strs2 size:" << strs2.size() << std::endl;
         for (std::string &str : strs2) {
             post_and_responses.response_ids.push_back(stoi(str));
+            if (default_config.one_response) {
+                break;
+            }
         }
         results.push_back(std::move(post_and_responses));
+        if (++i >= default_config.max_sample_count) {
+            break;
+        }
     }
 
     return results;
@@ -88,6 +96,7 @@ std::vector<std::vector<std::string>> readSentences(const std::string &filename)
         const std::string &sentence = strs.at(1);
         std::vector<std::string> words;
         boost::split(words, sentence, boost::is_any_of(" "));
+        words.push_back(STOP_SYMBOL);
         results.push_back(words);
         ++i;
     }

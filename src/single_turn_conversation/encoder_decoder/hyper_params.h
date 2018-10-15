@@ -10,7 +10,7 @@ struct HyperParams {
     int batchsize;
     float learning_rate;
 
-    void Print() {
+    void print() const {
         std::cout << "word_dim:" << word_dim << std::endl
             << "hidden_dim:" << hidden_dim << std::endl
             << "dropout:" << dropout << std::endl
