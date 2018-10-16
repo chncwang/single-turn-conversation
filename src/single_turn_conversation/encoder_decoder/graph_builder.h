@@ -53,6 +53,11 @@ struct GraphBuilder {
 
     void forwardDecoder(Graph &graph, int answer_size, const HyperParams &hyper_params,
             ModelParams &model_params) {
+        if (!graph.train) {
+            std::cerr << "train should be true" << std::endl;
+            abort();
+        }
+
         for (int i = 0; i < answer_size; ++i) {
             Node *last_input;
             if (i > 0) {
@@ -75,6 +80,42 @@ struct GraphBuilder {
             wordvector_to_onehot->setParam(model_params.lookup_table.E);
             wordvector_to_onehot->forward(graph, *decoder_to_wordvector);
             wordvector_to_onehots.push_back(wordvector_to_onehot);
+        }
+    }
+
+    void forwardDecoderUsingBeamSearch(Graph &graph, int beam_size,
+            const HyperParams &hyper_params,
+            ModelParams &model_params) {
+        if (graph.train) {
+            std::cerr << "train should be false" << std::endl;
+            abort();
+        }
+
+        for (int i = 0;; ++i) {
+            Node *last_input;
+            if (i > 0) {
+                last_input = decoder_to_wordvectors.at(i - 1).get();
+            } else {
+                last_input = &word_bucket;
+            }
+
+            decoder.forward(graph, model_params.decoder_params, *last_input, 
+                *encoder._hiddens.at(encoder._hiddens.size() - 1),
+                *encoder._cells.at(encoder._hiddens.size() - 1));
+
+            std::shared_ptr<LinearNode> decoder_to_wordvector(new LinearNode);
+            decoder_to_wordvector->init(hyper_params.word_dim, -1);
+            decoder_to_wordvector->setParam(model_params.hidden_to_wordvector_params);
+            decoder_to_wordvector->forward(graph, *decoder._hiddens.at(i));
+            decoder_to_wordvectors.push_back(decoder_to_wordvector);
+
+            std::shared_ptr<LinearWordVectorNode> wordvector_to_onehot(new LinearWordVectorNode);
+            wordvector_to_onehot->init(model_params.lookup_table.nVSize, -1);
+            wordvector_to_onehot->setParam(model_params.lookup_table.E);
+            wordvector_to_onehot->forward(graph, *decoder_to_wordvector);
+            wordvector_to_onehots.push_back(wordvector_to_onehot);
+
+            graph.compute();
         }
     }
 };

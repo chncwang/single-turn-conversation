@@ -106,6 +106,20 @@ vector<int> toIds(const vector<string> &sentence, LookupTable &lookup_table) {
     return ids;
 }
 
+void print(const vector<int> &word_ids, const LookupTable &lookup_table) {
+    for (int word_id : word_ids) {
+        cout << lookup_table.elems->from_id(word_id) << " ";
+    }
+    cout << endl;
+}
+
+void print(const vector<string> &words) {
+    for (const string &w : words) {
+        cout << w << " ";
+    }
+    cout << endl;
+}
+
 void analyze(const vector<int> &results, const vector<int> &answers, Metric &metric) {
     if (results.size() != answers.size()) {
         cerr << "results size is not equal to answers size" << endl;
@@ -273,6 +287,18 @@ int main(int argc, char *argv[]) {
                 loss_sum += result.first;
 
                 analyze(result.second, word_ids, *metric);
+
+                unique_ptr<Metric> local_metric(unique_ptr<Metric>(new Metric));
+                analyze(result.second, word_ids, *local_metric);
+                if (local_metric->getAccuracy() < 1.0f) {
+                    int post_id = train_conversation_pairs.at(instance_index).post_id;
+                    cout << "post:" << endl;
+                    print(post_sentences.at(post_id));
+                    cout << "golden answer:" << endl;
+                    print(word_ids, model_params.lookup_table);
+                    cout << "output:" << endl;
+                    print(result.second, model_params.lookup_table);
+                }
             }
             cout << "loss:" << loss_sum << endl;
             metric->print();
