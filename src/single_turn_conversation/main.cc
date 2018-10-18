@@ -258,6 +258,7 @@ int main(int argc, char *argv[]) {
             Graph graph;
             graph.train = true;
             vector<shared_ptr<GraphBuilder>> graph_builders;
+            vector<shared_ptr<DecoderComponents>> decoder_components_vector;
             vector<ConversationPair> conversation_pair_in_batch;
             for (int i = 0; i < hyper_params.batchsize; ++i) {
                 shared_ptr<GraphBuilder> graph_builder(new GraphBuilder);
@@ -269,8 +270,11 @@ int main(int argc, char *argv[]) {
                 graph_builder->forward(graph, post_sentences.at(post_id), hyper_params,
                         model_params);
                 int response_id = train_conversation_pairs.at(instance_index).response_id;
-                int response_size = response_sentences.at(response_id).size();
-                graph_builder->forwardDecoder(graph, response_size, hyper_params, model_params);
+                shared_ptr<DecoderComponents> decoder_components(new DecoderComponents);
+                decoder_components_vector.push_back(decoder_components);
+                graph_builder->forwardDecoder(graph, *decoder_components,
+                        response_sentences.at(response_id),
+                        hyper_params, model_params);
             }
 
             graph.compute();
@@ -281,7 +285,7 @@ int main(int argc, char *argv[]) {
                 vector<int> word_ids = toIds(response_sentences.at(response_id),
                         model_params.lookup_table);
                 vector<Node*> result_nodes =
-                    toNodePointers(graph_builders.at(i)->wordvector_to_onehots);
+                    toNodePointers(decoder_components_vector.at(i)->wordvector_to_onehots);
                 auto result = MaxLogProbabilityLoss(result_nodes,
                         word_ids, hyper_params.batchsize);
                 loss_sum += result.first;
@@ -314,16 +318,18 @@ int main(int argc, char *argv[]) {
 
                     graph_builder.forward(graph, post_sentences.at(conversation_pair.post_id),
                             hyper_params, model_params);
-                    int response_size = response_sentences.at(
-                            conversation_pair.response_id).size();
-                    graph_builder.forwardDecoder(graph, response_size, hyper_params, model_params);
+
+                    DecoderComponents decoder_components;
+                    graph_builder.forwardDecoder(graph, decoder_components,
+                            response_sentences.at(conversation_pair.response_id),
+                            hyper_params, model_params);
 
                     graph.compute();
 
                     vector<int> word_ids = toIds(response_sentences.at(
                                 conversation_pair.response_id), model_params.lookup_table);
                     vector<Node*> result_nodes = toNodePointers(
-                            graph_builder.wordvector_to_onehots);
+                            decoder_components.wordvector_to_onehots);
                     return MaxLogProbabilityLoss(result_nodes, word_ids, 1).first;
                 };
                 grad_checker.check<ConversationPair>(loss_function, conversation_pair_in_batch,
