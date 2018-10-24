@@ -7,14 +7,16 @@ struct HyperParams {
     int word_dim;
     int hidden_dim;
     float dropout;
-    int batchsize;
+    int batch_size;
+    int beam_size;
     float learning_rate;
 
     void print() const {
         std::cout << "word_dim:" << word_dim << std::endl
             << "hidden_dim:" << hidden_dim << std::endl
             << "dropout:" << dropout << std::endl
-            << "batchsize:" << batchsize << std::endl
+            << "batch_size:" << batch_size << std::endl
+            << "beam_size:" << beam_size << std::endl
             << "learning_rate:" << learning_rate << std::endl;
     }
 };

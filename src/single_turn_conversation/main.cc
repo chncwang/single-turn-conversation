@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <memory>
 #include <string>
+#include <boost/format.hpp>
 #include "N3LDG.h"
 #include "single_turn_conversation/data_manager.h"
 #include "single_turn_conversation/def.h"
@@ -15,6 +16,7 @@
 
 using namespace std;
 using namespace cxxopts;
+using boost::format;
 
 void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
     model_params.decoder_params.exportAdaParams(model_update);
@@ -50,6 +52,7 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
     DefaultConfig default_config;
     default_config.check_grad = ini_reader.GetBoolean("default", "check_grad", false);
     default_config.one_response = ini_reader.GetBoolean("default", "one_response", false);
+    default_config.learn_test = ini_reader.GetBoolean("default", "learn_test", false);
     default_config.max_sample_count = ini_reader.GetInteger("default", "max_sample_count",
             1000000000);
     default_config.dev_size = ini_reader.GetInteger("default", "dev_size", 0);
@@ -81,12 +84,19 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
     }
     hyper_params.dropout = dropout;
 
-    int batchsize = ini_reader.GetInteger("hyper", "batchsize", 0);
-    if (batchsize == 0) {
-        cerr << "batchsize not found" << endl;
+    int batch_size = ini_reader.GetInteger("hyper", "batch_size", 0);
+    if (batch_size == 0) {
+        cerr << "batch_size not found" << endl;
         abort();
     }
-    hyper_params.batchsize = batchsize;
+    hyper_params.batch_size = batch_size;
+
+    int beam_size = ini_reader.GetInteger("hyper", "beam_size", 0);
+    if (beam_size == 0) {
+        cerr << "beam_size not found" << endl;
+        abort();
+    }
+    hyper_params.beam_size = beam_size;
 
     float learning_rate = ini_reader.GetReal("hyper", "learning_rate", 0.001f);
     if (learning_rate <= 0.0f) {
@@ -113,6 +123,14 @@ void print(const vector<int> &word_ids, const LookupTable &lookup_table) {
     cout << endl;
 }
 
+void print(const vector<WordIdAndProbability> &word_ids_with_probability_vector,
+        const LookupTable &lookup_table) {
+    for (const WordIdAndProbability &ids : word_ids_with_probability_vector) {
+        cout << format("%1%(%2%) ") % lookup_table.elems->from_id(ids.word_id) % ids.probability;
+    }
+    cout << endl;
+}
+
 void print(const vector<string> &words) {
     for (const string &w : words) {
         cout << w << " ";
@@ -135,7 +153,11 @@ void analyze(const vector<int> &results, const vector<int> &answers, Metric &met
     }
 }
 
-void test(const HyperParams &hyper_params, ModelParams &model_params,
+void saveModel(const ModelParams &model_params) {
+
+}
+
+void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         const vector<PostAndResponses> &post_and_responses_vector,
         const vector<vector<string>> &post_sentences,
         const vector<vector<string>> &response_sentences) {
@@ -146,6 +168,17 @@ void test(const HyperParams &hyper_params, ModelParams &model_params,
         graph_builder.init(hyper_params);
         graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id), hyper_params,
                 model_params);
+        std::vector<DecoderComponents> decoder_components_vector;
+        decoder_components_vector.resize(hyper_params.beam_size);
+        auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
+                hyper_params, model_params);
+        const std::vector<WordIdAndProbability> &word_ids = pair.first;
+        cout << "post:" << endl;
+        print(post_sentences.at(post_and_responses.post_id));
+        cout << "response:" << endl;
+        print(word_ids, model_params.lookup_table);
+        dtype probability = pair.second;
+        cout << format("probability:%1%") % probability << endl;
     }
 }
 
@@ -190,16 +223,25 @@ int main(int argc, char *argv[]) {
     vector<ConversationPair> train_conversation_pairs;
     int i = 0;
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
-        if (i < default_config.dev_size) {
-            dev_post_and_responses.push_back(post_and_responses);
-        } else if (i < default_config.dev_size + default_config.test_size) {
-            test_post_and_responses.push_back(post_and_responses);
-        } else {
+        auto add_to_train = [&]() {
             train_post_and_responses.push_back(post_and_responses);
             vector<ConversationPair> conversation_pairs = toConversationPairs(post_and_responses);
             for (ConversationPair &conversation_pair : conversation_pairs) {
                 train_conversation_pairs.push_back(std::move(conversation_pair));
             }
+        };
+        if (i < default_config.dev_size) {
+            dev_post_and_responses.push_back(post_and_responses);
+            if (default_config.learn_test) {
+                add_to_train();
+            }
+        } else if (i < default_config.dev_size + default_config.test_size) {
+            test_post_and_responses.push_back(post_and_responses);
+            if (default_config.learn_test) {
+                add_to_train();
+            }
+        } else {
+            add_to_train();
         }
         ++i;
     }
@@ -252,7 +294,7 @@ int main(int argc, char *argv[]) {
         unique_ptr<Metric> metric = unique_ptr<Metric>(new Metric);
         dtype loss_sum = 0.0f;
 
-        for (int batch_i = 0; batch_i < train_conversation_pairs.size() / hyper_params.batchsize;
+        for (int batch_i = 0; batch_i < train_conversation_pairs.size() / hyper_params.batch_size;
                 ++batch_i) {
             cout << "batch_i:" << batch_i << endl;
             Graph graph;
@@ -260,11 +302,11 @@ int main(int argc, char *argv[]) {
             vector<shared_ptr<GraphBuilder>> graph_builders;
             vector<shared_ptr<DecoderComponents>> decoder_components_vector;
             vector<ConversationPair> conversation_pair_in_batch;
-            for (int i = 0; i < hyper_params.batchsize; ++i) {
+            for (int i = 0; i < hyper_params.batch_size; ++i) {
                 shared_ptr<GraphBuilder> graph_builder(new GraphBuilder);
                 graph_builders.push_back(graph_builder);
                 graph_builder->init(hyper_params);
-                int instance_index = batch_i * hyper_params.batchsize + i;
+                int instance_index = batch_i * hyper_params.batch_size + i;
                 int post_id = train_conversation_pairs.at(instance_index).post_id;
                 conversation_pair_in_batch.push_back(train_conversation_pairs.at(instance_index));
                 graph_builder->forward(graph, post_sentences.at(post_id), hyper_params,
@@ -279,15 +321,15 @@ int main(int argc, char *argv[]) {
 
             graph.compute();
 
-            for (int i = 0; i < hyper_params.batchsize; ++i) {
-                int instance_index = batch_i * hyper_params.batchsize + i;
+            for (int i = 0; i < hyper_params.batch_size; ++i) {
+                int instance_index = batch_i * hyper_params.batch_size + i;
                 int response_id = train_conversation_pairs.at(instance_index).response_id;
                 vector<int> word_ids = toIds(response_sentences.at(response_id),
                         model_params.lookup_table);
                 vector<Node*> result_nodes =
                     toNodePointers(decoder_components_vector.at(i)->wordvector_to_onehots);
                 auto result = MaxLogProbabilityLoss(result_nodes,
-                        word_ids, hyper_params.batchsize);
+                        word_ids, hyper_params.batch_size);
                 loss_sum += result.first;
 
                 analyze(result.second, word_ids, *metric);
@@ -339,13 +381,19 @@ int main(int argc, char *argv[]) {
             model_update.updateAdam(10.0f);
         }
 
+        cout << "dev:" << endl;
+        processTestPosts(hyper_params, model_params, dev_post_and_responses, post_sentences,
+                response_sentences);
+        cout << "test:" << endl;
+        processTestPosts(hyper_params, model_params, test_post_and_responses, post_sentences,
+                response_sentences);
+
         if (last_loss_sum < loss_sum) {
-            model_update._alpha *= 0.5;
+            model_update._alpha *= 0.875;
             cout << "learning_rate:" << model_update._alpha << endl;
         }
 
         last_loss_sum = loss_sum;
-
     }
 
     return 0;
