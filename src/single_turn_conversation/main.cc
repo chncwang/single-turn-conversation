@@ -1,9 +1,14 @@
 #include "cxxopts.hpp"
+#include <unistd.h>
+#include <chrono>
 #include <algorithm>
 #include <random>
 #include "INIReader.h"
 #include <unordered_map>
 #include <memory>
+#include <iomanip>
+#include <ctime>
+#include <sstream>
 #include <string>
 #include <boost/format.hpp>
 #include "N3LDG.h"
@@ -22,7 +27,6 @@ void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
     model_params.decoder_params.exportAdaParams(model_update);
     model_params.encoder_params.exportAdaParams(model_update);
     model_params.hidden_to_wordvector_params.exportAdaParams(model_update);
-    model_params.wordvector_to_onehot_params.exportAdaParams(model_update);
     model_params.lookup_table.exportAdaParams(model_update);
 }
 
@@ -50,13 +54,34 @@ void addWord(unordered_map<string, int> &word_counts, const vector<string> &sent
 
 DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
     DefaultConfig default_config;
-    default_config.check_grad = ini_reader.GetBoolean("default", "check_grad", false);
-    default_config.one_response = ini_reader.GetBoolean("default", "one_response", false);
-    default_config.learn_test = ini_reader.GetBoolean("default", "learn_test", false);
-    default_config.max_sample_count = ini_reader.GetInteger("default", "max_sample_count",
+    static const string SECTION = "default";
+    default_config.pair_file = ini_reader.Get(SECTION, "pair_file", "");
+    if (default_config.pair_file.empty()) {
+        cerr << "pair file empty" << endl;
+        abort();
+    }
+
+    default_config.post_file = ini_reader.Get(SECTION, "post_file", "");
+    if (default_config.post_file.empty()) {
+        cerr << "post file empty" << endl;
+        abort();
+    }
+
+    default_config.response_file = ini_reader.Get(SECTION, "response_file", "");
+    if (default_config.post_file.empty()) {
+        cerr << "post file empty" << endl;
+        abort();
+    }
+
+    default_config.check_grad = ini_reader.GetBoolean(SECTION, "check_grad", false);
+    default_config.one_response = ini_reader.GetBoolean(SECTION, "one_response", false);
+    default_config.learn_test = ini_reader.GetBoolean(SECTION, "learn_test", false);
+    default_config.max_sample_count = ini_reader.GetInteger(SECTION, "max_sample_count",
             1000000000);
-    default_config.dev_size = ini_reader.GetInteger("default", "dev_size", 0);
-    default_config.test_size = ini_reader.GetInteger("default", "test_size", 0);
+    default_config.dev_size = ini_reader.GetInteger(SECTION, "dev_size", 0);
+    default_config.test_size = ini_reader.GetInteger(SECTION, "test_size", 0);
+    default_config.output_model_file_prefix = ini_reader.Get(SECTION, "output_model_file_prefix",
+            "");
     return default_config;
 }
 
@@ -153,8 +178,25 @@ void analyze(const vector<int> &results, const vector<int> &answers, Metric &met
     }
 }
 
-void saveModel(const ModelParams &model_params) {
+void saveModel(const ModelParams &model_params, const string &filename_prefix) {
+    auto t = time(nullptr);
+    auto tm = *localtime(&t);
+    ostringstream oss;
+    oss << put_time(&tm, "%d-%m-%Y-%H-%M-%S");
+    string filename = filename_prefix + oss.str();
 
+    ofstream os(filename.c_str(), ios_base::out | ios::binary);
+    if (os.is_open()) {
+        model_params.lookup_table.save(os);
+        model_params.encoder_params.save(os);
+        model_params.decoder_params.save(os);
+        model_params.hidden_to_wordvector_params.save(os);
+    } else {
+        cerr << format("failed to open os, error when saveing %1%") % filename << endl;
+        abort();
+    }
+
+    os.close();
 }
 
 void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
@@ -180,6 +222,9 @@ void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params
         dtype probability = pair.second;
         cout << format("probability:%1%") % probability << endl;
     }
+
+    DefaultConfig &config = GetDefaultConfig();
+    saveModel(model_params, config.output_model_file_prefix);
 }
 
 int main(int argc, char *argv[]) {
@@ -187,10 +232,7 @@ int main(int argc, char *argv[]) {
 
     Options options("single-turn-conversation", "single turn conversation");
     options.add_options()
-        ("config", "config file name", cxxopts::value<string>())
-        ("pair", "pair file name", cxxopts::value<string>())
-        ("post", "post file name", cxxopts::value<string>())
-        ("response", "response file name", cxxopts::value<string>());
+        ("config", "config file name", cxxopts::value<string>());
     auto args = options.parse(argc, argv);
 
     string configfilename = args["config"].as<string>();
@@ -209,9 +251,8 @@ int main(int argc, char *argv[]) {
     cout << "hyper_params:" << endl;
     hyper_params.print();
 
-    string pair_filename = args["pair"].as<string>();
-
-    vector<PostAndResponses> post_and_responses_vector = readPostAndResponsesVector(pair_filename);
+    vector<PostAndResponses> post_and_responses_vector = readPostAndResponsesVector(
+            default_config.pair_file);
     cout << "post_and_responses_vector size:" << post_and_responses_vector.size() << endl;
 
     const int SEED = 0;
@@ -249,11 +290,9 @@ int main(int argc, char *argv[]) {
     cout << "train size:" << train_conversation_pairs.size() << " dev size:" <<
         dev_post_and_responses.size() << " test size:" << test_post_and_responses.size() << endl;
 
-    string post_filename = args["post"].as<string>();
-    vector<vector<string>> post_sentences = readSentences(post_filename);
+    vector<vector<string>> post_sentences = readSentences(default_config.post_file);
 
-    string response_filename = args["response"].as<string>();
-    vector<vector<string>> response_sentences = readSentences(response_filename);
+    vector<vector<string>> response_sentences = readSentences(default_config.response_file);
 
     unordered_map<string, int> word_counts;
     for (const ConversationPair &conversation_pair : train_conversation_pairs) {
@@ -275,7 +314,6 @@ int main(int argc, char *argv[]) {
     model_params.decoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
     model_params.hidden_to_wordvector_params.initial(hyper_params.word_dim,
             hyper_params.hidden_dim);
-    model_params.wordvector_to_onehot_params.initial(alphabet.size(), hyper_params.word_dim);
 
     ModelUpdate model_update;
     model_update._alpha = hyper_params.learning_rate;
@@ -293,6 +331,8 @@ int main(int argc, char *argv[]) {
         shuffle(begin(train_conversation_pairs), end(train_conversation_pairs), engine);
         unique_ptr<Metric> metric = unique_ptr<Metric>(new Metric);
         dtype loss_sum = 0.0f;
+
+        auto last_timestamp = chrono::steady_clock::now();
 
         for (int batch_i = 0; batch_i < train_conversation_pairs.size() / hyper_params.batch_size;
                 ++batch_i) {
@@ -379,6 +419,13 @@ int main(int argc, char *argv[]) {
             }
 
             model_update.updateAdam(10.0f);
+
+            auto current_timestamp = chrono::steady_clock::now();
+            if (chrono::duration_cast<chrono::seconds>(current_timestamp - last_timestamp).count()
+                    >= 3600) {
+                last_timestamp = current_timestamp;
+                saveModel(model_params, default_config.output_model_file_prefix);
+            }
         }
 
         cout << "dev:" << endl;
