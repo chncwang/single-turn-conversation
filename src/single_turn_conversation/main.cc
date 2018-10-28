@@ -195,6 +195,7 @@ void saveModel(const ModelParams &model_params, const string &filename_prefix) {
         cerr << format("failed to open os, error when saveing %1%") % filename << endl;
         abort();
     }
+    cout << format("model file %1% saved") % filename << endl;
 
     os.close();
 }
