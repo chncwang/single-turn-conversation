@@ -369,8 +369,32 @@ int main(int argc, char *argv[]) {
                         model_params.lookup_table);
                 vector<Node*> result_nodes =
                     toNodePointers(decoder_components_vector.at(i)->wordvector_to_onehots);
-                auto result = MaxLogProbabilityLoss(result_nodes,
-                        word_ids, hyper_params.batch_size);
+#if USE_GPU
+                vector<const dtype *> vals;
+                vector<dtype*> losses;
+                for (const Node *node : result_nodes) {
+                    vals.push_back(node->val.value);
+                    losses.push_back(node->loss.value);
+                }
+                auto result = n3ldg_cuda::SoftMaxLoss(vals, vals.size(), result_nodes.at(0)->dim,
+                        word_ids, hyper_params.batch_size, losses);
+#if TEST_CUDA
+                auto cpu_result = MaxLogProbabilityLoss(result_nodes, word_ids,
+                    hyper_params.batch_size);
+                cout << format("result loss:%1% cpu_result loss:%2%") % result.first %
+                    cpu_result.first << endl;
+                if (abs(result.first - cpu_result.first) > 0.001) {
+                    abort();
+                }
+
+                for (const Node *node : result_nodes) {
+                    n3ldg_cuda::Assert(node->loss.verify("cross entropy loss"));
+                }
+#endif
+#else
+                auto result = MaxLogProbabilityLoss(result_nodes, word_ids,
+                    hyper_params.batch_size);
+#endif
                 loss_sum += result.first;
 
                 analyze(result.second, word_ids, *metric);
