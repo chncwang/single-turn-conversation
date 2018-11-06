@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <ctime>
 #include <sstream>
+#include <fstream>
 #include <string>
 #include <boost/format.hpp>
 #include "N3LDG.h"
@@ -76,12 +77,16 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
     default_config.check_grad = ini_reader.GetBoolean(SECTION, "check_grad", false);
     default_config.one_response = ini_reader.GetBoolean(SECTION, "one_response", false);
     default_config.learn_test = ini_reader.GetBoolean(SECTION, "learn_test", false);
+    default_config.only_decode = ini_reader.GetBoolean(SECTION, "only_decode", false);
     default_config.max_sample_count = ini_reader.GetInteger(SECTION, "max_sample_count",
             1000000000);
     default_config.dev_size = ini_reader.GetInteger(SECTION, "dev_size", 0);
     default_config.test_size = ini_reader.GetInteger(SECTION, "test_size", 0);
+    default_config.device_id = ini_reader.GetInteger(SECTION, "device_id", 0);
     default_config.output_model_file_prefix = ini_reader.Get(SECTION, "output_model_file_prefix",
             "");
+    default_config.input_model_file = ini_reader.Get(SECTION, "input_model_file", "");
+
     return default_config;
 }
 
@@ -178,7 +183,8 @@ void analyze(const vector<int> &results, const vector<int> &answers, Metric &met
     }
 }
 
-void saveModel(const ModelParams &model_params, const string &filename_prefix) {
+void saveModel(const HyperParams &hyper_params, ModelParams &model_params,
+        const string &filename_prefix) {
     auto t = time(nullptr);
     auto tm = *localtime(&t);
     ostringstream oss;
@@ -187,10 +193,11 @@ void saveModel(const ModelParams &model_params, const string &filename_prefix) {
 
     ofstream os(filename.c_str(), ios_base::out | ios::binary);
     if (os.is_open()) {
-        model_params.lookup_table.save(os);
-        model_params.encoder_params.save(os);
-        model_params.decoder_params.save(os);
-        model_params.hidden_to_wordvector_params.save(os);
+        hyper_params.save(os);
+#if USE_GPU
+        model_params.copyFromDeviceToHost();
+#endif
+        model_params.save(os);
     } else {
         cerr << format("failed to open os, error when saveing %1%") % filename << endl;
         abort();
@@ -198,6 +205,18 @@ void saveModel(const ModelParams &model_params, const string &filename_prefix) {
     cout << format("model file %1% saved") % filename << endl;
 
     os.close();
+}
+
+void loadModel(HyperParams &hyper_params, ModelParams &model_params, const string &filename) {
+    ifstream is(filename.c_str());
+    if (is) {
+        hyper_params.load(is);
+        model_params.load(is);
+    } else {
+        cerr << format("failed to open is, error when loading %1%") % filename << endl;
+        abort();
+    }
+    cout << format("model file %1% loaded") % filename << endl;
 }
 
 void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
@@ -225,7 +244,7 @@ void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params
     }
 
     DefaultConfig &config = GetDefaultConfig();
-    saveModel(model_params, config.output_model_file_prefix);
+    saveModel(hyper_params, model_params, config.output_model_file_prefix);
 }
 
 int main(int argc, char *argv[]) {
@@ -247,6 +266,10 @@ int main(int argc, char *argv[]) {
     default_config = parseDefaultConfig(ini_reader);
     cout << "default_config:" << endl;
     default_config.print();
+
+#if USE_GPU
+    n3ldg_cuda::InitCuda(default_config.device_id);
+#endif
 
     HyperParams hyper_params = parseHyperParams(ini_reader);
     cout << "hyper_params:" << endl;
@@ -327,6 +350,9 @@ int main(int argc, char *argv[]) {
 
     dtype last_loss_sum = 1e10f;
 
+    n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+    profiler.SetEnabled(false);
+    profiler.BeginEvent("total");
     for (int epoch = 0; ; ++epoch) {
         cout << "epoch:" << epoch << endl;
         shuffle(begin(train_conversation_pairs), end(train_conversation_pairs), engine);
@@ -401,15 +427,15 @@ int main(int argc, char *argv[]) {
 
                 unique_ptr<Metric> local_metric(unique_ptr<Metric>(new Metric));
                 analyze(result.second, word_ids, *local_metric);
-                if (local_metric->getAccuracy() < 1.0f) {
-                    int post_id = train_conversation_pairs.at(instance_index).post_id;
-                    cout << "post:" << endl;
-                    print(post_sentences.at(post_id));
-                    cout << "golden answer:" << endl;
-                    print(word_ids, model_params.lookup_table);
-                    cout << "output:" << endl;
-                    print(result.second, model_params.lookup_table);
-                }
+//                if (local_metric->getAccuracy() < 1.0f) {
+//                    int post_id = train_conversation_pairs.at(instance_index).post_id;
+//                    cout << "post:" << endl;
+//                    print(post_sentences.at(post_id));
+//                    cout << "golden answer:" << endl;
+//                    print(word_ids, model_params.lookup_table);
+//                    cout << "output:" << endl;
+//                    print(result.second, model_params.lookup_table);
+//                }
             }
             cout << "loss:" << loss_sum << endl;
             metric->print();
@@ -439,6 +465,8 @@ int main(int argc, char *argv[]) {
                             decoder_components.wordvector_to_onehots);
                     return MaxLogProbabilityLoss(result_nodes, word_ids, 1).first;
                 };
+                cout << format("checking grad - conversation_pair size:%1%") %
+                    conversation_pair_in_batch.size() << endl;
                 grad_checker.check<ConversationPair>(loss_function, conversation_pair_in_batch,
                         "");
             }
@@ -449,9 +477,11 @@ int main(int argc, char *argv[]) {
             if (chrono::duration_cast<chrono::seconds>(current_timestamp - last_timestamp).count()
                     >= 3600) {
                 last_timestamp = current_timestamp;
-                saveModel(model_params, default_config.output_model_file_prefix);
+                saveModel(hyper_params, model_params, default_config.output_model_file_prefix);
             }
         }
+        profiler.EndCudaEvent();
+        profiler.Print();
 
         cout << "dev:" << endl;
         processTestPosts(hyper_params, model_params, dev_post_and_responses, post_sentences,
