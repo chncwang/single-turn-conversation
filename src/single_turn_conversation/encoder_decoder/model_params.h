@@ -20,6 +20,10 @@ struct ModelParams
     std::vector<n3ldg_cuda::Transferable *> transferablePtrs() {
         return {&lookup_table, &hidden_to_wordvector_params, &encoder_params, &decoder_params};
     }
+
+    virtual std::string name() const {
+        return "ModelParams";
+    }
 #endif
 
     void save(ofstream &os) const {

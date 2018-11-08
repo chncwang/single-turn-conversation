@@ -353,6 +353,7 @@ int main(int argc, char *argv[]) {
     n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
     profiler.SetEnabled(false);
     profiler.BeginEvent("total");
+    int interval = 60;
     for (int epoch = 0; ; ++epoch) {
         cout << "epoch:" << epoch << endl;
         shuffle(begin(train_conversation_pairs), end(train_conversation_pairs), engine);
@@ -475,7 +476,11 @@ int main(int argc, char *argv[]) {
 
             auto current_timestamp = chrono::steady_clock::now();
             if (chrono::duration_cast<chrono::seconds>(current_timestamp - last_timestamp).count()
-                    >= 3600) {
+                    >= interval) {
+                interval *= 2;
+                if (interval > 3600) {
+                    interval = 3600;
+                }
                 last_timestamp = current_timestamp;
                 saveModel(hyper_params, model_params, default_config.output_model_file_prefix);
             }
