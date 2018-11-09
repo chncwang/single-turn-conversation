@@ -208,7 +208,7 @@ struct GraphBuilder {
                     int last_word_id = word_ids.at(word_ids.size() - 1).word_id;
                     const std::string &word = model_params.lookup_table.elems->from_id(
                             last_word_id);
-                    if (word == STOP_SYMBOL || i >= 1000) {
+                    if (word == STOP_SYMBOL || i >= 100) {
 //                        std::cout << boost::format(
 //                                "i:%1% word:%2% most_like_results size:%3% j:%4%") % i % word %
 //                            most_like_results.size() % j << std::endl;
