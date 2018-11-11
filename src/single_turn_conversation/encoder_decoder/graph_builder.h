@@ -12,6 +12,7 @@
 #include "N3LDG.h"
 #include "model_params.h"
 #include "hyper_params.h"
+#include "single_turn_conversation/encoder_decoder/global_context/global_context_decoder_components.h"
 
 struct WordIdAndProbability {
     int word_id;
@@ -21,6 +22,11 @@ struct WordIdAndProbability {
     WordIdAndProbability(const WordIdAndProbability &word_id_and_probability) = default;
     WordIdAndProbability(int wordid, dtype prob) : word_id(wordid), probability(prob) {}
 };
+
+std::vector<std::shared_ptr<DecoderComponents>> CopyDecoderComponents(
+        const std::vector<std::shared_ptr<DecoderComponents>> &components) {
+    std::vector
+}
 
 struct BeamSearchResult {
     int beam_i;
@@ -86,13 +92,6 @@ std::vector<BeamSearchResult> mostLikeResults(
 
     return results;
 }
-
-struct DecoderComponents {
-    std::vector<std::shared_ptr<LookupNode>> decoder_lookups;
-    std::vector<std::shared_ptr<LinearNode>> decoder_to_wordvectors;
-    std::vector<std::shared_ptr<LinearWordVectorNode>> wordvector_to_onehots;
-    DynamicLSTMBuilder decoder;
-};
 
 struct GraphBuilder {
     std::vector<std::shared_ptr<LookupNode>> encoder_lookups;
@@ -176,14 +175,14 @@ struct GraphBuilder {
     }
 
     std::pair<std::vector<WordIdAndProbability>, dtype> forwardDecoderUsingBeamSearch(Graph &graph,
-            const std::vector<DecoderComponents> &decoder_components_beam,
+            const std::vector<std::shared_ptr<DecoderComponents>> &decoder_components_beam,
             const HyperParams &hyper_params,
             ModelParams &model_params) {
         if (graph.train) {
             std::cerr << "train should be false" << std::endl;
             abort();
         }
-        std::vector<DecoderComponents> beam = decoder_components_beam;
+        auto beam = decoder_components_beam;
         std::vector<std::pair<std::vector<WordIdAndProbability>, dtype>> word_ids_result;
         std::vector<BeamSearchResult> most_like_results;
         std::vector<std::string> last_answers;
@@ -193,13 +192,13 @@ struct GraphBuilder {
             if (i > 0) {
                 std::vector<Node *> last_outputs;
                 int beam_i = 0;
-                for (DecoderComponents &decoder_components : beam) {
+                for (std::shared_ptr<DecoderComponents> &decoder_components : beam) {
                     last_outputs.push_back(
-                            decoder_components.wordvector_to_onehots.at(i - 1).get());
+                            decoder_components->wordvector_to_onehots.at(i - 1).get());
                     ++beam_i;
                 }
                 most_like_results = mostLikeResults(last_outputs, most_like_results);
-                std::vector<DecoderComponents> last_beam = beam;
+                auto last_beam = beam;
                 beam.clear();
                 std::vector<BeamSearchResult> stop_removed_results;
                 int j = 0;
