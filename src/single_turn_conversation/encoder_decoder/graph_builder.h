@@ -34,9 +34,19 @@ struct BeamSearchResult {
     final_log_probability(log_probability) {}
 };
 
+void printWordIds(const vector<WordIdAndProbability> &word_ids_with_probability_vector,
+        const LookupTable &lookup_table) {
+    for (const WordIdAndProbability &ids : word_ids_with_probability_vector) {
+        cout << boost::format("%1%(%2%) ") % lookup_table.elems->from_id(ids.word_id) %
+            ids.probability;
+    }
+    cout << endl;
+}
+
 std::vector<BeamSearchResult> mostLikeResults(
         const std::vector<Node *> &nodes,
-        const std::vector<BeamSearchResult> &last_results) {
+        const std::vector<BeamSearchResult> &last_results,
+        const ModelParams &model_params) {
     if (nodes.size() != last_results.size() && !last_results.empty()) {
         std::cerr << boost::format(
                 "nodes size is not equal to last_results size, nodes size is %1% but last_results size is %2%")
@@ -82,6 +92,13 @@ std::vector<BeamSearchResult> mostLikeResults(
         auto &e = queue.top();
         results.push_back(e);
         queue.pop();
+    }
+
+    for (const BeamSearchResult &result : results) {
+        static int i;
+        std::cout << boost::format("mostLikeResults - i:%1%") % i << std::endl;
+        printWordIds(result.path, model_params.lookup_table);
+        ++i;
     }
 
     return results;
@@ -183,6 +200,9 @@ struct GraphBuilder {
             std::cerr << "train should be false" << std::endl;
             abort();
         }
+        std::cout << boost::format(
+                "forwardDecoderUsingBeamSearch - decoder_components_beam size:%1%") %
+                decoder_components_beam.size() << std::endl;
         std::vector<DecoderComponents> beam = decoder_components_beam;
         std::vector<std::pair<std::vector<WordIdAndProbability>, dtype>> word_ids_result;
         std::vector<BeamSearchResult> most_like_results;
@@ -198,7 +218,7 @@ struct GraphBuilder {
                             decoder_components.wordvector_to_onehots.at(i - 1).get());
                     ++beam_i;
                 }
-                most_like_results = mostLikeResults(last_outputs, most_like_results);
+                most_like_results = mostLikeResults(last_outputs, most_like_results, model_params);
                 std::vector<DecoderComponents> last_beam = beam;
                 beam.clear();
                 std::vector<BeamSearchResult> stop_removed_results;
@@ -245,6 +265,12 @@ struct GraphBuilder {
             std::cerr << boost::format("word_ids_result size is %1%, but beam_size is %2%") %
                 word_ids_result.size() % decoder_components_beam.size() << std::endl;
             abort();
+        }
+
+        for (const auto &pair : word_ids_result) {
+            const std::vector<WordIdAndProbability> ids = pair.first;
+            std::cout << "beam result: ";
+            printWordIds(ids, model_params.lookup_table);
         }
 
         auto compair = [](const std::pair<std::vector<WordIdAndProbability>, dtype> &a,

@@ -146,17 +146,9 @@ vector<int> toIds(const vector<string> &sentence, LookupTable &lookup_table) {
     return ids;
 }
 
-void print(const vector<int> &word_ids, const LookupTable &lookup_table) {
+void printWordIds(const vector<int> &word_ids, const LookupTable &lookup_table) {
     for (int word_id : word_ids) {
         cout << lookup_table.elems->from_id(word_id) << " ";
-    }
-    cout << endl;
-}
-
-void print(const vector<WordIdAndProbability> &word_ids_with_probability_vector,
-        const LookupTable &lookup_table) {
-    for (const WordIdAndProbability &ids : word_ids_with_probability_vector) {
-        cout << format("%1%(%2%) ") % lookup_table.elems->from_id(ids.word_id) % ids.probability;
     }
     cout << endl;
 }
@@ -223,6 +215,8 @@ void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params
         const vector<PostAndResponses> &post_and_responses_vector,
         const vector<vector<string>> &post_sentences,
         const vector<vector<string>> &response_sentences) {
+    cout << "processTestPosts begin" << endl;
+    hyper_params.print();
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
         Graph graph;
         graph.train = false;
@@ -232,13 +226,15 @@ void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params
                 model_params);
         std::vector<DecoderComponents> decoder_components_vector;
         decoder_components_vector.resize(hyper_params.beam_size);
+        cout << format("processTestPosts - beam_size:%1% decoder_components_vector.size:%2%") %
+            hyper_params.beam_size % decoder_components_vector.size() << endl;
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
                 hyper_params, model_params);
         const std::vector<WordIdAndProbability> &word_ids = pair.first;
         cout << "post:" << endl;
         print(post_sentences.at(post_and_responses.post_id));
         cout << "response:" << endl;
-        print(word_ids, model_params.lookup_table);
+        printWordIds(word_ids, model_params.lookup_table);
         dtype probability = pair.second;
         cout << format("probability:%1%") % probability << endl;
     }
@@ -333,6 +329,8 @@ int main(int argc, char *argv[]) {
     alphabet.initial(word_counts, 0);
     ModelParams model_params;
 
+    int beam_size = hyper_params.beam_size;
+
     if (default_config.input_model_file == "") {
         model_params.lookup_table.initial(&alphabet, hyper_params.word_dim, true);
         model_params.encoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
@@ -345,6 +343,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (default_config.only_decode) {
+        hyper_params.beam_size = beam_size;
         processTestPosts(hyper_params, model_params, test_post_and_responses, post_sentences,
                 response_sentences);
     } else {
@@ -446,9 +445,9 @@ int main(int argc, char *argv[]) {
                             cout << "post:" << endl;
                             print(post_sentences.at(post_id));
                             cout << "golden answer:" << endl;
-                            print(word_ids, model_params.lookup_table);
+                            printWordIds(word_ids, model_params.lookup_table);
                             cout << "output:" << endl;
-                            print(result.second, model_params.lookup_table);
+                            printWordIds(result.second, model_params.lookup_table);
                         }
                     }
                 }
