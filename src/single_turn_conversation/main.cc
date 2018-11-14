@@ -225,11 +225,11 @@ void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params
         graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id), hyper_params,
                 model_params);
         std::vector<DecoderComponents> decoder_components_vector;
-        decoder_components_vector.resize(hyper_params.beam_size);
+        decoder_components_vector.resize(1);
         cout << format("processTestPosts - beam_size:%1% decoder_components_vector.size:%2%") %
             hyper_params.beam_size % decoder_components_vector.size() << endl;
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
-                hyper_params, model_params);
+                hyper_params.beam_size, hyper_params, model_params);
         const std::vector<WordIdAndProbability> &word_ids = pair.first;
         cout << "post:" << endl;
         print(post_sentences.at(post_and_responses.post_id));
@@ -238,9 +238,6 @@ void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params
         dtype probability = pair.second;
         cout << format("probability:%1%") % probability << endl;
     }
-
-    DefaultConfig &config = GetDefaultConfig();
-    saveModel(hyper_params, model_params, config.output_model_file_prefix);
 }
 
 int main(int argc, char *argv[]) {
@@ -500,13 +497,6 @@ int main(int argc, char *argv[]) {
             }
             profiler.EndCudaEvent();
             profiler.Print();
-
-//            cout << "dev:" << endl;
-//            processTestPosts(hyper_params, model_params, dev_post_and_responses, post_sentences,
-//                    response_sentences);
-//            cout << "test:" << endl;
-//            processTestPosts(hyper_params, model_params, test_post_and_responses, post_sentences,
-//                    response_sentences);
 
             if (last_loss_sum < loss_sum) {
                 model_update._alpha *= 0.875;

@@ -37,8 +37,9 @@ struct BeamSearchResult {
 void printWordIds(const vector<WordIdAndProbability> &word_ids_with_probability_vector,
         const LookupTable &lookup_table) {
     for (const WordIdAndProbability &ids : word_ids_with_probability_vector) {
-        cout << boost::format("%1%(%2%) ") % lookup_table.elems->from_id(ids.word_id) %
-            ids.probability;
+//        cout << boost::format("%1%(%2%) ") % lookup_table.elems->from_id(ids.word_id) %
+//            ids.probability;
+        cout << lookup_table.elems->from_id(ids.word_id);
     }
     cout << endl;
 }
@@ -46,6 +47,7 @@ void printWordIds(const vector<WordIdAndProbability> &word_ids_with_probability_
 std::vector<BeamSearchResult> mostLikeResults(
         const std::vector<Node *> &nodes,
         const std::vector<BeamSearchResult> &last_results,
+        int k,
         const ModelParams &model_params) {
     if (nodes.size() != last_results.size() && !last_results.empty()) {
         std::cerr << boost::format(
@@ -53,8 +55,6 @@ std::vector<BeamSearchResult> mostLikeResults(
             % nodes.size() % last_results.size() << std::endl;
         abort();
     }
-
-    int k = nodes.size();
 
     auto cmp = [](const BeamSearchResult &a, const BeamSearchResult &b) {
         return a.final_log_probability > b.final_log_probability;
@@ -68,6 +68,9 @@ std::vector<BeamSearchResult> mostLikeResults(
             dtype value = node.val.v[j] - std::get<1>(tuple).second;
             dtype log_probability = value - log(std::get<2>(tuple));
             dtype word_probability = exp(log_probability);
+//            if (j == model_params.lookup_table.getElemId(STOP_SYMBOL)) {
+//                std::cout << boost::format("stop probability:%1%") % word_probability << std::endl;
+//            }
             std::vector<WordIdAndProbability> word_ids;
             if (!last_results.empty()) {
                 log_probability += last_results.at(i).final_log_probability;
@@ -94,12 +97,12 @@ std::vector<BeamSearchResult> mostLikeResults(
         queue.pop();
     }
 
-    for (const BeamSearchResult &result : results) {
-        static int i;
-        std::cout << boost::format("mostLikeResults - i:%1%") % i << std::endl;
-        printWordIds(result.path, model_params.lookup_table);
-        ++i;
-    }
+//    int i = 0;
+//    for (const BeamSearchResult &result : results) {
+//        std::cout << boost::format("mostLikeResults - i:%1%") % i << std::endl;
+//        printWordIds(result.path, model_params.lookup_table);
+//        ++i;
+//    }
 
     return results;
 }
@@ -194,15 +197,16 @@ struct GraphBuilder {
 
     std::pair<std::vector<WordIdAndProbability>, dtype> forwardDecoderUsingBeamSearch(Graph &graph,
             const std::vector<DecoderComponents> &decoder_components_beam,
+            int k,
             const HyperParams &hyper_params,
             ModelParams &model_params) {
         if (graph.train) {
             std::cerr << "train should be false" << std::endl;
             abort();
         }
-        std::cout << boost::format(
-                "forwardDecoderUsingBeamSearch - decoder_components_beam size:%1%") %
-                decoder_components_beam.size() << std::endl;
+//        std::cout << boost::format(
+//                "forwardDecoderUsingBeamSearch - decoder_components_beam size:%1%") %
+//                decoder_components_beam.size() << std::endl;
         std::vector<DecoderComponents> beam = decoder_components_beam;
         std::vector<std::pair<std::vector<WordIdAndProbability>, dtype>> word_ids_result;
         std::vector<BeamSearchResult> most_like_results;
@@ -218,7 +222,9 @@ struct GraphBuilder {
                             decoder_components.wordvector_to_onehots.at(i - 1).get());
                     ++beam_i;
                 }
-                most_like_results = mostLikeResults(last_outputs, most_like_results, model_params);
+                int current_k = k - word_ids_result.size();
+                most_like_results = mostLikeResults(last_outputs, most_like_results, current_k,
+                        model_params);
                 std::vector<DecoderComponents> last_beam = beam;
                 beam.clear();
                 std::vector<BeamSearchResult> stop_removed_results;
@@ -228,7 +234,7 @@ struct GraphBuilder {
                     int last_word_id = word_ids.at(word_ids.size() - 1).word_id;
                     const std::string &word = model_params.lookup_table.elems->from_id(
                             last_word_id);
-                    if (word == STOP_SYMBOL || i >= 100) {
+                    if (word == STOP_SYMBOL || i >= 50) {
 //                        std::cout << boost::format(
 //                                "i:%1% word:%2% most_like_results size:%3% j:%4%") % i % word %
 //                            most_like_results.size() % j << std::endl;
@@ -241,7 +247,6 @@ struct GraphBuilder {
                     }
                     ++j;
                 }
-//                std::cout << boost::format("beam size:%1%") % beam.size() << std::endl;
 
                 most_like_results = stop_removed_results;
             }
@@ -261,21 +266,21 @@ struct GraphBuilder {
             graph.compute();
         }
 
-        if (word_ids_result.size() != decoder_components_beam.size()) {
+        if (word_ids_result.size() != k) {
             std::cerr << boost::format("word_ids_result size is %1%, but beam_size is %2%") %
-                word_ids_result.size() % decoder_components_beam.size() << std::endl;
+                word_ids_result.size() % k << std::endl;
             abort();
         }
 
         for (const auto &pair : word_ids_result) {
             const std::vector<WordIdAndProbability> ids = pair.first;
-            std::cout << "beam result: ";
+            std::cout << boost::format("beam result:%1%") % exp(pair.second) << std::endl;
             printWordIds(ids, model_params.lookup_table);
         }
 
         auto compair = [](const std::pair<std::vector<WordIdAndProbability>, dtype> &a,
                 const std::pair<std::vector<WordIdAndProbability>, dtype> &b) {
-            return a.second > b.second;
+            return a.second < b.second;
         };
         auto max = std::max_element(word_ids_result.begin(), word_ids_result.end(), compair);
 
