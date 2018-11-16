@@ -12,6 +12,9 @@
 #include <fstream>
 #include <string>
 #include <boost/format.hpp>
+#include <boost/algorithm/string.hpp>
+#include <boost/regex.hpp>
+#include <boost/algorithm/string/regex.hpp>
 #include "N3LDG.h"
 #include "single_turn_conversation/data_manager.h"
 #include "single_turn_conversation/def.h"
@@ -22,6 +25,7 @@
 
 using namespace std;
 using namespace cxxopts;
+using boost::is_any_of;
 using boost::format;
 
 void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
@@ -74,10 +78,22 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
         abort();
     }
 
+    string program_mode_str = ini_reader.Get(SECTION, "program_mode", "interacting");
+    ProgramMode program_mode;
+    if (program_mode_str == "interacting") {
+        program_mode = ProgramMode::INTERACTING;
+    } else if (program_mode_str == "training") {
+        program_mode = ProgramMode::TRAINING;
+    } else if (program_mode_str == "decoding") {
+        program_mode = ProgramMode::DECODING;
+    } else {
+        cout << format("program mode is %1%") % program_mode_str << endl;
+        abort();
+    }
+
     default_config.check_grad = ini_reader.GetBoolean(SECTION, "check_grad", false);
     default_config.one_response = ini_reader.GetBoolean(SECTION, "one_response", false);
     default_config.learn_test = ini_reader.GetBoolean(SECTION, "learn_test", false);
-    default_config.only_decode = ini_reader.GetBoolean(SECTION, "only_decode", false);
     default_config.max_sample_count = ini_reader.GetInteger(SECTION, "max_sample_count",
             1000000000);
     default_config.dev_size = ini_reader.GetInteger(SECTION, "dev_size", 0);
@@ -240,6 +256,36 @@ void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params
     }
 }
 
+void interact(const HyperParams &hyper_params, ModelParams &model_params) {
+    hyper_params.print();
+    while (true) {
+        string post;
+        std::getline(cin >> ws, post);
+        vector<string> words;
+        split(words, post, is_any_of(" "));
+        words.push_back(STOP_SYMBOL);
+
+        Graph graph;
+        graph.train = false;
+        GraphBuilder graph_builder;
+        graph_builder.init(hyper_params);
+        graph_builder.forward(graph, words, hyper_params, model_params);
+        std::vector<DecoderComponents> decoder_components_vector;
+        decoder_components_vector.resize(1);
+        cout << format("processTestPosts - beam_size:%1% decoder_components_vector.size:%2%") %
+            hyper_params.beam_size % decoder_components_vector.size() << endl;
+        auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
+                hyper_params.beam_size, hyper_params, model_params);
+        const std::vector<WordIdAndProbability> &word_ids = pair.first;
+        cout << "post:" << endl;
+        cout << post << endl;
+        cout << "response:" << endl;
+        printWordIds(word_ids, model_params.lookup_table);
+        dtype probability = pair.second;
+        cout << format("probability:%1%") % probability << endl;
+    }
+}
+
 int main(int argc, char *argv[]) {
     cout << "dtype size:" << sizeof(dtype) << endl;
 
@@ -339,11 +385,14 @@ int main(int argc, char *argv[]) {
         loadModel(hyper_params, model_params, default_config.input_model_file);
     }
 
-    if (default_config.only_decode) {
+    if (default_config.program_mode == ProgramMode::INTERACTING) {
+        hyper_params.beam_size = beam_size;
+        interact(hyper_params, model_params);
+    } else if (default_config.program_mode == ProgramMode::DECODING) {
         hyper_params.beam_size = beam_size;
         processTestPosts(hyper_params, model_params, test_post_and_responses, post_sentences,
                 response_sentences);
-    } else {
+    } else if (default_config.program_mode == ProgramMode::TRAINING) {
         ModelUpdate model_update;
         model_update._alpha = hyper_params.learning_rate;
         exportToOptimizer(model_params, model_update);
@@ -505,6 +554,8 @@ int main(int argc, char *argv[]) {
 
             last_loss_sum = loss_sum;
         }
+    } else {
+        abort();
     }
 
     return 0;

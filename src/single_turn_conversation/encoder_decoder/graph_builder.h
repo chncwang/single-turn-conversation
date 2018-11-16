@@ -271,11 +271,11 @@ struct GraphBuilder {
             abort();
         }
 
-        for (const auto &pair : word_ids_result) {
-            const std::vector<WordIdAndProbability> ids = pair.first;
-            std::cout << boost::format("beam result:%1%") % exp(pair.second) << std::endl;
-            printWordIds(ids, model_params.lookup_table);
-        }
+//        for (const auto &pair : word_ids_result) {
+//            const std::vector<WordIdAndProbability> ids = pair.first;
+//            std::cout << boost::format("beam result:%1%") % exp(pair.second) << std::endl;
+//            printWordIds(ids, model_params.lookup_table);
+//        }
 
         auto compair = [](const std::pair<std::vector<WordIdAndProbability>, dtype> &a,
                 const std::pair<std::vector<WordIdAndProbability>, dtype> &b) {
