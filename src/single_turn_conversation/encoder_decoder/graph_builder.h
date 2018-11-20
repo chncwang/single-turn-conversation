@@ -84,7 +84,7 @@ std::vector<BeamSearchResult> mostProbableResults(
             } else if (queue.top().final_log_probability < log_probability) {
                 queue.pop();
                 queue.push(beam_search_result);
-            } else if (word_ids.size() >= 50 && j == stop_id) {
+            } else if (word_ids.size() >= 20 && j == stop_id) {
                 results.push_back(beam_search_result);
             }
         }
@@ -239,7 +239,7 @@ struct GraphBuilder {
 //                            most_probable_results.size() % j << std::endl;
                         word_ids_result.push_back(std::make_pair(word_ids,
                                     beam_search_result.final_log_probability));
-                    } else if (i < 100) {
+                    } else if (i < 50) {
                         stop_removed_results.push_back(beam_search_result);
                         last_answers.push_back(word);
                         beam.push_back(last_beam.at(beam_search_result.beam_i));
@@ -250,7 +250,7 @@ struct GraphBuilder {
                 most_probable_results = stop_removed_results;
             }
 
-            if (beam.empty() || i >= 100) {
+            if (beam.empty() || i >= 50) {
                 break;
             }
 
