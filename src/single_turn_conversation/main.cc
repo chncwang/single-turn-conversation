@@ -18,6 +18,7 @@
 #include "N3LDG.h"
 #include "single_turn_conversation/data_manager.h"
 #include "single_turn_conversation/def.h"
+#include "single_turn_conversation/bleu.h"
 #include "single_turn_conversation/default_config.h"
 #include "single_turn_conversation/encoder_decoder/graph_builder.h"
 #include "single_turn_conversation/encoder_decoder/hyper_params.h"
@@ -78,7 +79,7 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
         abort();
     }
 
-    string program_mode_str = ini_reader.Get(SECTION, "program_mode", "interacting");
+    string program_mode_str = ini_reader.Get(SECTION, "program_mode", "");
     ProgramMode program_mode;
     if (program_mode_str == "interacting") {
         program_mode = ProgramMode::INTERACTING;
@@ -90,6 +91,7 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
         cout << format("program mode is %1%") % program_mode_str << endl;
         abort();
     }
+    default_config.program_mode = program_mode;
 
     default_config.check_grad = ini_reader.GetBoolean(SECTION, "check_grad", false);
     default_config.one_response = ini_reader.GetBoolean(SECTION, "one_response", false);
@@ -233,6 +235,7 @@ void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params
         const vector<vector<string>> &response_sentences) {
     cout << "processTestPosts begin" << endl;
     hyper_params.print();
+    std::vector<CandidateAndReferences> candidate_and_references_vector;
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
         Graph graph;
         graph.train = false;
@@ -246,13 +249,38 @@ void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params
             hyper_params.beam_size % decoder_components_vector.size() << endl;
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
                 hyper_params.beam_size, hyper_params, model_params);
-        const std::vector<WordIdAndProbability> &word_ids = pair.first;
+        const std::vector<WordIdAndProbability> &word_ids_and_probability = pair.first;
         cout << "post:" << endl;
         print(post_sentences.at(post_and_responses.post_id));
         cout << "response:" << endl;
-        printWordIds(word_ids, model_params.lookup_table);
+        printWordIds(word_ids_and_probability, model_params.lookup_table);
         dtype probability = pair.second;
         cout << format("probability:%1%") % probability << endl;
+
+        std::vector<int> decoded_word_ids = transferVector<int, WordIdAndProbability>(
+                word_ids_and_probability, [](const WordIdAndProbability &w)->int {
+            return w.word_id;
+        });
+        const std::vector<int> &response_ids = post_and_responses.response_ids;
+        std::vector<std::vector<std::string>> str_references =
+            transferVector<std::vector<std::string>, int>(response_ids,
+                    [&](int response_id) -> std::vector<std::string> {
+                    return response_sentences.at(response_id);
+                    });
+        std::vector<std::vector<int>> id_references;
+        for (const std::vector<std::string> &strs : str_references) {
+            std::vector<int> ids = transferVector<int, std::string>(strs,
+                    [&](const std::string &w) -> int {
+                    return model_params.lookup_table.getElemId(w);
+                    });
+            id_references.push_back(ids);
+        }
+
+        CandidateAndReferences candidate_and_references(decoded_word_ids, id_references);
+        candidate_and_references_vector.push_back(candidate_and_references);
+
+        float bleu_value = computeBleu(candidate_and_references_vector);
+        cout << "bleu_value:" << bleu_value << endl;
     }
 }
 
