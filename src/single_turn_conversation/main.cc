@@ -18,6 +18,7 @@
 #include "N3LDG.h"
 #include "single_turn_conversation/data_manager.h"
 #include "single_turn_conversation/def.h"
+#include "single_turn_conversation/bleu.h"
 #include "single_turn_conversation/default_config.h"
 #include "single_turn_conversation/encoder_decoder/graph_builder.h"
 #include "single_turn_conversation/encoder_decoder/hyper_params.h"
