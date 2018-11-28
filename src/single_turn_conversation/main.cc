@@ -327,7 +327,7 @@ int main(int argc, char *argv[]) {
                 conversation_pair.response_id);
         addWord(word_counts, response_sentence);
     }
-    word_counts[unknownkey] = 1000000;
+    word_counts[unknownkey] = hyper_params.cutoff+1;
     word_counts[STOP_SYMBOL] = 1000000;
     Alphabet alphabet;
     alphabet.initial(word_counts, 0);
