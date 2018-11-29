@@ -229,6 +229,25 @@ void loadModel(HyperParams &hyper_params, ModelParams &model_params, const strin
     cout << format("model file %1% loaded") % filename << endl;
 }
 
+float computePerplex(const HyperParams &hyper_params, ModelParams &model_params,
+        const vector<PostAndResponses> &post_and_responses_vector,
+        const vector<vector<string>> &post_sentences,
+        const vector<vector<string>> &response_sentences) {
+    for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
+        std::vector<int> &response_ids = post_and_responses.response_ids;
+        for (int response_id : response_ids) {
+            Graph graph;
+            graph.train = false;
+            GraphBuilder graph_builder;
+            graph_builder.init(hyper_params);
+            graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id),
+                    hyper_params, model_params);
+            DecoderComponents decoder_components;
+            graph_builder.forwardDecoder(graph, decoder_components, 
+                    }
+    }
+}
+
 void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         const vector<PostAndResponses> &post_and_responses_vector,
         const vector<vector<string>> &post_sentences,
