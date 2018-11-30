@@ -19,6 +19,7 @@
 #include "single_turn_conversation/data_manager.h"
 #include "single_turn_conversation/def.h"
 #include "single_turn_conversation/bleu.h"
+#include "single_turn_conversation/perplex.h"
 #include "single_turn_conversation/default_config.h"
 #include "single_turn_conversation/encoder_decoder/graph_builder.h"
 #include "single_turn_conversation/encoder_decoder/hyper_params.h"
@@ -87,6 +88,8 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
         program_mode = ProgramMode::TRAINING;
     } else if (program_mode_str == "decoding") {
         program_mode = ProgramMode::DECODING;
+    } else if (program_mode_str == "metric") {
+        program_mode = ProgramMode::METRIC;
     } else {
         cout << format("program mode is %1%") % program_mode_str << endl;
         abort();
@@ -229,13 +232,21 @@ void loadModel(HyperParams &hyper_params, ModelParams &model_params, const strin
     cout << format("model file %1% loaded") % filename << endl;
 }
 
-float computePerplex(const HyperParams &hyper_params, ModelParams &model_params,
+float buildGraphAndComputePerplex(const HyperParams &hyper_params, ModelParams &model_params,
         const vector<PostAndResponses> &post_and_responses_vector,
         const vector<vector<string>> &post_sentences,
         const vector<vector<string>> &response_sentences) {
+    float rep_perplex = 0.0f;
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
-        std::vector<int> &response_ids = post_and_responses.response_ids;
+        cout << "post:" << endl;
+        print(post_sentences.at(post_and_responses.post_id));
+
+        const std::vector<int> &response_ids = post_and_responses.response_ids;
+        float min_perplex = -1.0f;
+        cout << "response size:" << response_ids.size() << endl;
         for (int response_id : response_ids) {
+//            cout << "response:" << endl;
+//            print(response_sentences.at(response_id));
             Graph graph;
             graph.train = false;
             GraphBuilder graph_builder;
@@ -243,16 +254,44 @@ float computePerplex(const HyperParams &hyper_params, ModelParams &model_params,
             graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id),
                     hyper_params, model_params);
             DecoderComponents decoder_components;
-            graph_builder.forwardDecoder(graph, decoder_components, 
-                    }
+            graph_builder.forwardDecoder(graph, decoder_components,
+                    response_sentences.at(response_id), hyper_params, model_params);
+            graph.compute();
+            vector<Node*> nodes = toNodePointers(decoder_components.wordvector_to_onehots);
+            vector<int> word_ids = transferVector<int, string>(response_sentences.at(response_id),
+                    [&](const string &w) -> int {
+                    return model_params.lookup_table.getElemId(w);
+                    });
+            float perplex = computePerplex(nodes, word_ids);
+//            cout << format("perplex:%1%") % perplex << endl;
+            if (min_perplex < 0.0f || perplex < min_perplex) {
+                min_perplex = perplex;
+            }
+        }
+        cout << "min_perplex:" << min_perplex << endl;
+        rep_perplex += 1.0f / min_perplex;
     }
+
+    return rep_perplex;
 }
 
-void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
+void metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         const vector<PostAndResponses> &post_and_responses_vector,
         const vector<vector<string>> &post_sentences,
         const vector<vector<string>> &response_sentences) {
-    cout << "processTestPosts begin" << endl;
+    cout << "metricTestPosts begin" << endl;
+    hyper_params.print();
+    std::vector<CandidateAndReferences> candidate_and_references_vector;
+    float rep_perplex = buildGraphAndComputePerplex(hyper_params, model_params,
+            post_and_responses_vector, post_sentences, response_sentences);
+    cout << "repciprocal perplex:" << rep_perplex << endl;
+}
+
+void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
+        const vector<PostAndResponses> &post_and_responses_vector,
+        const vector<vector<string>> &post_sentences,
+        const vector<vector<string>> &response_sentences) {
+    cout << "decodeTestPosts begin" << endl;
     hyper_params.print();
     std::vector<CandidateAndReferences> candidate_and_references_vector;
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
@@ -264,7 +303,7 @@ void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params
                 model_params);
         std::vector<DecoderComponents> decoder_components_vector;
         decoder_components_vector.resize(1);
-        cout << format("processTestPosts - beam_size:%1% decoder_components_vector.size:%2%") %
+        cout << format("decodeTestPosts - beam_size:%1% decoder_components_vector.size:%2%") %
             hyper_params.beam_size % decoder_components_vector.size() << endl;
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
                 hyper_params.beam_size, hyper_params, model_params);
@@ -319,7 +358,7 @@ void interact(const HyperParams &hyper_params, ModelParams &model_params) {
         graph_builder.forward(graph, words, hyper_params, model_params);
         std::vector<DecoderComponents> decoder_components_vector;
         decoder_components_vector.resize(1);
-        cout << format("processTestPosts - beam_size:%1% decoder_components_vector.size:%2%") %
+        cout << format("decodeTestPosts - beam_size:%1% decoder_components_vector.size:%2%") %
             hyper_params.beam_size % decoder_components_vector.size() << endl;
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
                 hyper_params.beam_size, hyper_params, model_params);
@@ -437,7 +476,10 @@ int main(int argc, char *argv[]) {
         interact(hyper_params, model_params);
     } else if (default_config.program_mode == ProgramMode::DECODING) {
         hyper_params.beam_size = beam_size;
-        processTestPosts(hyper_params, model_params, test_post_and_responses, post_sentences,
+        decodeTestPosts(hyper_params, model_params, test_post_and_responses, post_sentences,
+                response_sentences);
+    } else if (default_config.program_mode == ProgramMode::METRIC) {
+        metricTestPosts(hyper_params, model_params, test_post_and_responses, post_sentences,
                 response_sentences);
     } else if (default_config.program_mode == ProgramMode::TRAINING) {
         ModelUpdate model_update;

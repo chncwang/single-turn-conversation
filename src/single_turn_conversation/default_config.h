@@ -8,6 +8,7 @@ enum ProgramMode {
     TRAINING = 0,
     DECODING = 1,
     INTERACTING = 2,
+    METRIC = 3,
 };
 
 struct DefaultConfig {

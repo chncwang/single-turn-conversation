@@ -148,11 +148,6 @@ struct GraphBuilder {
             const std::vector<std::string> &answer,
             const HyperParams &hyper_params,
             ModelParams &model_params) {
-        if (!graph.train) {
-            std::cerr << "train should be true" << std::endl;
-            abort();
-        }
-
         for (int i = 0; i < answer.size(); ++i) {
             forwardDecoderByOneStep(graph, decoder_components, i,
                     i == 0 ? nullptr : &answer.at(i - 1),
