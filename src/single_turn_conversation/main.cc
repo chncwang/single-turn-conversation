@@ -19,6 +19,7 @@
 #include "single_turn_conversation/encoder_decoder/graph_builder.h"
 #include "single_turn_conversation/encoder_decoder/hyper_params.h"
 #include "single_turn_conversation/encoder_decoder/model_params.h"
+#include "single_turn_conversation/encoder_decoder/decoder_components_builder.h"
 
 using namespace std;
 using namespace cxxopts;
@@ -253,8 +254,10 @@ void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params
         graph_builder.init(hyper_params);
         graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id), hyper_params,
                 model_params);
-        std::vector<DecoderComponents> decoder_components_vector;
-        decoder_components_vector.resize(hyper_params.beam_size);
+        std::vector<shared_ptr<DecoderComponents>> decoder_components_vector;
+        for (int i = 0; i < hyper_params.beam_size; ++i) {
+            decoder_components_vector.push_back(buildDecoderComponents());
+        }
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
                 hyper_params, model_params);
         const std::vector<WordIdAndProbability> &word_ids = pair.first;
