@@ -128,6 +128,13 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
     }
     hyper_params.beam_size = beam_size;
 
+	int word_cutoff = ini_reader.GetInteger("hyper", "word_cutoff", 0);
+	if (word_cutoff == 0) {
+		cerr << "word_cutoff not found" << endl;
+		abort();
+	}
+	hyper_params.word_cutoff = word_cutoff;
+
     float learning_rate = ini_reader.GetReal("hyper", "learning_rate", 0.001f);
     if (learning_rate <= 0.0f) {
         cerr << "learning_rate wrong" << endl;
@@ -135,13 +142,28 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
     }
     hyper_params.learning_rate = learning_rate;
 
+	bool wordemb_finetune = ini_reader.GetBoolean("hyper", "wordemb_finetune", false);
+	hyper_params.wordemb_finetune = wordemb_finetune;
+
+	string word_file = ini_reader.Get("hyper", "word_file", "");
+	if (word_file == "") {
+		cerr << "word_file wrong" << endl;
+		abort();
+	}
+	hyper_params.word_file = word_file;
+ 
     return hyper_params;
 }
 
 vector<int> toIds(const vector<string> &sentence, LookupTable &lookup_table) {
     vector<int> ids;
     for (const string &word : sentence) {
-        ids.push_back(lookup_table.getElemId(word));
+        //ids.push_back(lookup_table.getElemId(word));
+		int xid = lookup_table.getElemId(word);
+		if (xid < 0 && lookup_table.nUNKId >= 0) {
+			xid = lookup_table.nUNKId;
+		}
+		ids.push_back(xid);
     }
     return ids;
 }
@@ -213,6 +235,7 @@ void loadModel(HyperParams &hyper_params, ModelParams &model_params, const strin
         hyper_params.load(is);
         model_params.load(is);
     } else {
+		//cout << filename << endl;
         cerr << format("failed to open is, error when loading %1%") % filename << endl;
         abort();
     }
@@ -248,13 +271,15 @@ void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params
 }
 
 int main(int argc, char *argv[]) {
+
     cout << "dtype size:" << sizeof(dtype) << endl;
 
     Options options("single-turn-conversation", "single turn conversation");
+	
     options.add_options()
         ("config", "config file name", cxxopts::value<string>());
     auto args = options.parse(argc, argv);
-
+	
     string configfilename = args["config"].as<string>();
     INIReader ini_reader(configfilename);
     if (ini_reader.ParseError() < 0) {
@@ -274,7 +299,8 @@ int main(int argc, char *argv[]) {
     HyperParams hyper_params = parseHyperParams(ini_reader);
     cout << "hyper_params:" << endl;
     hyper_params.print();
-
+        
+ 
     vector<PostAndResponses> post_and_responses_vector = readPostAndResponsesVector(
             default_config.pair_file);
     cout << "post_and_responses_vector size:" << post_and_responses_vector.size() << endl;
@@ -327,14 +353,18 @@ int main(int argc, char *argv[]) {
                 conversation_pair.response_id);
         addWord(word_counts, response_sentence);
     }
-    word_counts[unknownkey] = hyper_params.cutoff+1;
+  word_counts[unknownkey] = hyper_params.word_cutoff +1;
+  //word_counts[unknownkey] = 2;
     word_counts[STOP_SYMBOL] = 1000000;
     Alphabet alphabet;
-    alphabet.initial(word_counts, 0);
+   alphabet.initial(word_counts, hyper_params.word_cutoff);
+     //  alphabet.initial(word_counts, 0);
+	cout << "the size of alphabet is: " << endl;
+	cout << alphabet.m_size << endl;
     ModelParams model_params;
 
     if (default_config.input_model_file == "") {
-        model_params.lookup_table.initial(&alphabet, hyper_params.word_dim, true);
+        model_params.lookup_table.initial(&alphabet, hyper_params.word_file, hyper_params.wordemb_finetune);
         model_params.encoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
         model_params.decoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
         model_params.hidden_to_wordvector_params.initial(hyper_params.word_dim,
