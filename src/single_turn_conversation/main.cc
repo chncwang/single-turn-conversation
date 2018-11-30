@@ -142,6 +142,7 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
         abort();
     }
     hyper_params.learning_rate = learning_rate;
+<<<<<<< HEAD
 
 	bool wordemb_finetune = ini_reader.GetBoolean("hyper", "wordemb_finetune", false);
 	hyper_params.wordemb_finetune = wordemb_finetune;
@@ -152,6 +153,8 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
 		abort();
 	}
 	hyper_params.word_file = word_file;
+=======
+>>>>>>> 6bbbf2417f7e097d2999a999a86249b8ed0f1192
  
     return hyper_params;
 }

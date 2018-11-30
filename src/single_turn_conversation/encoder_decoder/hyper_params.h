@@ -12,9 +12,13 @@ struct HyperParams {
     float dropout;
     int batch_size;
     int beam_size;
+<<<<<<< HEAD
     int word_cutoff;
 	bool wordemb_finetune;
 	string word_file;
+=======
+        int word_cutoff;
+>>>>>>> 6bbbf2417f7e097d2999a999a86249b8ed0f1192
     float learning_rate;
 
     float flag() const {
@@ -27,10 +31,15 @@ struct HyperParams {
             << dropout << std::endl
             << batch_size << std::endl
             << beam_size << std::endl
+<<<<<<< HEAD
             << word_cutoff << std::endl
             << learning_rate << std::endl
 			<< wordemb_finetune << std::endl
 			<< word_file << std::endl
+=======
+                        << word_cutoff << std::endl
+            << learning_rate << std::endl
+>>>>>>> 6bbbf2417f7e097d2999a999a86249b8ed0f1192
             << flag() << std::endl;
     }
 
@@ -51,9 +60,13 @@ struct HyperParams {
             << "dropout:" << dropout << std::endl
             << "batch_size:" << batch_size << std::endl
             << "beam_size:" << beam_size << std::endl
+<<<<<<< HEAD
 			<< "word_cutoff:" << word_cutoff << std::endl
             << "wordemb_finetune:" << wordemb_finetune << std::endl
 			<< "word_file:" << word_file << std::endl
+=======
+            << "word_cutoff:" << word_cutoff << std::endl
+>>>>>>> 6bbbf2417f7e097d2999a999a86249b8ed0f1192
             << "learning_rate:" << learning_rate << std::endl;
     }
 };
