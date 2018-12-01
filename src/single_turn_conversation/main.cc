@@ -15,6 +15,8 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/regex.hpp>
 #include <boost/algorithm/string/regex.hpp>
+#include <boost/filesystem.hpp>
+#include <boost/range/iterator_range.hpp>
 #include "N3LDG.h"
 #include "single_turn_conversation/data_manager.h"
 #include "single_turn_conversation/def.h"
@@ -29,6 +31,9 @@ using namespace std;
 using namespace cxxopts;
 using boost::is_any_of;
 using boost::format;
+using boost::filesystem::path;
+using boost::filesystem::is_directory;
+using boost::filesystem::directory_iterator;
 
 void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
     model_params.decoder_params.exportAdaParams(model_update);
@@ -107,6 +112,7 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
     default_config.output_model_file_prefix = ini_reader.Get(SECTION, "output_model_file_prefix",
             "");
     default_config.input_model_file = ini_reader.Get(SECTION, "input_model_file", "");
+    default_config.input_model_dir = ini_reader.Get(SECTION, "input_model_dir", "");
 
     return default_config;
 }
@@ -232,10 +238,12 @@ void loadModel(HyperParams &hyper_params, ModelParams &model_params, const strin
     cout << format("model file %1% loaded") % filename << endl;
 }
 
-float buildGraphAndComputePerplex(const HyperParams &hyper_params, ModelParams &model_params,
+float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         const vector<PostAndResponses> &post_and_responses_vector,
         const vector<vector<string>> &post_sentences,
         const vector<vector<string>> &response_sentences) {
+    cout << "metricTestPosts begin" << endl;
+    hyper_params.print();
     float rep_perplex = 0.0f;
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
         cout << "post:" << endl;
@@ -272,19 +280,8 @@ float buildGraphAndComputePerplex(const HyperParams &hyper_params, ModelParams &
         rep_perplex += 1.0f / min_perplex;
     }
 
-    return rep_perplex;
-}
-
-void metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
-        const vector<PostAndResponses> &post_and_responses_vector,
-        const vector<vector<string>> &post_sentences,
-        const vector<vector<string>> &response_sentences) {
-    cout << "metricTestPosts begin" << endl;
-    hyper_params.print();
-    std::vector<CandidateAndReferences> candidate_and_references_vector;
-    float rep_perplex = buildGraphAndComputePerplex(hyper_params, model_params,
-            post_and_responses_vector, post_sentences, response_sentences);
     cout << "repciprocal perplex:" << rep_perplex << endl;
+    return rep_perplex;
 }
 
 void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
@@ -460,15 +457,17 @@ int main(int argc, char *argv[]) {
 
     int beam_size = hyper_params.beam_size;
 
-    if (default_config.input_model_file == "") {
-        model_params.lookup_table.initial(&alphabet, hyper_params.word_dim, true);
-        model_params.encoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
-        model_params.decoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
-        model_params.hidden_to_wordvector_params.initial(hyper_params.word_dim,
-                hyper_params.hidden_dim);
-    } else {
-        model_params.lookup_table.elems = &alphabet;
-        loadModel(hyper_params, model_params, default_config.input_model_file);
+    if (default_config.program_mode != ProgramMode::METRIC) {
+        if (default_config.input_model_file == "") {
+            model_params.lookup_table.initial(&alphabet, hyper_params.word_dim, true);
+            model_params.encoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
+            model_params.decoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
+            model_params.hidden_to_wordvector_params.initial(hyper_params.word_dim,
+                    hyper_params.hidden_dim);
+        } else {
+            model_params.lookup_table.elems = &alphabet;
+            loadModel(hyper_params, model_params, default_config.input_model_file);
+        }
     }
 
     if (default_config.program_mode == ProgramMode::INTERACTING) {
@@ -479,8 +478,33 @@ int main(int argc, char *argv[]) {
         decodeTestPosts(hyper_params, model_params, test_post_and_responses, post_sentences,
                 response_sentences);
     } else if (default_config.program_mode == ProgramMode::METRIC) {
-        metricTestPosts(hyper_params, model_params, test_post_and_responses, post_sentences,
-                response_sentences);
+        path dir_path(default_config.input_model_dir);
+        if (!is_directory(dir_path)) {
+            cerr << format("%1% is not dir path") % default_config.input_model_dir << endl;
+            abort();
+        }
+
+        float max_rep_perplex = 0.0f;
+        for(auto& entry : boost::make_iterator_range(directory_iterator(dir_path), {})) {
+            string basic_name = entry.path().filename().string();
+            if (basic_name.find("model") != 0) {
+                continue;
+            }
+
+            string model_file_path = entry.path().string();
+            cout << format("model_file_path:%1%") % model_file_path << endl;
+            ModelParams model_params;
+            model_params.lookup_table.elems = &alphabet;
+            loadModel(hyper_params, model_params, model_file_path);
+            float rep_perplex = metricTestPosts(hyper_params, model_params,
+                    test_post_and_responses, post_sentences, response_sentences);
+            cout << format("model %1% rep_perplex is %2%") % model_file_path % rep_perplex << endl;
+            if (max_rep_perplex < rep_perplex) {
+                max_rep_perplex = rep_perplex;
+                cout << format("best model now is %1%, and rep_perplex is %2%") % model_file_path %
+                    rep_perplex << endl;
+            }
+        }
     } else if (default_config.program_mode == ProgramMode::TRAINING) {
         ModelUpdate model_update;
         model_update._alpha = hyper_params.learning_rate;
