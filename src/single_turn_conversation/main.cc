@@ -12,9 +12,16 @@
 #include <fstream>
 #include <string>
 #include <boost/format.hpp>
+#include <boost/algorithm/string.hpp>
+#include <boost/regex.hpp>
+#include <boost/algorithm/string/regex.hpp>
+#include <boost/filesystem.hpp>
+#include <boost/range/iterator_range.hpp>
 #include "N3LDG.h"
 #include "single_turn_conversation/data_manager.h"
 #include "single_turn_conversation/def.h"
+#include "single_turn_conversation/bleu.h"
+#include "single_turn_conversation/perplex.h"
 #include "single_turn_conversation/default_config.h"
 #include "single_turn_conversation/encoder_decoder/graph_builder.h"
 #include "single_turn_conversation/encoder_decoder/hyper_params.h"
@@ -23,7 +30,11 @@
 
 using namespace std;
 using namespace cxxopts;
+using boost::is_any_of;
 using boost::format;
+using boost::filesystem::path;
+using boost::filesystem::is_directory;
+using boost::filesystem::directory_iterator;
 
 void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
     model_params.decoder_params.exportAdaParams(model_update);
@@ -75,10 +86,25 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
         abort();
     }
 
+    string program_mode_str = ini_reader.Get(SECTION, "program_mode", "");
+    ProgramMode program_mode;
+    if (program_mode_str == "interacting") {
+        program_mode = ProgramMode::INTERACTING;
+    } else if (program_mode_str == "training") {
+        program_mode = ProgramMode::TRAINING;
+    } else if (program_mode_str == "decoding") {
+        program_mode = ProgramMode::DECODING;
+    } else if (program_mode_str == "metric") {
+        program_mode = ProgramMode::METRIC;
+    } else {
+        cout << format("program mode is %1%") % program_mode_str << endl;
+        abort();
+    }
+    default_config.program_mode = program_mode;
+
     default_config.check_grad = ini_reader.GetBoolean(SECTION, "check_grad", false);
     default_config.one_response = ini_reader.GetBoolean(SECTION, "one_response", false);
     default_config.learn_test = ini_reader.GetBoolean(SECTION, "learn_test", false);
-    default_config.only_decode = ini_reader.GetBoolean(SECTION, "only_decode", false);
     default_config.max_sample_count = ini_reader.GetInteger(SECTION, "max_sample_count",
             1000000000);
     default_config.dev_size = ini_reader.GetInteger(SECTION, "dev_size", 0);
@@ -87,6 +113,7 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
     default_config.output_model_file_prefix = ini_reader.Get(SECTION, "output_model_file_prefix",
             "");
     default_config.input_model_file = ini_reader.Get(SECTION, "input_model_file", "");
+    default_config.input_model_dir = ini_reader.Get(SECTION, "input_model_dir", "");
 
     return default_config;
 }
@@ -147,17 +174,9 @@ vector<int> toIds(const vector<string> &sentence, LookupTable &lookup_table) {
     return ids;
 }
 
-void print(const vector<int> &word_ids, const LookupTable &lookup_table) {
+void printWordIds(const vector<int> &word_ids, const LookupTable &lookup_table) {
     for (int word_id : word_ids) {
         cout << lookup_table.elems->from_id(word_id) << " ";
-    }
-    cout << endl;
-}
-
-void print(const vector<WordIdAndProbability> &word_ids_with_probability_vector,
-        const LookupTable &lookup_table) {
-    for (const WordIdAndProbability &ids : word_ids_with_probability_vector) {
-        cout << format("%1%(%2%) ") % lookup_table.elems->from_id(ids.word_id) % ids.probability;
     }
     cout << endl;
 }
@@ -220,10 +239,59 @@ void loadModel(HyperParams &hyper_params, ModelParams &model_params, const strin
     cout << format("model file %1% loaded") % filename << endl;
 }
 
-void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
+float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         const vector<PostAndResponses> &post_and_responses_vector,
         const vector<vector<string>> &post_sentences,
         const vector<vector<string>> &response_sentences) {
+    cout << "metricTestPosts begin" << endl;
+    hyper_params.print();
+    float rep_perplex = 0.0f;
+    for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
+        cout << "post:" << endl;
+        print(post_sentences.at(post_and_responses.post_id));
+
+        const std::vector<int> &response_ids = post_and_responses.response_ids;
+        float min_perplex = -1.0f;
+        cout << "response size:" << response_ids.size() << endl;
+        for (int response_id : response_ids) {
+//            cout << "response:" << endl;
+//            print(response_sentences.at(response_id));
+            Graph graph;
+            graph.train = false;
+            GraphBuilder graph_builder;
+            graph_builder.init(hyper_params);
+            graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id),
+                    hyper_params, model_params);
+            std::shared_ptr<DecoderComponents> decoder_components(buildDecoderComponents());
+            graph_builder.forwardDecoder(graph, *decoder_components,
+                    response_sentences.at(response_id), hyper_params, model_params);
+            graph.compute();
+            vector<Node*> nodes = toNodePointers(decoder_components->wordvector_to_onehots);
+            vector<int> word_ids = transferVector<int, string>(response_sentences.at(response_id),
+                    [&](const string &w) -> int {
+                    return model_params.lookup_table.getElemId(w);
+                    });
+            float perplex = computePerplex(nodes, word_ids);
+//            cout << format("perplex:%1%") % perplex << endl;
+            if (min_perplex < 0.0f || perplex < min_perplex) {
+                min_perplex = perplex;
+            }
+        }
+        cout << "min_perplex:" << min_perplex << endl;
+        rep_perplex += 1.0f / min_perplex;
+    }
+
+    cout << "repciprocal perplex:" << rep_perplex << endl;
+    return rep_perplex;
+}
+
+void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
+        const vector<PostAndResponses> &post_and_responses_vector,
+        const vector<vector<string>> &post_sentences,
+        const vector<vector<string>> &response_sentences) {
+    cout << "decodeTestPosts begin" << endl;
+    hyper_params.print();
+    std::vector<CandidateAndReferences> candidate_and_references_vector;
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
         Graph graph;
         graph.train = false;
@@ -236,18 +304,70 @@ void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params
             decoder_components_vector.push_back(buildDecoderComponents());
         }
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
-                hyper_params, model_params);
-        const std::vector<WordIdAndProbability> &word_ids = pair.first;
+                hyper_params.beam_size, hyper_params, model_params);
+        const std::vector<WordIdAndProbability> &word_ids_and_probability = pair.first;
         cout << "post:" << endl;
         print(post_sentences.at(post_and_responses.post_id));
         cout << "response:" << endl;
-        print(word_ids, model_params.lookup_table);
+        printWordIds(word_ids_and_probability, model_params.lookup_table);
+        dtype probability = pair.second;
+        cout << format("probability:%1%") % probability << endl;
+
+        std::vector<int> decoded_word_ids = transferVector<int, WordIdAndProbability>(
+                word_ids_and_probability, [](const WordIdAndProbability &w)->int {
+            return w.word_id;
+        });
+        const std::vector<int> &response_ids = post_and_responses.response_ids;
+        std::vector<std::vector<std::string>> str_references =
+            transferVector<std::vector<std::string>, int>(response_ids,
+                    [&](int response_id) -> std::vector<std::string> {
+                    return response_sentences.at(response_id);
+                    });
+        std::vector<std::vector<int>> id_references;
+        for (const std::vector<std::string> &strs : str_references) {
+            std::vector<int> ids = transferVector<int, std::string>(strs,
+                    [&](const std::string &w) -> int {
+                    return model_params.lookup_table.getElemId(w);
+                    });
+            id_references.push_back(ids);
+        }
+
+        CandidateAndReferences candidate_and_references(decoded_word_ids, id_references);
+        candidate_and_references_vector.push_back(candidate_and_references);
+
+        float bleu_value = computeBleu(candidate_and_references_vector);
+        cout << "bleu_value:" << bleu_value << endl;
+    }
+}
+
+void interact(const HyperParams &hyper_params, ModelParams &model_params) {
+    hyper_params.print();
+    while (true) {
+        string post;
+        std::getline(cin >> ws, post);
+        vector<string> words;
+        split(words, post, is_any_of(" "));
+        words.push_back(STOP_SYMBOL);
+
+        Graph graph;
+        graph.train = false;
+        GraphBuilder graph_builder;
+        graph_builder.init(hyper_params);
+        graph_builder.forward(graph, words, hyper_params, model_params);
+        std::vector<std::shared_ptr<DecoderComponents>> decoder_components_vector;
+        decoder_components_vector.push_back(buildDecoderComponents());
+        cout << format("decodeTestPosts - beam_size:%1% decoder_components_vector.size:%2%") %
+            hyper_params.beam_size % decoder_components_vector.size() << endl;
+        auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
+                hyper_params.beam_size, hyper_params, model_params);
+        const std::vector<WordIdAndProbability> &word_ids = pair.first;
+        cout << "post:" << endl;
+        cout << post << endl;
+        cout << "response:" << endl;
+        printWordIds(word_ids, model_params.lookup_table);
         dtype probability = pair.second;
         cout << format("probability:%1%") % probability << endl;
     }
-
-    DefaultConfig &config = GetDefaultConfig();
-    saveModel(hyper_params, model_params, config.output_model_file_prefix);
 }
 
 int main(int argc, char *argv[]) {
@@ -336,21 +456,57 @@ int main(int argc, char *argv[]) {
     alphabet.initial(word_counts, 0);
     ModelParams model_params;
 
-    if (default_config.input_model_file == "") {
-        model_params.lookup_table.initial(&alphabet, hyper_params.word_dim, true);
-        model_params.encoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
-        model_params.decoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
-        model_params.hidden_to_wordvector_params.initial(hyper_params.word_dim,
-                hyper_params.hidden_dim);
-    } else {
-        model_params.lookup_table.elems = &alphabet;
-        loadModel(hyper_params, model_params, default_config.input_model_file);
+    int beam_size = hyper_params.beam_size;
+
+    if (default_config.program_mode != ProgramMode::METRIC) {
+        if (default_config.input_model_file == "") {
+            model_params.lookup_table.initial(&alphabet, hyper_params.word_dim, true);
+            model_params.encoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
+            model_params.decoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
+            model_params.hidden_to_wordvector_params.initial(hyper_params.word_dim,
+                    hyper_params.hidden_dim);
+        } else {
+            model_params.lookup_table.elems = &alphabet;
+            loadModel(hyper_params, model_params, default_config.input_model_file);
+        }
     }
 
-    if (default_config.only_decode) {
-        processTestPosts(hyper_params, model_params, test_post_and_responses, post_sentences,
+    if (default_config.program_mode == ProgramMode::INTERACTING) {
+        hyper_params.beam_size = beam_size;
+        interact(hyper_params, model_params);
+    } else if (default_config.program_mode == ProgramMode::DECODING) {
+        hyper_params.beam_size = beam_size;
+        decodeTestPosts(hyper_params, model_params, test_post_and_responses, post_sentences,
                 response_sentences);
-    } else {
+    } else if (default_config.program_mode == ProgramMode::METRIC) {
+        path dir_path(default_config.input_model_dir);
+        if (!is_directory(dir_path)) {
+            cerr << format("%1% is not dir path") % default_config.input_model_dir << endl;
+            abort();
+        }
+
+        float max_rep_perplex = 0.0f;
+        for(auto& entry : boost::make_iterator_range(directory_iterator(dir_path), {})) {
+            string basic_name = entry.path().filename().string();
+            if (basic_name.find("model") != 0) {
+                continue;
+            }
+
+            string model_file_path = entry.path().string();
+            cout << format("model_file_path:%1%") % model_file_path << endl;
+            ModelParams model_params;
+            model_params.lookup_table.elems = &alphabet;
+            loadModel(hyper_params, model_params, model_file_path);
+            float rep_perplex = metricTestPosts(hyper_params, model_params,
+                    test_post_and_responses, post_sentences, response_sentences);
+            cout << format("model %1% rep_perplex is %2%") % model_file_path % rep_perplex << endl;
+            if (max_rep_perplex < rep_perplex) {
+                max_rep_perplex = rep_perplex;
+                cout << format("best model now is %1%, and rep_perplex is %2%") % model_file_path %
+                    rep_perplex << endl;
+            }
+        }
+    } else if (default_config.program_mode == ProgramMode::TRAINING) {
         ModelUpdate model_update;
         model_update._alpha = hyper_params.learning_rate;
         exportToOptimizer(model_params, model_update);
@@ -449,9 +605,9 @@ int main(int argc, char *argv[]) {
                             cout << "post:" << endl;
                             print(post_sentences.at(post_id));
                             cout << "golden answer:" << endl;
-                            print(word_ids, model_params.lookup_table);
+                            printWordIds(word_ids, model_params.lookup_table);
                             cout << "output:" << endl;
-                            print(result.second, model_params.lookup_table);
+                            printWordIds(result.second, model_params.lookup_table);
                         }
                     }
                 }
@@ -506,13 +662,6 @@ int main(int argc, char *argv[]) {
             profiler.EndCudaEvent();
             profiler.Print();
 
-//            cout << "dev:" << endl;
-//            processTestPosts(hyper_params, model_params, dev_post_and_responses, post_sentences,
-//                    response_sentences);
-//            cout << "test:" << endl;
-//            processTestPosts(hyper_params, model_params, test_post_and_responses, post_sentences,
-//                    response_sentences);
-
             if (last_loss_sum < loss_sum) {
                 model_update._alpha *= 0.875;
                 cout << "learning_rate:" << model_update._alpha << endl;
@@ -520,6 +669,8 @@ int main(int argc, char *argv[]) {
 
             last_loss_sum = loss_sum;
         }
+    } else {
+        abort();
     }
 
     return 0;
