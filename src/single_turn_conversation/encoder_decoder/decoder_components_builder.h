@@ -5,7 +5,7 @@
 #include "single_turn_conversation/encoder_decoder/global_context/global_context_decoder_components.h"
 
 std::shared_ptr<DecoderComponents> buildDecoderComponents() {
-    return std::shared_ptr(new GlobalContextDecoderComponents);
+    return std::shared_ptr<GlobalContextDecoderComponents>(new GlobalContextDecoderComponents);
 }
 
 #endif
