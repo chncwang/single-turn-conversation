@@ -393,7 +393,7 @@ int main(int argc, char *argv[]) {
                     graph_builder->forward(graph, post_sentences.at(post_id), hyper_params,
                             model_params);
                     int response_id = train_conversation_pairs.at(instance_index).response_id;
-                    shared_ptr<DecoderComponents> decoder_components(new DecoderComponents);
+                    shared_ptr<DecoderComponents> decoder_components(buildDecoderComponents());
                     decoder_components_vector.push_back(decoder_components);
                     graph_builder->forwardDecoder(graph, *decoder_components,
                             response_sentences.at(response_id),
@@ -470,8 +470,9 @@ int main(int argc, char *argv[]) {
                         graph_builder.forward(graph, post_sentences.at(conversation_pair.post_id),
                                 hyper_params, model_params);
 
-                        DecoderComponents decoder_components;
-                        graph_builder.forwardDecoder(graph, decoder_components,
+                        std::shared_ptr<DecoderComponents> decoder_components(
+                                buildDecoderComponents());
+                        graph_builder.forwardDecoder(graph, *decoder_components,
                                 response_sentences.at(conversation_pair.response_id),
                                 hyper_params, model_params);
 
@@ -480,7 +481,7 @@ int main(int argc, char *argv[]) {
                         vector<int> word_ids = toIds(response_sentences.at(
                                     conversation_pair.response_id), model_params.lookup_table);
                         vector<Node*> result_nodes = toNodePointers(
-                                decoder_components.wordvector_to_onehots);
+                                decoder_components->wordvector_to_onehots);
                         return MaxLogProbabilityLoss(result_nodes, word_ids, 1).first;
                     };
                     cout << format("checking grad - conversation_pair size:%1%") %

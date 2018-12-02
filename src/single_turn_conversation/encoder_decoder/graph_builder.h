@@ -239,7 +239,7 @@ struct GraphBuilder {
             }
 
             for (int beam_i = 0; beam_i < beam.size(); ++beam_i) {
-                DecoderComponents &decoder_components = beam.at(beam_i);
+                DecoderComponents &decoder_components = *beam.at(beam_i);
                 forwardDecoderByOneStep(graph, decoder_components, i,
                         i == 0 ? nullptr : &last_answers.at(beam_i),
                         hyper_params,
