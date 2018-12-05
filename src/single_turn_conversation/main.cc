@@ -11,6 +11,7 @@
 #include <sstream>
 #include <fstream>
 #include <string>
+#include<stdio.h>
 #include <boost/format.hpp>
 #include "N3LDG.h"
 #include "single_turn_conversation/data_manager.h"
@@ -135,22 +136,43 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
     }
     hyper_params.learning_rate = learning_rate;
 
+	int word_cutoff = ini_reader.GetInteger("hyper", "word_cutoff", 0);
+	if (word_cutoff == 0) {
+		cerr << "word_cutoff not found" << endl;
+		abort();
+	}
+	hyper_params.word_cutoff = word_cutoff;
+
+	string word_file = ini_reader.Get("hyper", "word_file", "");
+	hyper_params.word_file = word_file;
+	
+
+	bool wordemb_finetune = ini_reader.GetBoolean("hyper", "wordemb_finetune", false);
+
+	hyper_params.wordemb_finetune = wordemb_finetune;
+
     return hyper_params;
 }
 
 vector<int> toIds(const vector<string> &sentence, LookupTable &lookup_table) {
     vector<int> ids;
     for (const string &word : sentence) {
-        ids.push_back(lookup_table.getElemId(word));
+		int xid = lookup_table.getElemId(word);
+		if (xid < 0 && lookup_table.nUNKId >= 0) {
+			xid = lookup_table.nUNKId;
+		}
+		ids.push_back(xid);
     }
     return ids;
 }
 
 void print(const vector<int> &word_ids, const LookupTable &lookup_table) {
     for (int word_id : word_ids) {
-        cout << lookup_table.elems->from_id(word_id) << " ";
+        cout << lookup_table.elems->from_id(word_id) << " "<<word_id<<" ";
+              
     }
     cout << endl;
+
 }
 
 void print(const vector<WordIdAndProbability> &word_ids_with_probability_vector,
@@ -213,6 +235,7 @@ void loadModel(HyperParams &hyper_params, ModelParams &model_params, const strin
         hyper_params.load(is);
         model_params.load(is);
     } else {
+		//cout << filename << endl;
         cerr << format("failed to open is, error when loading %1%") % filename << endl;
         abort();
     }
@@ -248,13 +271,15 @@ void processTestPosts(const HyperParams &hyper_params, ModelParams &model_params
 }
 
 int main(int argc, char *argv[]) {
+
     cout << "dtype size:" << sizeof(dtype) << endl;
 
     Options options("single-turn-conversation", "single turn conversation");
+	
     options.add_options()
         ("config", "config file name", cxxopts::value<string>());
     auto args = options.parse(argc, argv);
-
+	
     string configfilename = args["config"].as<string>();
     INIReader ini_reader(configfilename);
     if (ini_reader.ParseError() < 0) {
@@ -323,18 +348,50 @@ int main(int argc, char *argv[]) {
         const vector<string> &post_sentence = post_sentences.at(conversation_pair.post_id);
         addWord(word_counts, post_sentence);
 
-        const vector<string> &response_sentence = response_sentences.at(
+        const vector<string> &response_sent = response_sentences.at(
                 conversation_pair.response_id);
-        addWord(word_counts, response_sentence);
+        addWord(word_counts, response_sent);
     }
-    word_counts[unknownkey] = hyper_params.cutoff+1;
+	
+	/*
+		if (!hyper_params.wordemb_finetune) {
+		for (const PostAndResponses &post_dev : dev_post_and_responses) {
+			const vector<string> &post_sentence = post_sentences.at(post_dev.post_id);
+                 
+			addWord(word_counts, post_sentence);
+		}
+
+		for (const PostAndResponses &post_test : test_post_and_responses) {
+			const vector<string> &post_sentence = post_sentences.at(post_test.post_id);
+			addWord(word_counts, post_sentence);
+		}
+	}
+*/
+	
+	
+    word_counts[unknownkey] = hyper_params.word_cutoff +1;
     word_counts[STOP_SYMBOL] = 1000000;
     Alphabet alphabet;
-    alphabet.initial(word_counts, 0);
+    alphabet.initial(word_counts, hyper_params.word_cutoff);
+	cout << "the size of alphabet is: " << endl;
+	cout << alphabet.m_size << endl;
     ModelParams model_params;
+     
+/*
+unordered_map<string,int>::iterator it;
 
+it = word_counts.begin();
+
+while(it != word_counts.end())
+{
+    if(it->second == 22538) cout<<"dddd: "<<  it->first<<endl;
+    it ++;     
+}
+*/
     if (default_config.input_model_file == "") {
-        model_params.lookup_table.initial(&alphabet, hyper_params.word_dim, true);
+        if(hyper_params.word_file == "")  model_params.lookup_table.initial(&alphabet, hyper_params.word_dim, true);
+        else model_params.lookup_table.initial(&alphabet, hyper_params.word_file, hyper_params.wordemb_finetune);
+
         model_params.encoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
         model_params.decoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
         model_params.hidden_to_wordvector_params.initial(hyper_params.word_dim,
@@ -440,7 +497,7 @@ int main(int argc, char *argv[]) {
 
                     if (local_metric->getAccuracy() < 1.0f) {
                         static int count_for_print;
-                        if (++count_for_print % 100 == 0) {
+                        if (++count_for_print % 1 == 0) {
                             count_for_print = 0;
                             int post_id = train_conversation_pairs.at(instance_index).post_id;
                             cout << "post:" << endl;
