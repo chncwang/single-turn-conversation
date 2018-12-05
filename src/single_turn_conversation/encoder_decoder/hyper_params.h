@@ -12,13 +12,13 @@ struct HyperParams {
     float dropout;
     int batch_size;
     int beam_size;
-    float learning_rate;
-	int word_cutoff;
+    int word_cutoff;
 	bool wordemb_finetune;
 	string word_file;
+    float learning_rate;
 
     float flag() const {
-        return word_dim + hidden_dim + dropout + batch_size + beam_size + learning_rate + word_cutoff;
+        return word_dim + hidden_dim + dropout + batch_size + beam_size + word_cutoff + learning_rate;
     }
 
     void save(std::ofstream &os) const {
@@ -27,10 +27,10 @@ struct HyperParams {
             << dropout << std::endl
             << batch_size << std::endl
             << beam_size << std::endl
+            << word_cutoff << std::endl
             << learning_rate << std::endl
-			<< word_cutoff << std::endl
-			<< word_file << std::endl
 			<< wordemb_finetune << std::endl
+			<< word_file << std::endl
             << flag() << std::endl;
     }
 
