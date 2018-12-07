@@ -95,17 +95,8 @@ std::vector<std::vector<std::string>> readSentences(const std::string &filename)
 
         const std::string &sentence = strs.at(1);
         std::vector<std::string> words;
-           boost::split(words, sentence, boost::is_any_of(" "));
-
-
-
+        boost::split(words, sentence, boost::is_any_of(" "));
         words.push_back(STOP_SYMBOL);
-/*
-	for (string ww: words) {
-		cout<<ww<<endl;
-	}
-cout<<endl<<endl;;
-*/
         results.push_back(words);
         ++i;
     }
