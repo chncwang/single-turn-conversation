@@ -184,9 +184,9 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
 vector<int> toIds(const vector<string> &sentence, LookupTable &lookup_table) {
     vector<int> ids;
     for (const string &word : sentence) {
-	int xid = lookup_table.getElemId(word, true);
-	if(xid < 0 && lookup_table.getElemId(unknownkey, true) >=0 ){
-	    xid = lookup_table.getElemId(unknownkey, true);
+	int xid = lookup_table.getElemId(word);
+	if(xid < 0 && lookup_table.getElemId(unknownkey) >=0 ){
+	    xid = lookup_table.getElemId(unknownkey);
 	}
         ids.push_back(xid);
     }
@@ -702,7 +702,7 @@ int main(int argc, char *argv[]) {
                    // saveModel(hyper_params, model_params, default_config.output_model_file_prefix, epoch);
                // }
             }
-	    saveModel(hyper_params, model_params, default_config.output_model_file_prefix, epoch);
+	        saveModel(hyper_params, model_params, default_config.output_model_file_prefix, epoch);
             profiler.EndCudaEvent();
             profiler.Print();
 
