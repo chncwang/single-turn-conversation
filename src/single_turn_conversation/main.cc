@@ -163,13 +163,32 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
     }
     hyper_params.learning_rate = learning_rate;
 
+    int word_cutoff = ini_reader.GetReal("hyper", "word_cutoff", -1);
+    if(word_cutoff == -1){
+   	cerr << "word_cutoff read error" << endl;
+    }
+    hyper_params.word_cutoff = word_cutoff;
+
+    bool word_finetune = ini_reader.GetBoolean("hyper", "word_finetune", -1);
+    if(word_finetune == -1){
+        cerr << "word_finetune read error" << endl;
+    }
+    hyper_params.word_finetune = word_finetune;
+
+    string word_file = ini_reader.Get("hyper", "word_file", "");
+    hyper_params.word_file = word_file;
+
     return hyper_params;
 }
 
 vector<int> toIds(const vector<string> &sentence, LookupTable &lookup_table) {
     vector<int> ids;
     for (const string &word : sentence) {
-        ids.push_back(lookup_table.getElemId(word));
+	int xid = lookup_table.getElemId(word);
+	if(xid < 0 && lookup_table.getElemId(unknownkey) >=0 ){
+	    xid = lookup_table.getElemId(unknownkey);
+	}
+        ids.push_back(xid);
     }
     return ids;
 }
@@ -204,12 +223,12 @@ void analyze(const vector<int> &results, const vector<int> &answers, Metric &met
 }
 
 void saveModel(const HyperParams &hyper_params, ModelParams &model_params,
-        const string &filename_prefix) {
+        const string &filename_prefix, int epoch) {
     auto t = time(nullptr);
     auto tm = *localtime(&t);
     ostringstream oss;
     oss << put_time(&tm, "%d-%m-%Y-%H-%M-%S");
-    string filename = filename_prefix + oss.str();
+    string filename = filename_prefix + oss.str() + "epoch" + to_string(epoch);
 
     ofstream os(filename.c_str(), ios_base::out | ios::binary);
     if (os.is_open()) {
@@ -450,10 +469,33 @@ int main(int argc, char *argv[]) {
                 conversation_pair.response_id);
         addWord(word_counts, response_sentence);
     }
-    word_counts[unknownkey] = 1000000;
+    
+    for (const PostAndResponses &dev : dev_post_and_responses){
+    	const vector<string>&post_sentence = post_sentences.at(dev.post_id);
+	addWord(word_counts, post_sentence);
+
+	for(int i=0; i<dev.response_ids.size(); i++){
+	    const vector<string>&resp_sentence = response_sentences.at(dev.response_ids.at(i));
+	    addWord(word_counts, resp_sentence);
+	}
+    }
+    
+    for (const PostAndResponses &test : test_post_and_responses){
+        const vector<string>&post_sentence = post_sentences.at(test.post_id);
+	addWord(word_counts, post_sentence);
+
+	for(int i =0; i<test.response_ids.size(); i++){
+	    const vector<string>&resp_sentence = response_sentences.at(test.response_ids.at(i));
+	    addWord(word_counts, resp_sentence);
+	}
+    } 
+
+    word_counts[unknownkey] = hyper_params.word_cutoff + 1;
     word_counts[STOP_SYMBOL] = 1000000;
     Alphabet alphabet;
-    alphabet.initial(word_counts, 0);
+    alphabet.initial(word_counts, hyper_params.word_cutoff);
+    cout << "the size of alphabet is: ";
+    cout << alphabet.size() <<endl;
     ModelParams model_params;
 
     int beam_size = hyper_params.beam_size;
@@ -462,6 +504,13 @@ int main(int argc, char *argv[]) {
         if (default_config.input_model_file == "") {
             model_params.lookup_table.initial(&alphabet, hyper_params.word_dim, true);
             model_params.encoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
+            if(hyper_params.word_file == "") {
+                model_params.lookup_table.initial(&alphabet, hyper_params.word_dim, true);
+            } else {
+                model_params.lookup_table.initial(&alphabet, hyper_params.word_file,
+                        hyper_params.word_finetune);
+            }
+	    model_params.encoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
             model_params.decoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
             model_params.hidden_to_wordvector_params.initial(hyper_params.word_dim,
                     hyper_params.hidden_dim);
@@ -647,18 +696,9 @@ int main(int argc, char *argv[]) {
                 }
 
                 model_update.updateAdam(10.0f);
-
-                auto current_timestamp = chrono::steady_clock::now();
-                if (chrono::duration_cast<chrono::seconds>(current_timestamp -
-                            last_timestamp).count() >= interval) {
-                    interval *= 2;
-                    if (interval > 3600) {
-                        interval = 3600;
-                    }
-                    last_timestamp = current_timestamp;
-                    saveModel(hyper_params, model_params, default_config.output_model_file_prefix);
-                }
+                
             }
+            saveModel(hyper_params, model_params, default_config.output_model_file_prefix, epoch);
             profiler.EndCudaEvent();
             profiler.Print();
 

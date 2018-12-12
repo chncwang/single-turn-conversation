@@ -13,9 +13,12 @@ struct HyperParams {
     int batch_size;
     int beam_size;
     float learning_rate;
+    int word_cutoff;
+    string word_file;
+    bool word_finetune;
 
     float flag() const {
-        return word_dim + hidden_dim + dropout + batch_size + beam_size + learning_rate;
+        return word_dim + hidden_dim + dropout + batch_size + beam_size + learning_rate + word_cutoff;
     }
 
     void save(std::ofstream &os) const {
@@ -25,12 +28,15 @@ struct HyperParams {
             << batch_size << std::endl
             << beam_size << std::endl
             << learning_rate << std::endl
+	    << word_cutoff << std::endl
+	    << word_file << std::endl
+	    << word_finetune << std::endl
             << flag() << std::endl;
     }
 
     void load(std::ifstream &is) {
         float f;
-        is >> word_dim >> hidden_dim >> dropout >> batch_size >> beam_size >> learning_rate >> f;
+        is >> word_dim >> hidden_dim >> dropout >> batch_size >> beam_size >> learning_rate >> word_cutoff >> f;
         if (abs(f - flag()) > 0.001) {
             std::cerr << boost::format(
                     "loading hyper params error, s is %1%, but computed flag is %2%") % f % flag()
@@ -45,7 +51,10 @@ struct HyperParams {
             << "dropout:" << dropout << std::endl
             << "batch_size:" << batch_size << std::endl
             << "beam_size:" << beam_size << std::endl
-            << "learning_rate:" << learning_rate << std::endl;
+            << "learning_rate:" << learning_rate << std::endl
+	    << "word_cutoff:" << word_cutoff << std::endl
+	    << "word_file:" << word_file << std::endl
+    	    << "word_finetune:" << word_finetune << std::endl; 
     }
 };
 
