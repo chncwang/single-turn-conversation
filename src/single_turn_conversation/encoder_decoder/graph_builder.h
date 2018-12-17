@@ -82,6 +82,10 @@ std::vector<BeamSearchResult> mostProbableResults(
         auto tuple = toExp(node);
 
         for (int j = 0; j < nodes.at(i)->dim; ++j) {
+            if (j == model_params.lookup_table.nUNKId) {
+                continue;
+            }
+
             dtype value = node.val.v[j] - std::get<1>(tuple).second;
             dtype log_probability = value - log(std::get<2>(tuple));
             dtype word_probability = exp(log_probability);
@@ -89,6 +93,10 @@ std::vector<BeamSearchResult> mostProbableResults(
             if (!last_results.empty()) {
                 log_probability += last_results.at(i).final_log_probability;
                 word_ids = last_results.at(i).path;
+            }
+
+            if (exp(log_probability) < 1e-20) {
+                continue;
             }
 
             word_ids.push_back(WordIdAndProbability(j, word_probability));
@@ -99,8 +107,10 @@ std::vector<BeamSearchResult> mostProbableResults(
             } else if (queue.top().final_log_probability < log_probability) {
                 queue.pop();
                 queue.push(beam_search_result);
-            } else if (word_ids.size() >= 20 && j == stop_id) {
-                results.push_back(beam_search_result);
+//            } else if (j == stop_id) {
+//                std::cout << boost::format(
+//                        "queue.top().final_log_probability:%1% stop log_probability:%2%") %
+//                    queue.top().final_log_probability % log_probability << std::endl;
             }
         }
     }
