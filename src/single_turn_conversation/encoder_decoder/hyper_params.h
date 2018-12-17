@@ -29,19 +29,18 @@ struct HyperParams {
             << beam_size << std::endl
             << learning_rate << std::endl
 	    << word_cutoff << std::endl
-	    << word_file << std::endl
 	    << word_finetune << std::endl
             << flag() << std::endl;
     }
 
     void load(std::ifstream &is) {
         float f;
-        is >> word_dim >> hidden_dim >> dropout >> batch_size >> beam_size >> learning_rate >> word_cutoff >> f;
+        is >> word_dim >> hidden_dim >> dropout >> batch_size >> beam_size >> learning_rate >>
+            word_cutoff >> word_finetune >> f;
         if (abs(f - flag()) > 0.001) {
             std::cerr << boost::format(
                     "loading hyper params error, s is %1%, but computed flag is %2%") % f % flag()
                 << std::endl;
-            abort();
         }
     }
 

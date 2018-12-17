@@ -105,6 +105,9 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
     default_config.check_grad = ini_reader.GetBoolean(SECTION, "check_grad", false);
     default_config.one_response = ini_reader.GetBoolean(SECTION, "one_response", false);
     default_config.learn_test = ini_reader.GetBoolean(SECTION, "learn_test", false);
+    default_config.save_model_per_batch = ini_reader.GetBoolean(SECTION, "save_model_per_batch",
+            false);
+
     default_config.max_sample_count = ini_reader.GetInteger(SECTION, "max_sample_count",
             1000000000);
     default_config.dev_size = ini_reader.GetInteger(SECTION, "dev_size", 0);
@@ -232,11 +235,13 @@ void saveModel(const HyperParams &hyper_params, ModelParams &model_params,
 
     ofstream os(filename.c_str(), ios_base::out | ios::binary);
     if (os.is_open()) {
+        cout << "saving model..." << endl;
         hyper_params.save(os);
 #if USE_GPU
         model_params.copyFromDeviceToHost();
 #endif
         model_params.save(os);
+        cout << "model saved" << endl;
     } else {
         cerr << format("failed to open os, error when saveing %1%") % filename << endl;
         abort();
@@ -249,8 +254,10 @@ void saveModel(const HyperParams &hyper_params, ModelParams &model_params,
 void loadModel(HyperParams &hyper_params, ModelParams &model_params, const string &filename) {
     ifstream is(filename.c_str());
     if (is) {
+        cout << "loading model..." << endl;
         hyper_params.load(is);
         model_params.load(is);
+        cout << "model loaded" << endl;
     } else {
         cerr << format("failed to open is, error when loading %1%") % filename << endl;
         abort();
@@ -502,8 +509,6 @@ int main(int argc, char *argv[]) {
 
     if (default_config.program_mode != ProgramMode::METRIC) {
         if (default_config.input_model_file == "") {
-            model_params.lookup_table.initial(&alphabet, hyper_params.word_dim, true);
-            model_params.encoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
             if(hyper_params.word_file == "") {
                 model_params.lookup_table.initial(&alphabet, hyper_params.word_dim, true);
             } else {
@@ -576,8 +581,6 @@ int main(int argc, char *argv[]) {
             shuffle(begin(train_conversation_pairs), end(train_conversation_pairs), engine);
             unique_ptr<Metric> metric = unique_ptr<Metric>(new Metric);
             dtype loss_sum = 0.0f;
-
-            auto last_timestamp = chrono::steady_clock::now();
 
             for (int batch_i = 0; batch_i < train_conversation_pairs.size() /
                     hyper_params.batch_size; ++batch_i) {
@@ -696,14 +699,19 @@ int main(int argc, char *argv[]) {
                 }
 
                 model_update.updateAdam(10.0f);
-                
+
+                if (default_config.save_model_per_batch) {
+                    saveModel(hyper_params, model_params, default_config.output_model_file_prefix,
+                            epoch);
+                }
             }
+
             saveModel(hyper_params, model_params, default_config.output_model_file_prefix, epoch);
             profiler.EndCudaEvent();
             profiler.Print();
 
             if (last_loss_sum < loss_sum) {
-                model_update._alpha *= 0.875;
+                model_update._alpha *= 0.1f;
                 cout << "learning_rate:" << model_update._alpha << endl;
             }
 
