@@ -571,20 +571,34 @@ int main(int argc, char *argv[]) {
         }
 
         dtype last_loss_sum = 1e10f;
+        dtype loss_sum = 0.0f;
 
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
         profiler.SetEnabled(false);
         profiler.BeginEvent("total");
-        int interval = 600;
+
+        int check_learning_rate_iteration = 10000 / hyper_params.batch_size;
+        int iteration = 0;
+
         for (int epoch = 0; ; ++epoch) {
             cout << "epoch:" << epoch << endl;
             shuffle(begin(train_conversation_pairs), end(train_conversation_pairs), engine);
             unique_ptr<Metric> metric = unique_ptr<Metric>(new Metric);
-            dtype loss_sum = 0.0f;
 
             for (int batch_i = 0; batch_i < train_conversation_pairs.size() /
                     hyper_params.batch_size; ++batch_i) {
-                cout << "batch_i:" << batch_i << endl;
+                cout << format("batch_i:%1% iteration:%2%") % batch_i % iteration << endl;
+                if (iteration % check_learning_rate_iteration == 0) {
+                    cout << format("loss_sum is %1%, and last loss_sum is %2%") % loss_sum %
+                        last_loss_sum << endl;
+                    if (loss_sum >= last_loss_sum) {
+                        model_update._alpha *= 0.5f;
+                        cout << "learning_rate:" << model_update._alpha << endl;
+                    }
+                    last_loss_sum = loss_sum;
+                    loss_sum = 0.0f;
+                }
+
                 Graph graph;
                 graph.train = true;
                 vector<shared_ptr<GraphBuilder>> graph_builders;
@@ -704,18 +718,14 @@ int main(int argc, char *argv[]) {
                     saveModel(hyper_params, model_params, default_config.output_model_file_prefix,
                             epoch);
                 }
+
+                ++iteration;
             }
 
             saveModel(hyper_params, model_params, default_config.output_model_file_prefix, epoch);
             profiler.EndCudaEvent();
             profiler.Print();
 
-            if (last_loss_sum < loss_sum) {
-                model_update._alpha *= 0.1f;
-                cout << "learning_rate:" << model_update._alpha << endl;
-            }
-
-            last_loss_sum = loss_sum;
         }
     } else {
         abort();
