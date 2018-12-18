@@ -107,8 +107,8 @@ class UniNode : public Node {
         in = NULL;
     }
 
-    void init(int ndim, dtype dropout) {
-        Node::init(ndim, dropout);
+    void init(int ndim) {
+        Node::init(ndim);
         ty.init(ndim);
         lty.init(ndim);
     }
@@ -148,7 +148,7 @@ class UniNode : public Node {
         in->loss.mat() += param->W.val.mat().transpose() * lty.mat();
     }
 
-    PExecute generate(bool bTrain, dtype cur_drop_factor);
+    PExecute generate();
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) override {
@@ -221,7 +221,7 @@ public:
         in->loss.mat() += param->W.val.mat().transpose() * loss.mat();
     }
 
-    PExecute generate(bool bTrain, dtype cur_drop_factor);
+    PExecute generate();
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) override {
@@ -248,14 +248,12 @@ class UniExecute :public Execute {
     UniParams* param;
     dtype(*activate)(const dtype&);   // activation function
     dtype(*derivate)(const dtype&, const dtype&);  // derivation function of activation function
-    Tensor2D drop_mask;
 
     void  forward() {
         int count = batch.size();
         ty.init(outDim, count);
         x.init(inDim, count);
         y.init(outDim, count);
-        drop_mask.init(outDim, count);
 #if TEST_CUDA || !USE_GPU
         b.init(outDim, count);
 #endif
@@ -279,11 +277,8 @@ class UniExecute :public Execute {
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, x.value,
                 ty.value, outDim, inDim, count, param->bUseB);
 
-        CalculateDropMask(count, outDim, drop_mask);
-
         n3ldg_cuda::ActivatedEnum activatedEnum = ToActivatedEnum(activate);
-        n3ldg_cuda::Activated(activatedEnum, ty.value, ys, y.value, outDim,
-                bTrain, dynamicDropValue(), drop_mask.value);
+        n3ldg_cuda::Activated(activatedEnum, ty.value, ys, y.value, outDim);
 
         for (int i = 0; i<batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
@@ -319,16 +314,7 @@ class UniExecute :public Execute {
             }
         }
 
-        drop_mask.copyFromDeviceToHost();
         for (int i = 0; i < count; ++i) {
-            for (int j = 0; j < outDim; ++j) {
-                dtype v = drop_mask[i][j];
-                batch[i]->drop_mask[j] = v <= dynamicDropValue() ? 0 : 1;
-            }
-        }
-
-        for (int i = 0; i < count; ++i) {
-            batch[i]->forward_drop(bTrain, drop_factor);
             n3ldg_cuda::Assert(batch[i]->val.verify("forward batch i val"));
         }
 
@@ -364,10 +350,6 @@ class UniExecute :public Execute {
         }
         profiler.EndEvent();
 
-        for (int i = 0; i < count; ++i) {
-            dtype drop_value = batch[0]->drop_value;
-            batch[i]->forward_drop(bTrain, drop_factor);
-        }
         profiler.EndEvent();
 #endif
     }
@@ -388,8 +370,7 @@ class UniExecute :public Execute {
         }
         n3ldg_cuda::ActivatedEnum activatedEnum = ToActivatedEnum(activate);
         n3ldg_cuda::CalculateLtyForUniBackward(activatedEnum, ly_vec, ty.value,
-                y.value, drop_mask.value, dynamicDropValue(), lty.value, count,
-                outDim);
+                y.value, lty.value, count, outDim);
 #if TEST_CUDA
         n3ldg_cuda::Assert(param->W.grad.verify(
                     "uni backward W grad initial"));
@@ -419,7 +400,6 @@ class UniExecute :public Execute {
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
-            ptr->backward_drop();
             for (int idy = 0; idy < outDim; idy++) {
                 ly[idx][idy] = ptr->loss[idy];
             }
@@ -462,7 +442,6 @@ class UniExecute :public Execute {
         ly.init(outDim, count);
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
-            ptr->backward_drop();
             memcpy(ly.v + idx * outDim, ptr->loss.v, outDim * sizeof(dtype));
         }
 
@@ -489,11 +468,9 @@ class UniExecute :public Execute {
     }
 };
 
-PExecute UniNode::generate(bool bTrain, dtype cur_drop_factor) {
+PExecute UniNode::generate() {
     UniExecute* exec = new UniExecute();
     exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor;
     exec->inDim = param->W.inDim();
     exec->outDim = param->W.outDim();
     exec->param = param;
@@ -603,7 +580,6 @@ public:
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             LinearNode* ptr = (LinearNode*)batch[idx];
-            ptr->backward_drop();
             for (int idy = 0; idy < outDim; idy++) {
                 ly[idx][idy] = ptr->loss[idy];
             }
@@ -670,7 +646,6 @@ class LinearExecute :public Execute {
         for (int idx = 0; idx < count; idx++) {
             LinearNode* ptr = (LinearNode*)batch[idx];
             memcpy(ptr->val.v, y.v + idx * outDim, outDim * sizeof(dtype));
-            ptr->forward_drop(bTrain, drop_factor);
         }
     }
 
@@ -681,7 +656,6 @@ class LinearExecute :public Execute {
 
         for (int idx = 0; idx < count; idx++) {
             LinearNode* ptr = (LinearNode*)batch[idx];
-            ptr->backward_drop();
             memcpy(ly.v + idx * outDim, ptr->loss.v, outDim * sizeof(dtype));
         }
 
@@ -707,13 +681,12 @@ class LinearExecute :public Execute {
 };
 #endif
 
-PExecute LinearNode::generate(bool bTrain, dtype cur_drop_factor) {
+PExecute LinearNode::generate() {
     LinearExecute* exec = new LinearExecute();
     exec->batch.push_back(this);
     exec->inDim = param->W.inDim();
     exec->outDim = param->W.outDim();
     exec->param = param;
-    exec->bTrain = bTrain;
     return exec;
 };
 
@@ -744,7 +717,7 @@ struct LinearWordVectorNode : public Node {
         abort();
     }
 
-    Execute* generate(bool bTrain, dtype cur_drop_factor);
+    Execute* generate();
 
     bool typeEqual(PNode other) override {
         bool result = Node::typeEqual(other);
@@ -927,13 +900,12 @@ struct LinearWordVectorExecute : public Execute {
 
 #endif
 
-Execute* LinearWordVectorNode::generate(bool bTrain, dtype cur_drop_factor) {
+Execute* LinearWordVectorNode::generate() {
     LinearWordVectorExecute* exec = new LinearWordVectorExecute();
     exec->batch.push_back(this);
     exec->inDim = param->outDim();
     exec->outDim = param->inDim();
     exec->param = param;
-    exec->bTrain = bTrain;
     return exec;
 }
 

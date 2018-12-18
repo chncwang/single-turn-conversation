@@ -107,7 +107,7 @@ class SparseNode : public Node {
         param->W.loss(ins, loss);
     }
 
-    PExecute generate(bool bTrain, dtype cur_drop_factor);
+    PExecute generate();
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) {
@@ -124,34 +124,11 @@ class SparseNode : public Node {
 
 };
 
+class SparseExecute :public Execute {};
 
-class SparseExecute :public Execute {
-  public:
-    void  forward() {
-        int count = batch.size();
-        //#pragma omp parallel for
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->compute();
-            batch[idx]->forward_drop(bTrain, drop_factor);
-        }
-    }
-
-    void backward() {
-        int count = batch.size();
-        //#pragma omp parallel for
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->backward_drop();
-            batch[idx]->backward();
-        }
-    }
-};
-
-
-PExecute SparseNode::generate(bool bTrain, dtype cur_drop_factor) {
+PExecute SparseNode::generate() {
     SparseExecute* exec = new SparseExecute();
     exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor;
     return exec;
 }
 

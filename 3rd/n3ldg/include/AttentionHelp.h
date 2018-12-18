@@ -43,8 +43,8 @@ public:
     }
 
 
-    void init(int ndim, dtype dropout) {
-        Node::init(ndim, dropout);
+    void init(int ndim) {
+        Node::init(ndim);
     }
 
   public:
@@ -80,7 +80,7 @@ public:
 
 
   public:
-    PExecute generate(bool bTrain, dtype cur_drop_factor);
+    PExecute generate();
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) {
@@ -219,7 +219,6 @@ public:
 
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
-            batch[idx]->backward_drop();
             batch[idx]->backward();
         }
 
@@ -246,7 +245,6 @@ class AttentionSoftMaxExecute : public Execute {
         //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            batch[idx]->forward_drop(bTrain, drop_factor);
         }
     }
 
@@ -254,18 +252,15 @@ class AttentionSoftMaxExecute : public Execute {
         int count = batch.size();
         //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
-            batch[idx]->backward_drop();
             batch[idx]->backward();
         }
     }
 };
 #endif
 
-PExecute AttentionSoftMaxNode::generate(bool bTrain, dtype cur_drop_factor) {
+PExecute AttentionSoftMaxNode::generate() {
     AttentionSoftMaxExecute* exec = new AttentionSoftMaxExecute();
     exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor;
 #if USE_GPU
     exec->dim = dim;
 #endif
@@ -303,8 +298,8 @@ class AttentionSoftMaxVNode : public Node {
     }
 
 
-    void init(int ndim, dtype dropout) {
-        Node::init(ndim, dropout);
+    void init(int ndim) {
+        Node::init(ndim);
         int count = masks.size();
         for (int idx = 0; idx < count; idx++) {
             masks[idx].init(ndim);
@@ -350,7 +345,7 @@ class AttentionSoftMaxVNode : public Node {
 
 
   public:
-    PExecute generate(bool bTrain, dtype cur_drop_factor);
+    PExecute generate();
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) {
@@ -495,7 +490,6 @@ public:
 
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
-            batch[idx]->backward_drop();
             batch[idx]->backward();
         }
 
@@ -522,7 +516,6 @@ class AttentionSoftMaxVExecute : public Execute {
         //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            batch[idx]->forward_drop(bTrain, drop_factor);
         }
     }
 
@@ -530,18 +523,15 @@ class AttentionSoftMaxVExecute : public Execute {
         int count = batch.size();
         //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
-            batch[idx]->backward_drop();
             batch[idx]->backward();
         }
     }
 };
 #endif
 
-PExecute AttentionSoftMaxVNode::generate(bool bTrain, dtype cur_drop_factor) {
+PExecute AttentionSoftMaxVNode::generate() {
     AttentionSoftMaxVExecute* exec = new AttentionSoftMaxVExecute();
     exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor;
 #if USE_GPU
     exec->dim = dim;
 #endif

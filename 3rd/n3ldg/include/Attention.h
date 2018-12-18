@@ -84,9 +84,9 @@ class AttentionBuilder {
         int maxsize = _weights.size();
         for (int idx = 0; idx < maxsize; idx++) {
             _weights[idx].setParam(&_param->bi_atten);
-            _weights[idx].init(1, -1);
+            _weights[idx].init(1);
         }
-        _hidden.init(_nHiddenDim, -1);
+        _hidden.init(_nHiddenDim);
     }
 
   public:
@@ -181,9 +181,9 @@ class AttentionVBuilder {
         int maxsize = _weights.size();
         for (int idx = 0; idx < maxsize; idx++) {
             _weights[idx].setParam(&_param->bi_atten);
-            _weights[idx].init(_nHiddenDim, -1);
+            _weights[idx].init(_nHiddenDim);
         }
-        _hidden.init(_nHiddenDim, -1);
+        _hidden.init(_nHiddenDim);
     }
 
   public:
@@ -272,9 +272,9 @@ class SelfAttentionBuilder {
         int maxsize = _weights.size();
         for (int idx = 0; idx < maxsize; idx++) {
             _weights[idx].setParam(&_param->uni_atten);
-            _weights[idx].init(1, -1);
+            _weights[idx].init(1);
         }
-        _hidden.init(_nHiddenDim, -1);
+        _hidden.init(_nHiddenDim);
     }
 
   public:
@@ -365,9 +365,9 @@ class SelfAttentionVBuilder {
         int maxsize = _weights.size();
         for (int idx = 0; idx < maxsize; idx++) {
             _weights[idx].setParam(&_param->uni_atten);
-            _weights[idx].init(_nHiddenDim, -1);
+            _weights[idx].init(_nHiddenDim);
         }
-        _hidden.init(_nHiddenDim, -1);
+        _hidden.init(_nHiddenDim);
     }
 
   public:

@@ -613,10 +613,7 @@ __global__ void KernelActivated(ActivatedEnum activated, const dtype *src,
         dtype**dest,
         dtype* dest2,
         int count,
-        int len,
-        bool is_being_trained,
-        dtype drop_factor,
-        const dtype *drop_mask) {
+        int len) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
     int step = blockDim.x * gridDim.x;
 
@@ -638,61 +635,38 @@ __global__ void KernelActivated(ActivatedEnum activated, const dtype *src,
             printf("KernelActivated error\n");
             return;
         }
-        if (is_being_trained) {
-            if (drop_factor > 0 && drop_mask[i] <= drop_factor) {
-                dest[count_i][len_i] = 0.0f;
-                dest2[i] = result;
-            } else {
-                dest[count_i][len_i] = result;
-                dest2[i] = result;
-            }
-        } else {
-            dest[count_i][len_i] = result * (1 - drop_factor);
-            dest2[i] = result;
-        }
+        dest[count_i][len_i] = result;
+        dest2[i] = result;
     }
 }
 
 void Activated(ActivatedEnum activated, const dtype *src,
         const std::vector<dtype*>& dest,
         dtype *dest2,
-        int len,
-        bool is_being_trained,
-        dtype drop_factor,
-        const dtype *drop_mask) {
-    if (drop_factor < 0) {
-        drop_factor = 0;
-    }
+        int len) {
     int count = dest.size();
     NumberPointerArray dest_arr;
     dest_arr.init((dtype**)dest.data(), dest.size());
     int block_count = std::min((len * count - 1 + TPB) / TPB, BLOCK_COUNT);
-    KernelActivated<<<block_count, TPB>>>(activated, src, dest_arr.value,
-            dest2, count, len, is_being_trained, drop_factor, drop_mask);
+    KernelActivated<<<block_count, TPB>>>(activated, src, dest_arr.value, dest2, count, len);
     CheckCudaError();
 }
 
 __global__ void KernelTanhForward(ActivatedEnum activated, const dtype** xs,
         int count,
         int dim,
-        const dtype* drop_mask,
-        dtype drop_factor,
         dtype**ys) {
     int index = DeviceDefaultIndex();
     int step = DeviceDefaultStep();
     for (int i = index; i < dim * count; i += step) {
         int count_i = i / dim;
         int dim_i = i % dim;
-        if (drop_factor > 0.0f && drop_mask[i] < drop_factor) {
-            ys[count_i][dim_i] = 0.0f;
+        if (activated == ActivatedEnum::TANH) {
+            ys[count_i][dim_i] = cuda_tanh(xs[count_i][dim_i]);
+        } else if (activated == ActivatedEnum::SIGMOID) {
+            ys[count_i][dim_i] = cuda_sigmoid(xs[count_i][dim_i]);
         } else {
-            if (activated == ActivatedEnum::TANH) {
-                ys[count_i][dim_i] = cuda_tanh(xs[count_i][dim_i]);
-            } else if (activated == ActivatedEnum::SIGMOID) {
-                ys[count_i][dim_i] = cuda_sigmoid(xs[count_i][dim_i]);
-            } else {
-                printf("error\n");
-            }
+            printf("error\n");
         }
     }
 }
@@ -700,19 +674,13 @@ __global__ void KernelTanhForward(ActivatedEnum activated, const dtype** xs,
 void TanhForward(ActivatedEnum activated, const std::vector<dtype*> &xs,
         int count,
         int dim,
-        const dtype *drop_mask,
-        dtype drop_factor,
         std::vector<dtype*> &ys) {
-    if (drop_factor < 0) {
-        drop_factor = 0.0f;
-    }
     NumberPointerArray x_arr, y_arr;
     x_arr.init((dtype**)xs.data(), xs.size());
     y_arr.init((dtype**)ys.data(), ys.size());
     int block_count = DefaultBlockCount(count * dim);
     KernelTanhForward<<<block_count, TPB>>>(activated,
-            (const dtype**)x_arr.value, count, dim, drop_mask, drop_factor,
-            y_arr.value);
+            (const dtype**)x_arr.value, count, dim, y_arr.value);
     CheckCudaError();
 }
 
@@ -721,25 +689,21 @@ __global__ void KernelTanhBackward(ActivatedEnum activated,
         const dtype **vals,
         int count,
         int dim,
-        const dtype* drop_mask,
-        dtype drop_factor,
         dtype** in_losses) {
     int index = DeviceDefaultIndex();
     int step = DeviceDefaultStep();
     for (int i = index; i < dim * count; i += step) {
         int count_i = i / dim;
         int dim_i = i % dim;
-        if (drop_factor <= 0.0f || drop_mask[i] > drop_factor) {
-            dtype v;
-            if (activated == ActivatedEnum::TANH) {
-                v = losses[count_i][dim_i] * (1 - vals[count_i][dim_i] *
-                        vals[count_i][dim_i]);
-            } else if (activated == ActivatedEnum::SIGMOID) {
-                v = losses[count_i][dim_i] * (1 - vals[count_i][dim_i]) *
-                    vals[count_i][dim_i];
-            }
-            atomicAdd(in_losses[count_i] + dim_i, v);
+        dtype v;
+        if (activated == ActivatedEnum::TANH) {
+            v = losses[count_i][dim_i] * (1 - vals[count_i][dim_i] *
+                    vals[count_i][dim_i]);
+        } else if (activated == ActivatedEnum::SIGMOID) {
+            v = losses[count_i][dim_i] * (1 - vals[count_i][dim_i]) *
+                vals[count_i][dim_i];
         }
+        atomicAdd(in_losses[count_i] + dim_i, v);
     }
 }
 
@@ -747,24 +711,19 @@ void TanhBackward(ActivatedEnum activated, const std::vector<dtype*> &losses,
         const std::vector<dtype*> &vals,
         int count,
         int dim,
-        const dtype *drop_mask,
-        dtype drop_factor,
         std::vector<dtype*> &in_losses) {
-    if (drop_factor < 0) {
-        drop_factor = 0.0f;
-    }
     NumberPointerArray loss_arr, val_arr, in_loss_arr;
     loss_arr.init((dtype**)losses.data(), losses.size());
     val_arr.init((dtype**)vals.data(), vals.size());
     in_loss_arr.init((dtype**)in_losses.data(), in_losses.size());
     int block_count = DefaultBlockCount(count * dim);
     KernelTanhBackward<<<block_count, TPB>>>(activated ,(const dtype**)loss_arr.value,
-            (const dtype**)val_arr.value, count, dim, drop_mask, drop_factor,
-            in_loss_arr.value);
+            (const dtype**)val_arr.value, count, dim, in_loss_arr.value);
     CheckCudaError();
 }
 
 __global__ void KernelDropoutForward(const dtype** xs, int count, int dim,
+        bool is_training,
         const dtype* drop_mask,
         dtype drop_factor,
         dtype**ys) {
@@ -773,33 +732,40 @@ __global__ void KernelDropoutForward(const dtype** xs, int count, int dim,
     for (int i = index; i < dim * count; i += step) {
         int count_i = i / dim;
         int dim_i = i % dim;
-        if (drop_factor > 0.0f && drop_mask[i] < drop_factor) {
-            ys[count_i][dim_i] = 0.0f;
+        if (is_training) {
+            if (drop_mask[i] < drop_factor) {
+                ys[count_i][dim_i] = 0.0f;
+            } else {
+                ys[count_i][dim_i] = xs[count_i][dim_i];
+            }
         } else {
-            ys[count_i][dim_i] = xs[count_i][dim_i];
+            ys[count_i][dim_i] = (1 - drop_factor) * xs[count_i][dim_i];
         }
     }
 }
 
 void DropoutForward(const std::vector<dtype*> &xs, int count, int dim,
+        bool is_training,
         const dtype *drop_mask,
         dtype drop_factor,
         std::vector<dtype*> &ys) {
-    if (drop_factor < 0) {
-        drop_factor = 0.0f;
+    if (drop_factor < 0 || drop_factor >= 1.0f) {
+        std::cerr << "drop value is " << drop_factor << std::endl;
+        abort();
     }
     NumberPointerArray x_arr, y_arr;
     x_arr.init((dtype**)xs.data(), xs.size());
     y_arr.init((dtype**)ys.data(), ys.size());
     int block_count = DefaultBlockCount(count * dim);
     KernelDropoutForward<<<block_count, TPB>>>((const dtype**)x_arr.value,
-            count, dim, drop_mask, drop_factor, y_arr.value);
+            count, dim, is_training, drop_mask, drop_factor, y_arr.value);
     CheckCudaError();
 }
 
 __global__ void KernelDropoutBackward(const dtype **losses, const dtype **vals,
         int count,
         int dim,
+        bool is_training,
         const dtype* drop_mask,
         dtype drop_factor,
         dtype** in_losses) {
@@ -808,8 +774,12 @@ __global__ void KernelDropoutBackward(const dtype **losses, const dtype **vals,
     for (int i = index; i < dim * count; i += step) {
         int count_i = i / dim;
         int dim_i = i % dim;
-        if (drop_factor <= 0.0f || drop_mask[i] > drop_factor) {
-            atomicAdd(in_losses[count_i] + dim_i, losses[count_i][dim_i]);
+        if (is_training) {
+            if (drop_mask[i] >= drop_factor) {
+                atomicAdd(in_losses[count_i] + dim_i, losses[count_i][dim_i]);
+            }
+        } else {
+            atomicAdd(in_losses[count_i] + dim_i, (1 - drop_factor) * losses[count_i][dim_i]);
         }
     }
 }
@@ -818,11 +788,13 @@ void DropoutBackward(const std::vector<dtype*> &losses,
         const std::vector<dtype*> &vals,
         int count,
         int dim,
+        bool is_training,
         const dtype *drop_mask,
         dtype drop_factor,
         std::vector<dtype*> &in_losses) {
-    if (drop_factor < 0) {
-        drop_factor = 0.0f;
+    if (drop_factor < 0 || drop_factor >= 1) {
+        std::cerr << "drop value is " << drop_factor << std::endl;
+        abort();
     }
     NumberPointerArray loss_arr, val_arr, in_loss_arr;
     loss_arr.init((dtype**)losses.data(), losses.size());
@@ -830,7 +802,7 @@ void DropoutBackward(const std::vector<dtype*> &losses,
     in_loss_arr.init((dtype**)in_losses.data(), in_losses.size());
     int block_count = DefaultBlockCount(count * dim);
     KernelDropoutBackward<<<block_count, TPB>>>((const dtype**)loss_arr.value,
-            (const dtype**)val_arr.value, count, dim, drop_mask, drop_factor,
+            (const dtype**)val_arr.value, count, dim, is_training, drop_mask, drop_factor,
             in_loss_arr.value);
     CheckCudaError();
 }
@@ -1157,8 +1129,6 @@ __global__ void KernelCalculateLtyForUniBackward(ActivatedEnum activated,
         const dtype *const*ly,
         const dtype *ty,
         const dtype *y,
-        const dtype *drop_mask,
-        dtype drop_factor,
         dtype *lty,
         int count,
         int dim) {
@@ -1169,23 +1139,19 @@ __global__ void KernelCalculateLtyForUniBackward(ActivatedEnum activated,
         int count_i = i / dim;
         int dim_i = i % dim;
         dtype yi = y[i];
-        if (drop_factor > 0.0f && drop_mask[i] < drop_factor) {
-            lty[i] = 0.0f;
+        dtype lyv = ly[count_i][dim_i];
+        if (activated == ActivatedEnum::TANH) {
+            lty[i] = lyv * cuda_dtanh(yi);
+        } else if (activated == ActivatedEnum::SIGMOID) {
+            lty[i] = lyv * cuda_dsigmoid(yi);
+        } else if (activated == ActivatedEnum::RELU) {
+            lty[i] = lyv * cuda_drelu(ty[i]);
+        } else if (activated == ActivatedEnum::LEAKY_RELU) {
+            lty[i] = lyv * cuda_dleaky_relu(ty[i]);
+        } else if (activated == ActivatedEnum::SELU) {
+            lty[i] = lyv * cuda_dselu(ty[i], yi);
         } else {
-            dtype lyv = ly[count_i][dim_i];
-            if (activated == ActivatedEnum::TANH) {
-                lty[i] = lyv * cuda_dtanh(yi);
-            } else if (activated == ActivatedEnum::SIGMOID) {
-                lty[i] = lyv * cuda_dsigmoid(yi);
-            } else if (activated == ActivatedEnum::RELU) {
-                lty[i] = lyv * cuda_drelu(ty[i]);
-            } else if (activated == ActivatedEnum::LEAKY_RELU) {
-                lty[i] = lyv * cuda_dleaky_relu(ty[i]);
-            } else if (activated == ActivatedEnum::SELU) {
-                lty[i] = lyv * cuda_dselu(ty[i], yi);
-            } else {
-                printf("KernelCalculateLtyForUniBackward error\n");
-            }
+            printf("KernelCalculateLtyForUniBackward error\n");
         }
     }
 }
@@ -1194,19 +1160,14 @@ void CalculateLtyForUniBackward(ActivatedEnum activated,
         const std::vector<dtype*> &ly,
         const dtype *ty,
         const dtype *y,
-        const dtype *drop_mask,
-        dtype drop_factor,
         dtype *lty,
         int count,
         int dim) {
-    if (drop_factor < 0) {
-        drop_factor = 0;
-    }
     NumberPointerArray ly_arr;
     ly_arr.init((dtype**)ly.data(), ly.size());
     int block_count = std::min(BLOCK_COUNT, (count * dim + TPB - 1) / TPB);
     KernelCalculateLtyForUniBackward<<<block_count, TPB>>>(activated,
-            ly_arr.value, ty, y, drop_mask, drop_factor, lty, count, dim);
+            ly_arr.value, ty, y, lty, count, dim);
     CheckCudaError();
     cudaDeviceSynchronize();
 }
@@ -1406,9 +1367,6 @@ void CalculateDropoutMask(dtype drop_factor, int count, int dim, dtype* mask) {
 
 __global__ void KernelConcatForward(dtype **ins, int *in_dims,
         dtype **outs,
-        bool on_training,
-        const dtype *drop_mask,
-        dtype drop_factor,
         int count,
         int in_count,
         int out_dim) {
@@ -1418,58 +1376,29 @@ __global__ void KernelConcatForward(dtype **ins, int *in_dims,
     for (int i = index; i < out_dim * count; i += step) {
         int out_dim_i = i % out_dim;
         int count_i = i / out_dim;
-        if (on_training) {
-            if (drop_factor > 0.0f && drop_mask[i] <
-                    drop_factor) {
-                outs[count_i][out_dim_i] = 0.0f;
-            } else {
-                int in_dim_sum = 0;
-                int last_in_dim_sum;
-                int offset_j = 0;
-                for (int j = 0; j < in_count; ++j) {
-                    last_in_dim_sum = in_dim_sum;
-                    in_dim_sum += in_dims[j];
-                    offset_j = j;
-                    if (out_dim_i < in_dim_sum) {
-                        break;
-                    }
-                }
-                int in_dim_i = out_dim_i - last_in_dim_sum;
-                dtype v = ins[count_i * in_count + offset_j][in_dim_i];
-                outs[count_i][out_dim_i] = v;
+        int in_dim_sum = 0;
+        int last_in_dim_sum;
+        int offset_j = 0;
+        for (int j = 0; j < in_count; ++j) {
+            last_in_dim_sum = in_dim_sum;
+            in_dim_sum += in_dims[j];
+            offset_j = j;
+            if (out_dim_i < in_dim_sum) {
+                break;
             }
-        } else {
-            int in_dim_sum = 0;
-            int last_in_dim_sum;
-            int offset_j = 0;
-            for (int j = 0; j < in_count; ++j) {
-                last_in_dim_sum = in_dim_sum;
-                in_dim_sum += in_dims[j];
-                offset_j = j;
-                if (out_dim_i < in_dim_sum) {
-                    break;
-                }
-            }
-            int in_dim_i = out_dim_i - last_in_dim_sum;
-            dtype v = ins[count_i * in_count + offset_j][in_dim_i];
-            outs[count_i][out_dim_i] = v * (1 - drop_factor);
         }
+        int in_dim_i = out_dim_i - last_in_dim_sum;
+        dtype v = ins[count_i * in_count + offset_j][in_dim_i];
+        outs[count_i][out_dim_i] = v;
     }
 }
 
 void ConcatForward(const std::vector<dtype*> &in_vals,
         const std::vector<int> &in_dims,
         std::vector<dtype*> &vals,
-        bool on_training,
-        const dtype *drop_mask,
-        dtype drop_factor,
         int count,
         int in_count,
         int out_dim) {
-    assert(drop_factor < 1);
-    if (drop_factor < 0) {
-        drop_factor = 0;
-    }
     int len = count * out_dim;
     int block_count = std::min(BLOCK_COUNT, (len - 1 + TPB) / TPB);
     NumberPointerArray in_val_arr, val_arr;
@@ -1479,15 +1408,12 @@ void ConcatForward(const std::vector<dtype*> &in_vals,
     in_dim_arr.init((int*)in_dims.data(), in_dims.size());
 
     KernelConcatForward<<<block_count, TPB>>>(in_val_arr.value,
-            in_dim_arr.value, val_arr.value, on_training, drop_mask,
-            drop_factor, count, in_count, out_dim);
+            in_dim_arr.value, val_arr.value, count, in_count, out_dim);
     CheckCudaError();
 }
 
 __global__ void KernelConcatBackward(dtype** in_losses, int *in_dims,
         dtype **out_losses,
-        const dtype *drop_mask,
-        dtype drop_factor,
         int count,
         int in_count,
         int out_dim) {
@@ -1496,39 +1422,29 @@ __global__ void KernelConcatBackward(dtype** in_losses, int *in_dims,
     for (int i = index; i < out_dim * count; i += step) {
         int out_dim_i = i % out_dim;
         int count_i = i / out_dim;
-        dtype dropout = drop_factor > 0 ?
-            drop_mask[i] : 1;
-        if (dropout > drop_factor) {
-            int in_dim_sum = 0;
-            int last_in_dim_sum;
-            int offset_j = 0;
-            for (int j = 0; j < in_count; ++j) {
-                last_in_dim_sum = in_dim_sum;
-                in_dim_sum += in_dims[j];
-                offset_j = j;
-                if (out_dim_i < in_dim_sum) {
-                    break;
-                }
+        int in_dim_sum = 0;
+        int last_in_dim_sum;
+        int offset_j = 0;
+        for (int j = 0; j < in_count; ++j) {
+            last_in_dim_sum = in_dim_sum;
+            in_dim_sum += in_dims[j];
+            offset_j = j;
+            if (out_dim_i < in_dim_sum) {
+                break;
             }
-            int in_dim_i = out_dim_i - last_in_dim_sum;
-            DeviceAtomicAdd(in_losses[count_i * in_count + offset_j] +
-                    in_dim_i, out_losses[count_i][out_dim_i]);
         }
+        int in_dim_i = out_dim_i - last_in_dim_sum;
+        DeviceAtomicAdd(in_losses[count_i * in_count + offset_j] +
+                in_dim_i, out_losses[count_i][out_dim_i]);
     }
 }
 
 void ConcatBackward(const std::vector<dtype*> &in_losses,
         const std::vector<int> &in_dims,
         std::vector<dtype*> &losses,
-        const dtype *drop_mask,
-        dtype drop_factor,
         int count,
         int in_count,
         int out_dim) {
-    assert(drop_factor < 1);
-    if (drop_factor < 0) {
-        drop_factor = 0;
-    }
     int len = count * out_dim;
     int block_count = std::min(BLOCK_COUNT, (len - 1 + TPB) / TPB);
 
@@ -1539,8 +1455,7 @@ void ConcatBackward(const std::vector<dtype*> &in_losses,
     in_dim_arr.init((int*)in_dims.data(), in_dims.size());
 
     KernelConcatBackward<<<block_count, TPB>>>(in_loss_arr.value,
-            in_dim_arr.value, loss_arr.value, drop_mask, drop_factor, count,
-            in_count, out_dim);
+            in_dim_arr.value, loss_arr.value, count, in_count, out_dim);
     CheckCudaError();
 }
 
@@ -1599,9 +1514,6 @@ void BatchMemset(const std::vector<dtype*> &vec, int count, int dim,
 }
 
 __global__ void KernelLookupForward(const int *xids, const dtype *vocabulary,
-        bool on_training,
-        const dtype *drop_mask,
-        dtype drop_factor,
         int count,
         int dim,
         dtype **vals) {
@@ -1610,57 +1522,33 @@ __global__ void KernelLookupForward(const int *xids, const dtype *vocabulary,
     for (int i = index; i < count * dim; i += step) {
         int count_i = i / dim;
         int dim_i = i % dim;
-        if (on_training) {
-            if (drop_factor > 0 &&
-                    drop_mask[i] < drop_factor) {
-                vals[count_i][dim_i] = 0.0f;
-            } else {
-                int xid = xids[count_i];
-                if (xid >= 0) {
-                    int voc_i = xid * dim + dim_i;
-                    vals[count_i][dim_i] = vocabulary[voc_i];
-                } else {
-                    vals[count_i][dim_i] = 0.0f;
-                }
-            }
+        int xid = xids[count_i];
+        if (xid >= 0) {
+            int voc_i = xid * dim + dim_i;
+            vals[count_i][dim_i] = vocabulary[voc_i];
         } else {
-            int xid = xids[count_i];
-            if (xid >= 0) {
-                int voc_i = xid * dim + dim_i;
-                vals[count_i][dim_i] = vocabulary[voc_i] * (1 - drop_factor);
-            } else {
-                vals[count_i][dim_i] = 0.0f;
-            }
+            vals[count_i][dim_i] = 0.0f;
         }
     }
 }
 
 void LookupForward(const std::vector<int> &xids, const dtype *vocabulary,
-        bool on_training,
-        const dtype *drop_mask,
-        dtype drop_factor,
         int count,
         int dim,
         std::vector<dtype*> &vals) {
-    if (drop_factor < 0) {
-        drop_factor = 0;
-    }
     int block_count = std::min(BLOCK_COUNT, (count * dim - 1 + TPB) / TPB);
     IntArray xid_arr;
     xid_arr.init((int*)xids.data(), xids.size());
     NumberPointerArray val_arr;
     val_arr.init((dtype**)vals.data(), vals.size());
     KernelLookupForward<<<block_count, TPB>>>(xid_arr.value, vocabulary,
-            on_training, drop_mask, drop_factor,  count, dim,
-            const_cast<dtype**>(val_arr.value));
+            count, dim, const_cast<dtype**>(val_arr.value));
     CheckCudaError();
 }
 
 __global__ void KernelLookupBackward(const int *xids, int unknown_id,
         bool fine_tune,
         const dtype** losses,
-        const dtype *drop_mask,
-        dtype drop_factor,
         int count,
         int dim,
         dtype *grad,
@@ -1676,11 +1564,7 @@ __global__ void KernelLookupBackward(const int *xids, int unknown_id,
             if (dim_i == 0) {
                 indexers[xid] = true;
             }
-            dtype dropout = drop_factor > 0 ?  drop_mask[i] : 1;
-            if (drop_factor < dropout) {
-                DeviceAtomicAdd(grad + xid * dim + dim_i,
-                        losses[count_i][dim_i]);
-            }
+            DeviceAtomicAdd(grad + xid * dim + dim_i, losses[count_i][dim_i]);
         }
     }
 }
@@ -1688,8 +1572,6 @@ __global__ void KernelLookupBackward(const int *xids, int unknown_id,
 void LookupBackward(const std::vector<int> &xids, int unknown_id,
         bool fine_tune,
         const std::vector<dtype*> &losses,
-        const dtype *drop_mask,
-        dtype drop_factor,
         int count,
         int dim,
         dtype *grad,
@@ -1706,8 +1588,6 @@ void LookupBackward(const std::vector<int> &xids, int unknown_id,
             unknown_id,
             fine_tune,
             const_cast<const dtype**>(loss_arr.value),
-            drop_mask,
-            drop_factor,
             count,
             dim,
             grad,
@@ -2358,31 +2238,13 @@ void VectorAttentionBackward(const std::vector<dtype*> &losses,
 __global__ void KernelPMultiForward(const dtype **ins1, const dtype **ins2,
         int count,
         int dim,
-        bool on_training,
-        const dtype* drop_mask,
-        dtype drop_factor,
         dtype** vals) {
     int index = DeviceDefaultIndex();
     int step = DeviceDefaultStep();
     for (int i = index; i < count * dim; i += step) {
         int count_i = i / dim;
         int dim_i = i % dim;
-        dtype dropout = drop_factor > 0 ?
-            drop_mask[i] : 1;
-        vals[count_i][dim_i] = drop_factor < dropout ?
-            ins1[count_i][dim_i] * ins2[count_i][dim_i] : 0.0f;
-        if (on_training) {
-            if (drop_factor > 0.0f &&
-                    drop_mask[i] < drop_factor) {
-                vals[count_i][dim_i] = 0.0f;
-            } else {
-                vals[count_i][dim_i] = ins1[count_i][dim_i] *
-                    ins2[count_i][dim_i];
-            }
-        } else {
-            vals[count_i][dim_i] = (1 - drop_factor) * ins1[count_i][dim_i] *
-                    ins2[count_i][dim_i];
-        }
+        vals[count_i][dim_i] = ins1[count_i][dim_i] * ins2[count_i][dim_i];
     }
 }
 
@@ -2390,21 +2252,14 @@ void PMultiForward(const std::vector<dtype*> &ins1,
         const std::vector<dtype*> &ins2,
         int count,
         int dim,
-        bool on_training,
-        const dtype* drop_mask,
-        dtype dropout,
         std::vector<dtype*> &vals) {
     int block_count = DefaultBlockCount(count * dim);
     NumberPointerArray ins1_arr, ins2_arr, vals_arr;
     ins1_arr.init((dtype**)ins1.data(), count);
     ins2_arr.init((dtype**)ins2.data(), count);
     vals_arr.init((dtype**)vals.data(), count);
-    if (dropout < 0) {
-        dropout = 0;
-    }
     KernelPMultiForward<<<block_count, TPB>>>((const dtype**)ins1_arr.value,
-            (const dtype**)ins2_arr.value, count, dim, on_training,drop_mask,
-            dropout, vals_arr.value);
+            (const dtype**)ins2_arr.value, count, dim, vals_arr.value);
     CheckCudaError();
 }
 
@@ -2413,8 +2268,6 @@ __global__ void KernelPMultiBackward(const dtype **losses,
         const dtype **in_vals2,
         int count,
         int dim,
-        const dtype *drop_mask,
-        dtype drop_factor,
         dtype** in_losses1,
         dtype** in_losses2) {
     int index = DeviceDefaultIndex();
@@ -2422,14 +2275,8 @@ __global__ void KernelPMultiBackward(const dtype **losses,
     for (int i = index; i < count * dim; i += step) {
         int count_i = i / dim;
         int dim_i = i % dim;
-        dtype dropout = drop_factor > 0 ?
-            drop_mask[i] : 1;
-        if (drop_factor < dropout) {
-            DeviceAtomicAdd(in_losses1[count_i] + dim_i,
-                    losses[count_i][dim_i] * in_vals2[count_i][dim_i]);
-            DeviceAtomicAdd(in_losses2[count_i] + dim_i,
-                    losses[count_i][dim_i] * in_vals1[count_i][dim_i]);
-        }
+        DeviceAtomicAdd(in_losses1[count_i] + dim_i, losses[count_i][dim_i] * in_vals2[count_i][dim_i]);
+        DeviceAtomicAdd(in_losses2[count_i] + dim_i, losses[count_i][dim_i] * in_vals1[count_i][dim_i]);
     }
 }
 
@@ -2438,8 +2285,6 @@ void PMultiBackward(const std::vector<dtype*> &losses,
         const std::vector<dtype*> &in_vals2,
         int count,
         int dim,
-        const dtype* drop_mask,
-        dtype drop_factor,
         std::vector<dtype*> &in_losses1,
         std::vector<dtype*> &in_losses2) {
     int block_count = DefaultBlockCount(count * dim);
@@ -2452,32 +2297,23 @@ void PMultiBackward(const std::vector<dtype*> &losses,
     in_losses2_arr.init((dtype**)in_losses2.data(), in_losses2.size());
     KernelPMultiBackward<<<block_count, TPB>>>((const dtype**)losses_arr.value,
             (const dtype**)in_vals1_arr.value,
-            (const dtype**)in_vals2_arr.value, count, dim, drop_mask,
-            drop_factor, in_losses1_arr.value, in_losses2_arr.value);
+            (const dtype**)in_vals2_arr.value, count, dim, in_losses1_arr.value, in_losses2_arr.value);
     CheckCudaError();
 }
 
 __global__ void KernelPAddForward(const dtype*** ins, int count, int dim,
         int in_count,
-        const dtype *drop_mask,
-        dtype drop_factor,
         dtype **vals) {
     int index = DeviceDefaultIndex();
     int step = DeviceDefaultStep();
     for (int i = index; i < count * dim; i+= step) {
         int count_i = i / dim;
         int dim_i = i % dim;
-        dtype dropout = drop_factor > 0 ?
-            drop_mask[i] : 1;
-        if (drop_factor < dropout) {
-            dtype sum = ins[0][count_i][dim_i];
-            for (int j = 1; j < in_count; ++j) {
-                sum += ins[j][count_i][dim_i];
-            }
-            vals[count_i][dim_i] = sum;
-        } else {
-            vals[count_i][dim_i] = 0.0f;
+        dtype sum = ins[0][count_i][dim_i];
+        for (int j = 1; j < in_count; ++j) {
+            sum += ins[j][count_i][dim_i];
         }
+        vals[count_i][dim_i] = sum;
     }
 }
 
@@ -2567,8 +2403,6 @@ void PDotBackward(const std::vector<dtype*> &losses,
 void PAddForward(const std::vector<std::vector<dtype*>> &ins, int count,
         int dim,
         int in_count,
-        const dtype *drop_mask,
-        dtype drop_factor,
         std::vector<dtype*> &vals) {
     std::vector<std::shared_ptr<NumberPointerArray>> gpu_addr;
     gpu_addr.reserve(ins.size());
@@ -2591,14 +2425,12 @@ void PAddForward(const std::vector<std::vector<dtype*>> &ins, int count,
 
     int block_count = DefaultBlockCount(count * dim);
     KernelPAddForward<<<block_count, TPB>>>((const dtype***)in_arr.value,
-            count, dim, in_count, drop_mask, drop_factor, out_arr.value);
+            count, dim, in_count, out_arr.value);
     CheckCudaError();
 }
 
 __global__ void KernelPAddBackward(const dtype **losses, int count, int dim,
         int in_count,
-        const dtype *drop_mask,
-        dtype drop_factor,
         dtype ***in_losses) {
     int index = DeviceDefaultIndex();
     int step = DeviceDefaultStep();
@@ -2608,19 +2440,12 @@ __global__ void KernelPAddBackward(const dtype **losses, int count, int dim,
         int dim_mul_count_i = i % dim_mul_count;
         int count_i = dim_mul_count_i / dim;
         int dim_i = dim_mul_count_i % dim;
-        dtype dropout = drop_factor > 0 ?
-            drop_mask[i] : 1;
-        if (drop_factor < dropout) {
-            DeviceAtomicAdd(in_losses[in_count_i][count_i] + dim_i,
-                    losses[count_i][dim_i]);
-        }
+        DeviceAtomicAdd(in_losses[in_count_i][count_i] + dim_i, losses[count_i][dim_i]);
     }
 }
 
 void PAddBackward(const std::vector<dtype*> &losses, int count, int dim,
         int in_count,
-        const dtype *drop_mask,
-        dtype drop_factor,
         std::vector<std::vector<dtype*>> &in_losses) {
     std::vector<std::shared_ptr<NumberPointerArray>> gpu_addr;
     gpu_addr.reserve(in_losses.size());
@@ -2643,7 +2468,7 @@ void PAddBackward(const std::vector<dtype*> &losses, int count, int dim,
 
     int block_count = DefaultBlockCount(in_count * count * dim);
     KernelPAddBackward<<<block_count, TPB>>>((const dtype**)out_loss_arr.value,
-            count, dim, in_count, drop_mask, drop_factor, in_loss_arr.value);
+            count, dim, in_count, in_loss_arr.value);
     CheckCudaError();
 }
 

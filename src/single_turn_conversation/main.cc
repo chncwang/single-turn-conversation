@@ -283,7 +283,6 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
 //            cout << "response:" << endl;
 //            print(response_sentences.at(response_id));
             Graph graph;
-            graph.train = false;
             GraphBuilder graph_builder;
             graph_builder.init(hyper_params);
             graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id),
@@ -320,7 +319,6 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
     std::vector<CandidateAndReferences> candidate_and_references_vector;
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
         Graph graph;
-        graph.train = false;
         GraphBuilder graph_builder;
         graph_builder.init(hyper_params);
         graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id), hyper_params,
@@ -338,6 +336,9 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         printWordIds(word_ids_and_probability, model_params.lookup_table);
         dtype probability = pair.second;
         cout << format("probability:%1%") % probability << endl;
+        if (word_ids_and_probability.empty()) {
+            continue;
+        }
 
         std::vector<int> decoded_word_ids = transferVector<int, WordIdAndProbability>(
                 word_ids_and_probability, [](const WordIdAndProbability &w)->int {
@@ -376,7 +377,6 @@ void interact(const HyperParams &hyper_params, ModelParams &model_params) {
         words.push_back(STOP_SYMBOL);
 
         Graph graph;
-        graph.train = false;
         GraphBuilder graph_builder;
         graph_builder.init(hyper_params);
         graph_builder.forward(graph, words, hyper_params, model_params);
@@ -600,7 +600,6 @@ int main(int argc, char *argv[]) {
                 }
 
                 Graph graph;
-                graph.train = true;
                 vector<shared_ptr<GraphBuilder>> graph_builders;
                 vector<shared_ptr<DecoderComponents>> decoder_components_vector;
                 vector<ConversationPair> conversation_pair_in_batch;
@@ -687,7 +686,6 @@ int main(int argc, char *argv[]) {
                         GraphBuilder graph_builder;
                         graph_builder.init(hyper_params);
                         Graph graph;
-                        graph.train = true;
 
                         graph_builder.forward(graph, post_sentences.at(conversation_pair.post_id),
                                 hyper_params, model_params);

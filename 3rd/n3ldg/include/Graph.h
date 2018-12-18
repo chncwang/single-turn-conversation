@@ -70,7 +70,7 @@ int Size(const NodeMap &map) {
 // one Node means a vector
 // the col should be 1, because we aimed for NLP only
 class Graph {
-  protected:
+protected:
     vector<PExecute> execs; //backward
     vector<PNode> nodes; //forward
     NodeMap free_nodes;
@@ -78,13 +78,8 @@ class Graph {
     vector<PNode> finish_nodes;
     vector<PNode> all_nodes;
 
-  public:
-    dtype drop_factor;
-    bool train;
-
-    Graph() {
-        drop_factor = 1.0;
-    }
+public:
+    Graph() = default;
 
     virtual ~Graph() {
         int count = execs.size();
@@ -95,13 +90,6 @@ class Graph {
         nodes.clear();
         free_nodes.clear();
         node_type_depth.clear();
-    }
-
-
-    void setDropFactor(dtype cur_drop_factor) {
-        drop_factor = cur_drop_factor;
-        if (drop_factor <= 0) drop_factor = 0;
-        if (drop_factor >= 1.0) drop_factor = 1.0;
     }
 
     void backward() {
@@ -159,7 +147,7 @@ class Graph {
                     std::endl;
                 std::cout << "node size:" << shallow_nodes.size() << std::endl;
             }
-            PExecute cur_exec = first_node->generate(train, drop_factor);
+            PExecute cur_exec = first_node->generate();
             cur_exec->batch = std::move(shallow_nodes);
             free_nodes.erase(min_hash);
 

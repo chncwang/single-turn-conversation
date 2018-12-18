@@ -67,7 +67,7 @@ class ActivateNode :public Node {
     }
 
   public:
-    PExecute generate(bool bTrain, dtype cur_drop_factor);
+    PExecute generate();
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) {
@@ -78,31 +78,11 @@ class ActivateNode :public Node {
 
 
 class ActivateExecute :public Execute {
-  public:
-    void  forward() {
-        int count = batch.size();
-        //#pragma omp parallel for
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->compute();
-            batch[idx]->forward_drop(bTrain, drop_factor);
-        }
-    }
-
-    void backward() {
-        int count = batch.size();
-        //#pragma omp parallel for
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->backward_drop();
-            batch[idx]->backward();
-        }
-    }
 };
 
-PExecute ActivateNode::generate(bool bTrain, dtype cur_drop_factor) {
+PExecute ActivateNode::generate() {
     ActivateExecute* exec = new ActivateExecute();
     exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor;
     return exec;
 };
 
@@ -142,7 +122,7 @@ class TanhNode :public Node {
     }
 
   public:
-    PExecute generate(bool bTrain, dtype cur_drop_factor);
+    PExecute generate();
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) {
@@ -152,10 +132,8 @@ class TanhNode :public Node {
 };
 
 class TanhExecute :public Execute {
-  public:
-    Tensor2D drop_mask;
-    int dim;
 public:
+    int dim;
     Tensor1D y, x;
     int sumDim;
 
@@ -165,7 +143,6 @@ public:
         std::vector<dtype*> xs, ys;
         xs.reserve(count);
         ys.reserve(count);
-        drop_mask.init(dim, count);
         for (Node *n : batch) {
             TanhNode *tanh = static_cast<TanhNode*>(n);
 #if TEST_CUDA
@@ -175,20 +152,10 @@ public:
             ys.push_back(tanh->val.value);
         }
 
-        CalculateDropMask(count, dim, drop_mask);
-        n3ldg_cuda::TanhForward(n3ldg_cuda::ActivatedEnum::TANH, xs, count, dim, drop_mask.value,
-                this->dynamicDropValue(), ys);
+        n3ldg_cuda::TanhForward(n3ldg_cuda::ActivatedEnum::TANH, xs, count, dim, ys);
 #if TEST_CUDA
-        drop_mask.copyFromDeviceToHost();
-        for (int i = 0; i < count; ++i) {
-            for (int j = 0; j < dim; ++j) {
-                dtype v = drop_mask[i][j];
-                batch[i]->drop_mask[j] = v <= dynamicDropValue() ? 0 : 1;
-            }
-        }
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            batch[idx]->forward_drop(bTrain, drop_factor);
             n3ldg_cuda::Assert(batch.at(idx)->val.verify("Tanh forward"));
         }
 #endif
@@ -223,7 +190,6 @@ public:
                 ptr->val[idy] = y[offset + idy];
             }
             offset += ptr->dim;
-            ptr->forward_drop(bTrain,drop_factor);
         }
     }
 #endif
@@ -245,11 +211,10 @@ public:
             losses.push_back(tanh->loss.value);
             in_losses.push_back(tanh->in->loss.value);
         }
-        n3ldg_cuda::TanhBackward(n3ldg_cuda::ActivatedEnum::TANH, losses, vals, count, dim, drop_mask.value,
-                dynamicDropValue(), in_losses);
+        n3ldg_cuda::TanhBackward(n3ldg_cuda::ActivatedEnum::TANH, losses, vals, count, dim,
+                in_losses);
 #if TEST_CUDA
         for (Node *n : batch) {
-            n->backward_drop();
             n->backward();
         }
         for (Node *n : batch) {
@@ -269,7 +234,6 @@ public:
         int offset = 0;
         for (int idx = 0; idx < count; idx++) {
             TanhNode* ptr = (TanhNode*)batch[idx];
-            ptr->backward_drop();
             for (int idy = 0; idy < ptr->dim; idy++) {
                 ly[offset + idy] = ptr->loss[idy];
             }
@@ -290,11 +254,9 @@ public:
 #endif
 };
 
-PExecute TanhNode::generate(bool bTrain, dtype cur_drop_factor) {
+PExecute TanhNode::generate() {
     TanhExecute* exec = new TanhExecute();
     exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor;
     exec->dim = dim;
     return exec;
 };
@@ -335,7 +297,7 @@ class SigmoidNode :public Node {
     }
 
   public:
-    PExecute generate(bool bTrain, dtype cur_drop_factor);
+    PExecute generate();
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) {
@@ -347,7 +309,6 @@ class SigmoidNode :public Node {
 
 class SigmoidExecute :public Execute {
   public:
-    Tensor2D drop_mask;
     int dim;
 public:
     Tensor1D x, y;
@@ -359,7 +320,6 @@ public:
         std::vector<dtype*> xs, ys;
         xs.reserve(count);
         ys.reserve(count);
-        drop_mask.init(dim, count);
         for (Node *n : batch) {
             SigmoidNode *tanh = static_cast<SigmoidNode*>(n);
 #if TEST_CUDA
@@ -369,20 +329,10 @@ public:
             ys.push_back(tanh->val.value);
         }
 
-        CalculateDropMask(count, dim, drop_mask);
-        n3ldg_cuda::TanhForward(n3ldg_cuda::ActivatedEnum::SIGMOID, xs, count, dim, drop_mask.value,
-                this->dynamicDropValue(), ys);
+        n3ldg_cuda::TanhForward(n3ldg_cuda::ActivatedEnum::SIGMOID, xs, count, dim, ys);
 #if TEST_CUDA
-        drop_mask.copyFromDeviceToHost();
-        for (int i = 0; i < count; ++i) {
-            for (int j = 0; j < dim; ++j) {
-                dtype v = drop_mask[i][j];
-                batch[i]->drop_mask[j] = v <= dynamicDropValue() ? 0 : 1;
-            }
-        }
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            batch[idx]->forward_drop(bTrain, drop_factor);
             n3ldg_cuda::Assert(batch.at(idx)->val.verify("Sigmoid forward"));
         }
 #endif
@@ -407,11 +357,10 @@ public:
             losses.push_back(tanh->loss.value);
             in_losses.push_back(tanh->in->loss.value);
         }
-        n3ldg_cuda::TanhBackward(n3ldg_cuda::ActivatedEnum::SIGMOID, losses, vals, count, dim, drop_mask.value,
-                dynamicDropValue(), in_losses);
+        n3ldg_cuda::TanhBackward(n3ldg_cuda::ActivatedEnum::SIGMOID, losses, vals, count, dim,
+                in_losses);
 #if TEST_CUDA
         for (Node *n : batch) {
-            n->backward_drop();
             n->backward();
         }
         for (Node *n : batch) {
@@ -424,11 +373,9 @@ public:
 #endif
 };
 
-PExecute SigmoidNode::generate(bool bTrain, dtype cur_drop_factor) {
+PExecute SigmoidNode::generate() {
     SigmoidExecute* exec = new SigmoidExecute();
     exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor;
     exec->dim = dim;
     return exec;
 };
@@ -465,7 +412,7 @@ class ReluNode :public Node {
     }
 
   public:
-    PExecute generate(bool bTrain, dtype cur_drop_factor);
+    PExecute generate();
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) {
@@ -474,192 +421,19 @@ class ReluNode :public Node {
     }
 };
 
-class ReluExecute :public Execute {
-  public:
-    void  forward() {
-        int count = batch.size();
-        //#pragma omp parallel for
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->compute();
-            batch[idx]->forward_drop(bTrain, drop_factor);
-        }
-    }
+class ReluExecute :public Execute {};
 
-    void backward() {
-        int count = batch.size();
-        //#pragma omp parallel for
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->backward_drop();
-            batch[idx]->backward();
-        }
-    }
-};
-
-PExecute ReluNode::generate(bool bTrain, dtype cur_drop_factor) {
+PExecute ReluNode::generate() {
     ReluExecute* exec = new ReluExecute();
     exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor;
     return exec;
 };
-
-
-class IndexNode :public Node {
-  public:
-    PNode in;
-    int index_id;
-
-  public:
-    IndexNode() : Node() {
-        in = NULL;
-        index_id = -1;
-        dim = 1;
-        node_type = "index";
-    }
-
-    ~IndexNode() {
-        in = NULL;
-    }
-
-    //can not be dropped since the output is a scalar
-    void init(int ndim, dtype dropout) {
-        dim = 1;
-        Node::init(dim, -1);
-    }
-
-  public:
-    void forward(Graph *cg, PNode x, int index) {
-        in = x;
-        index_id = index;
-        degree = 0;
-        in->addParent(this);
-        cg->addNode(this);
-    }
-
-  public:
-    void compute() {
-        val[0] = in->val[index_id];
-    }
-
-    void backward() {
-        in->loss[index_id] += loss[0];
-    }
-
-  public:
-    PExecute generate(bool bTrain, dtype cur_drop_factor);
-
-    // better to rewrite for deep understanding
-    bool typeEqual(PNode other) {
-        bool result = Node::typeEqual(other);
-        return result;
-    }
-};
-
-class IndexExecute : public Execute {
-  public:
-    void  forward() {
-        int count = batch.size();
-        //#pragma omp parallel for
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->compute();
-            batch[idx]->forward_drop(bTrain, drop_factor);
-        }
-    }
-
-    void backward() {
-        int count = batch.size();
-        //#pragma omp parallel for
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->backward_drop();
-            batch[idx]->backward();
-        }
-    }
-};
-
-PExecute IndexNode::generate(bool bTrain, dtype cur_drop_factor) {
-    IndexExecute* exec = new IndexExecute();
-    exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor;
-    return exec;
-}
-
-
-
-class PSubNode : public Node {
-  public:
-    PNode in1, in2;
-  public:
-    PSubNode() : Node() {
-        in1 = NULL;
-        in2 = NULL;
-        node_type = "point-subtraction";
-    }
-
-  public:
-    void forward(Graph *cg, PNode x1, PNode x2) {
-        in1 = x1;
-        in2 = x2;
-        degree = 0;
-        in1->addParent(this);
-        in2->addParent(this);
-        cg->addNode(this);
-    }
-
-  public:
-    void compute() {
-        val.vec() = in1->val.vec() - in2->val.vec();
-    }
-
-    void backward() {
-        in1->loss.vec() += loss.vec();
-        in2->loss.vec() -= loss.vec();
-    }
-
-  public:
-    // better to rewrite for deep understanding
-    bool typeEqual(PNode other) {
-        return Node::typeEqual(other);
-    }
-
-    PExecute generate(bool bTrain, dtype cur_drop_factor);
-};
-
-
-class PSubExecute :public Execute {
-  public:
-    void  forward() {
-        int count = batch.size();
-        //#pragma omp parallel for
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->compute();
-            batch[idx]->forward_drop(bTrain, drop_factor);
-        }
-    }
-
-    void backward() {
-        int count = batch.size();
-        //#pragma omp parallel for
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->backward_drop();
-            batch[idx]->backward();
-        }
-    }
-};
-
-PExecute PSubNode::generate(bool bTrain, dtype cur_drop_factor) {
-    PSubExecute* exec = new PSubExecute();
-    exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor;
-    return exec;
-}
 
 
 class PDotNode : public Node {
-  public:
+public:
     PNode in1, in2;
-  public:
+
     PDotNode() : Node() {
         in1 = NULL;
         in2 = NULL;
@@ -667,13 +441,11 @@ class PDotNode : public Node {
         node_type = "point-dot";
     }
 
-    //can not be dropped since the output is a scalar
-    void init(int ndim, dtype dropout) {
+    void init() {
         dim = 1;
-        Node::init(dim, -1);
+        Node::init(dim);
     }
 
-  public:
     void forward(Graph *cg, PNode x1, PNode x2) {
         in1 = x1;
         in2 = x2;
@@ -683,7 +455,6 @@ class PDotNode : public Node {
         cg->addNode(this);
     }
 
-  public:
     void compute() {
         val[0] = 0.0;
         for (int idx = 0; idx < in1->dim; idx++) {
@@ -698,13 +469,7 @@ class PDotNode : public Node {
         }
     }
 
-  public:
-    // better to rewrite for deep understanding
-    bool typeEqual(PNode other) {
-        return Node::typeEqual(other);
-    }
-
-    PExecute generate(bool bTrain, dtype cur_drop_factor);
+    PExecute generate();
 };
 
 #if USE_GPU
@@ -775,53 +540,97 @@ private:
 };
 #else
 class PDotExecute :public Execute {
-  public:
-    void  forward() {
-        int count = batch.size();
-        //#pragma omp parallel for
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->compute();
-            batch[idx]->forward_drop(bTrain, drop_factor);
-        }
-    }
-
-    void backward() {
-        int count = batch.size();
-        //#pragma omp parallel for
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->backward_drop();
-            batch[idx]->backward();
-        }
-    }
 };
 #endif
 
 
-PExecute PDotNode::generate(bool bTrain, dtype cur_drop_factor) {
+PExecute PDotNode::generate() {
     PDotExecute* exec = new PDotExecute();
     exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor;
     return exec;
 }
 
 class DropoutNode : public Node {
 public:
     PNode in = NULL;
+    Tensor1D drop_mask;
+    dtype drop_value = 0.0f;
+    bool is_training = true;
 
     DropoutNode() {
         node_type = "dropout";
     }
 
-    PExecute generate(bool bTrain, dtype cur_drop_factor);
+    void init(int dimm, dtype dropout) {
+        Node::init(dimm);
+        drop_value = dropout;
+        drop_mask.init(dimm);
+    }
+
+#if USE_GPU
+    void initOnHostAndDevice(int ndim, dtype dropout) {
+        Node::initOnHostAndDevice(ndim);
+        drop_mask.init(ndim);
+    }
+#endif
+
+    virtual void generate_dropmask() {
+        int dropNum = (int)(dim * drop_value);
+        std::vector<int> tmp_masks(dim);
+        for (int idx = 0; idx < dim; idx++) {
+            tmp_masks[idx] = idx < dropNum ? 0 : 1;
+        }
+        random_shuffle(tmp_masks.begin(), tmp_masks.end());
+        for (int idx = 0; idx < dim; idx++) {
+            drop_mask[idx] = tmp_masks[idx];
+        }
+    }
+
+    void compute() override {
+        if (is_training) {
+#if !TEST_CUDA
+            generate_dropmask();
+#endif
+        } else {
+            drop_mask = 1 - drop_value;
+        }
+        val.vec() = val.vec() * drop_mask.vec();
+    }
+
+    void backward() override {
+        loss.vec() = loss.vec() * drop_mask.vec();
+    }
+
+    bool typeEqual(Node *other) override {
+        DropoutNode *o = static_cast<DropoutNode*>(other);
+        if (o->is_training != is_training) {
+            std::cerr << "is_training not equal" << std::endl;
+            abort();
+        }
+        return Node::typeEqual(other) && abs(drop_value - o->drop_value) < 0.001f;
+    }
+
+    size_t typeHashCode() const override {
+        return Node::typeHashCode() ^ (std::hash<int>{}((int)(10000 * drop_value)) << 1);
+    }
+
+    PExecute generate() override;
 };
 
 class DropoutExecute :public Execute {
   public:
     Tensor2D drop_mask;
+    dtype drop_value;
     int dim;
+    bool is_training;
 
 #if USE_GPU
+    void CalculateDropMask(int count, int dim, const Tensor2D &mask) {
+        if (is_training) {
+            n3ldg_cuda::CalculateDropoutMask(drop_value, count, dim, mask.value);
+        }
+    }
+
     void forward() {
         int count = batch.size();
         std::vector<dtype*> xs, ys;
@@ -838,35 +647,22 @@ class DropoutExecute :public Execute {
         }
 
         CalculateDropMask(count, dim, drop_mask);
-        n3ldg_cuda::DropoutForward(xs, count, dim, drop_mask.value,
-                this->dynamicDropValue(), ys);
+        n3ldg_cuda::DropoutForward(xs, count, dim, is_training, drop_mask.value, drop_value, ys);
 #if TEST_CUDA
         drop_mask.copyFromDeviceToHost();
         for (int i = 0; i < count; ++i) {
             for (int j = 0; j < dim; ++j) {
                 dtype v = drop_mask[i][j];
-                batch[i]->drop_mask[j] = v <= dynamicDropValue() ? 0 : 1;
+                static_cast<DropoutNode*>(batch.at(i))->drop_mask[j] = v <= drop_value ? 0 : 1;
             }
         }
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            batch[idx]->forward_drop(bTrain, drop_factor);
             n3ldg_cuda::Assert(batch.at(idx)->val.verify("Dropout forward"));
         }
 #endif
     }
-#else
-    void  forward() {
-        int count = batch.size();
-        //#pragma omp parallel for
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->compute();
-            batch[idx]->forward_drop(bTrain, drop_factor);
-        }
-    }
-#endif
 
-#if USE_GPU
     void backward() {
         int count = batch.size();
         std::vector<dtype*> vals, losses, in_losses;
@@ -883,11 +679,10 @@ class DropoutExecute :public Execute {
             losses.push_back(tanh->loss.value);
             in_losses.push_back(tanh->in->loss.value);
         }
-        n3ldg_cuda::DropoutBackward(losses, vals, count, dim, drop_mask.value,
-                dynamicDropValue(), in_losses);
+        n3ldg_cuda::DropoutBackward(losses, vals, count, dim, is_training, drop_mask.value,
+                drop_value, in_losses);
 #if TEST_CUDA
         for (Node *n : batch) {
-            n->backward_drop();
             n->backward();
         }
         for (Node *n : batch) {
@@ -896,18 +691,14 @@ class DropoutExecute :public Execute {
         }
 #endif
     }
-#else
-    void backward() {
-        int count = batch.size();
-        //#pragma omp parallel for
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->backward_drop();
-            batch[idx]->backward();
-        }
-    }
 #endif
 };
 
-
+PExecute DropoutNode::generate() {
+    DropoutExecute* exec = new DropoutExecute();
+    exec->batch.push_back(this);
+    exec->is_training = is_training;
+    return exec;
+}
 
 #endif

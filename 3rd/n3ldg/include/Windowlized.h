@@ -46,9 +46,9 @@ class WindowBuilder {
         _outDim = _window * _inDim;
         int maxsize = _outputs.size();
         for (int idx = 0; idx < maxsize; idx++) {
-            _outputs[idx].init(_outDim, -1); // dropout is not supported here
+            _outputs[idx].init(_outDim);
         }
-        _bucket.init(_inDim, -1);
+        _bucket.init(_inDim);
     }
 
     void forward(Graph *cg, const vector<PNode>& x) {

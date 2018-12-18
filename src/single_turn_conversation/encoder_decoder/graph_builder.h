@@ -138,8 +138,8 @@ struct GraphBuilder {
     BucketNode word_bucket;
 
     void init(const HyperParams &hyper_params) {
-        hidden_bucket.init(hyper_params.hidden_dim, -1);
-        word_bucket.init(hyper_params.word_dim, -1);
+        hidden_bucket.init(hyper_params.hidden_dim);
+        word_bucket.init(hyper_params.word_dim);
     }
 
     void forward(Graph &graph, const std::vector<std::string> &sentence,
@@ -150,7 +150,7 @@ struct GraphBuilder {
 
         for (const std::string &word : sentence) {
             std::shared_ptr<LookupNode> input_lookup(new LookupNode);
-            input_lookup->init(hyper_params.word_dim, hyper_params.dropout);
+            input_lookup->init(hyper_params.word_dim);
             input_lookup->setParam(model_params.lookup_table);
             input_lookup->forward(graph, word);
             encoder_lookups.push_back(input_lookup);
@@ -181,7 +181,7 @@ struct GraphBuilder {
         Node *last_input;
         if (i > 0) {
             std::shared_ptr<LookupNode> decoder_lookup(new LookupNode);
-            decoder_lookup->init(hyper_params.word_dim, -1);
+            decoder_lookup->init(hyper_params.word_dim);
             decoder_lookup->setParam(model_params.lookup_table);
             decoder_lookup->forward(graph, *answer);
             decoder_components.decoder_lookups.push_back(decoder_lookup);
@@ -195,13 +195,13 @@ struct GraphBuilder {
                 *encoder._cells.at(encoder._hiddens.size() - 1));
 
         std::shared_ptr<LinearNode> decoder_to_wordvector(new LinearNode);
-        decoder_to_wordvector->init(hyper_params.word_dim, -1);
+        decoder_to_wordvector->init(hyper_params.word_dim);
         decoder_to_wordvector->setParam(model_params.hidden_to_wordvector_params);
         decoder_to_wordvector->forward(graph, *decoder_components.decoder._hiddens.at(i));
         decoder_components.decoder_to_wordvectors.push_back(decoder_to_wordvector);
 
         std::shared_ptr<LinearWordVectorNode> wordvector_to_onehot(new LinearWordVectorNode);
-        wordvector_to_onehot->init(model_params.lookup_table.nVSize, -1);
+        wordvector_to_onehot->init(model_params.lookup_table.nVSize);
         wordvector_to_onehot->setParam(model_params.lookup_table.E);
         wordvector_to_onehot->forward(graph, *decoder_to_wordvector);
         decoder_components.wordvector_to_onehots.push_back(wordvector_to_onehot);
@@ -212,10 +212,6 @@ struct GraphBuilder {
             int k,
             const HyperParams &hyper_params,
             ModelParams &model_params) {
-        if (graph.train) {
-            std::cerr << "train should be false" << std::endl;
-            abort();
-        }
         auto beam = decoder_components_beam;
 //        std::cout << boost::format(
 //                "forwardDecoderUsingBeamSearch - decoder_components_beam size:%1%") %
@@ -281,7 +277,9 @@ struct GraphBuilder {
         if (word_ids_result.size() < k) {
             std::cerr << boost::format("word_ids_result size is %1%, but beam_size is %2%") %
                 word_ids_result.size() % k << std::endl;
-            abort();
+        }
+        if (word_ids_result.empty()) {
+            return std::make_pair(std::vector<WordIdAndProbability>(), 0.0f);
         }
 
 //        for (const auto &pair : word_ids_result) {

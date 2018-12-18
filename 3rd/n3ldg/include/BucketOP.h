@@ -25,8 +25,8 @@ class BucketNode : public Node {
         node_type = "bucket";
     }
   public:
-    virtual void init(int ndim, dtype dropout) {
-        Node::init(ndim, -1);
+    virtual void init(int ndim) {
+        Node::init(ndim);
     }
 
     void forward(Graph &graph, dtype value) {
@@ -87,7 +87,7 @@ class BucketNode : public Node {
     }
 
   public:
-    PExecute generate(bool bTrain, dtype cur_drop_factor);
+    PExecute generate();
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) {
@@ -96,40 +96,12 @@ class BucketNode : public Node {
 
 };
 
-#if USE_GPU
 class BucketExecute : public Execute {
-  public:
-    void  forward() override {}
-
-    void backward() override {}
 };
 
-#else
-class BucketExecute : public Execute {
-  public:
-    void  forward() {
-        int count = batch.size();
-        //#pragma omp parallel for
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->forward_drop(bTrain, drop_factor);
-        }
-    }
-
-    void backward() {
-        int count = batch.size();
-        //#pragma omp parallel for
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->backward_drop();
-        }
-    }
-};
-#endif
-
-PExecute BucketNode::generate(bool bTrain, dtype cur_drop_factor) {
+PExecute BucketNode::generate() {
     BucketExecute* exec = new BucketExecute();
     exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor;
     return exec;
 }
 
