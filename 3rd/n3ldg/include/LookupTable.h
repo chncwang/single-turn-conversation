@@ -87,10 +87,6 @@ public:
         }
 
         ifstream inf;
-        if (inf.is_open()) {
-            inf.close();
-            inf.clear();
-        }
         inf.open(inFile.c_str());
 
         if (!inf.is_open()) {
@@ -102,7 +98,6 @@ public:
         int wordId;
 
         vector<string> sLines;
-        sLines.clear();
         while (1) {
             if (!my_getline(inf, strLine)) {
                 break;

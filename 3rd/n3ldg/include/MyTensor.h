@@ -282,10 +282,16 @@ struct Tensor2D {
         is >> curSize;
         is >> curRow;
         is >> curCol;
+//        std::cout << "size:" << curSize << " row:" << curRow << " col:" << curCol << std::endl;
         init(curRow, curCol);
         dtype sum = 0.0f;
         for (int idx = 0; idx < size; idx++) {
-            is >> v[idx];
+//            std::cout << "idx:" << idx << std::endl;
+            std::string t;
+            is >> t;
+            std::cout << "t:" << t << std::endl;
+//            abort();
+            v[idx] = ::atof(t.c_str());
             sum += v[idx];
         }
         dtype saved_sum;

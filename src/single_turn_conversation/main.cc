@@ -256,7 +256,11 @@ void loadModel(HyperParams &hyper_params, ModelParams &model_params, const strin
     if (is) {
         cout << "loading model..." << endl;
         hyper_params.load(is);
+        hyper_params.print();
         model_params.load(is);
+#if USE_GPU
+        model_params.copyFromHostToDevice();
+#endif
         cout << "model loaded" << endl;
     } else {
         cerr << format("failed to open is, error when loading %1%") % filename << endl;
@@ -497,8 +501,8 @@ int main(int argc, char *argv[]) {
 	}
     } 
 
-    word_counts[unknownkey] = hyper_params.word_cutoff + 1;
-    word_counts[STOP_SYMBOL] = 1000000;
+    word_counts[unknownkey] = 1000000000;
+    word_counts[STOP_SYMBOL] = 1000000000;
     Alphabet alphabet;
     alphabet.initial(word_counts, hyper_params.word_cutoff);
     cout << "the size of alphabet is: ";

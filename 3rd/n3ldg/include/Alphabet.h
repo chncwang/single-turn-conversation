@@ -2,6 +2,7 @@
 #define _ALPHABET_
 
 #include "MyLib.h"
+#include <boost/format.hpp>
 
 /*
  please check to ensure that m_size not exceeds the upbound of int
@@ -27,24 +28,10 @@ class basic_quark {
     StringToId m_string_to_id;
     IdToString m_id_to_string;
     bool m_b_fixed;
-	bool m_v_done;
+    bool m_v_done;
     int m_size;
 
   public:
-    /**
-     * Construct.
-     */
-    basic_quark() {
-        clear();
-
-    }
-
-    /**
-     * Destruct.
-     */
-    virtual ~basic_quark() {
-    }
-
     /**
      * Map a string to its associated ID.
      *  If string-to-integer association does not exist, allocate a new ID.
@@ -94,15 +81,10 @@ class basic_quark {
         if (it != m_string_to_id.end()) {
             return it->second;
         } else if (!m_b_fixed) {
-			if(m_v_done){
-			    StringToId::const_iterator i = m_string_to_id.find(unknownkey); 
-                if(it == m_string_to_id.end()) {
-		            cout<< "no such word in alphabet and unknown word id is not initialed" << endl;
-		            abort();
-		        }else{
-		             return i->second;
-		             } 
-			}
+            if (m_v_done) {
+                StringToId::const_iterator i = m_string_to_id.find(unknownkey); 
+                return i->second;
+            }
             int newid = m_size;
             m_id_to_string.push_back(str);
             m_string_to_id.insert(std::pair<std::string, int>(str, newid));
@@ -112,14 +94,6 @@ class basic_quark {
         } else {
             return -1;
         }
-    }
-
-    void clear() {
-        m_string_to_id.clear();
-        m_id_to_string.clear();
-        m_b_fixed = false;
-		m_v_done = false;
-        m_size = 0;
     }
 
     void set_fixed_flag(bool bfixed) {
@@ -146,7 +120,6 @@ class basic_quark {
 
 
     void read(std::ifstream &inf) {
-        clear();
         string featKey;
         int featId;
         inf >> m_size;
@@ -159,6 +132,7 @@ class basic_quark {
         if (m_size > 0) {
             set_fixed_flag(true);
         }
+        m_v_done = true;
     }
 
     void write(std::ofstream &outf) const {
@@ -169,25 +143,19 @@ class basic_quark {
     }
 
     void initial(const unordered_map<string, int>& elem_stat, int cutOff = 0) {
-        clear();
         unordered_map<string, int>::const_iterator elem_iter;
         for (elem_iter = elem_stat.begin(); elem_iter != elem_stat.end(); elem_iter++) {
             if (elem_iter->second > cutOff) {
                 from_string(elem_iter->first);
             }
         }
-		set_v_Done(true);
-        set_fixed_flag(true);
+        set_v_Done(true);
+        m_v_done = true;
     }
 
     // initial by a file (first column), always an embedding file
     void initial(const string& inFile, bool bUseUnknown = true) {
-        clear();
         ifstream inf;
-        if (inf.is_open()) {
-            inf.close();
-            inf.clear();
-        }
         inf.open(inFile.c_str());
 
         string strLine;
@@ -207,6 +175,8 @@ class basic_quark {
         if (m_size > 0) {
             set_fixed_flag(true);
         }
+
+        m_v_done = true;
     }
 
 };

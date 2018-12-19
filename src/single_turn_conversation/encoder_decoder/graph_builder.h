@@ -95,11 +95,14 @@ std::vector<BeamSearchResult> mostProbableResults(
                 word_ids = last_results.at(i).path;
             }
 
-            if (exp(log_probability) < 1e-20) {
+            if (exp(log_probability) < 1e-30) {
                 continue;
             }
 
             word_ids.push_back(WordIdAndProbability(j, word_probability));
+            if (j == stop_id) {
+                log_probability += 1;
+            }
             BeamSearchResult beam_search_result(i, word_ids, log_probability);
 
             if (queue.size() < k) {
