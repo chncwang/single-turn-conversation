@@ -19,9 +19,9 @@
 #include <cstdlib>
 #include "profiler.h"
 
-class UniParams
+class UniParams : public N3LDGSerializable
 #if USE_GPU
-: public TransferableComponents 
+, public TransferableComponents 
 #endif
 {
   public:
@@ -49,19 +49,21 @@ class UniParams
         }
     }
 
-    void save(std::ofstream &os) const {
-        os << bUseB << std::endl;
-        W.save(os);
+    Json::Value toJson() const override {
+        Json::Value json;
+        json["use_b"] = bUseB;
+        json["w"] = W.toJson();
         if (bUseB) {
-            b.save(os);
+            json["b"] = b.toJson();
         }
+        return json;
     }
 
-    void load(std::ifstream &is) {
-        is >> bUseB;
-        W.load(is);
+    void fromJson(const Json::Value &json) {
+        bUseB = json["use_b"].asBool();
+        W.fromJson(json["w"]);
         if (bUseB) {
-            b.load(is);
+            b.fromJson(json["b"]);
         }
     }
 

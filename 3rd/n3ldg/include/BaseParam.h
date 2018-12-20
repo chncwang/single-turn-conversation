@@ -37,9 +37,9 @@ public:
 };
 #endif
 
-struct BaseParam
+struct BaseParam : public N3LDGSerializable
 #if USE_GPU
-: public TransferableComponents
+, public TransferableComponents
 #endif
 {
     Tensor2D val;
@@ -62,8 +62,6 @@ struct BaseParam
     virtual void randpoint(int& idx, int &idy) = 0;
     virtual dtype squareGradNorm() = 0;
     virtual void rescaleGrad(dtype scale) = 0;
-    virtual void save(std::ostream &os)const = 0;
-    virtual void load(std::istream &is) = 0;
 #if USE_GPU
     virtual std::vector<n3ldg_cuda::Transferable *> transferablePtrs() {
         return {&val};

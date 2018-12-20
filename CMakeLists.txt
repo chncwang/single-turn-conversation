@@ -41,7 +41,7 @@ function(find_mkl)
 endfunction()
 
 ######## Cross-compiler, cross-platform options
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DEIGEN_FAST_MATH")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DEIGEN_FAST_MATH -Wall -Wno-sign-compare")
 if (MKL OR MKL_ROOT)
   find_mkl()  # sets include/lib directories and sets ${LIBS} needed for linking
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DEIGEN_USE_MKL_ALL")
@@ -75,7 +75,7 @@ SET(Boost_USE_STATIC_RUNTIME OFF)
 FIND_PACKAGE(Boost REQUIRED COMPONENTS regex system filesystem) 
 INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS}) 
 INCLUDE_DIRECTORIES(3rd/eigen)
-
+INCLUDE_DIRECTORIES(3rd/jsoncpp)
 INCLUDE_DIRECTORIES(3rd/n3ldg/include 3rd/cxxopts/include src)
 INCLUDE_DIRECTORIES(3rd/inih)
 
@@ -106,4 +106,3 @@ ENDIF()
 
 TARGET_LINK_LIBRARIES(main ${LIBS})
 TARGET_LINK_LIBRARIeS(main ${Boost_LIBRARIES})
-

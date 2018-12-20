@@ -6,7 +6,7 @@
 #include <cmath>
 #include <boost/format.hpp>
 
-struct HyperParams {
+struct HyperParams : public N3LDGSerializable {
     int word_dim;
     int hidden_dim;
     float dropout;
@@ -17,31 +17,30 @@ struct HyperParams {
     string word_file;
     bool word_finetune;
 
-    float flag() const {
-        return word_dim + hidden_dim + dropout + batch_size + beam_size + learning_rate + word_cutoff;
+    Json::Value toJson() const {
+        Json::Value json;
+        json["word_dim"] = word_dim;
+        json["hidden_dim"] = hidden_dim;
+        json["dropout"] = dropout;
+        json["batch_size"] = batch_size;
+        json["beam_size"] = beam_size;
+        json["learning_rate"] = learning_rate;
+        json["word_cutoff"] = word_cutoff;
+        json["word_file"] = word_file;
+        json["word_finetune"] = word_finetune;
+        return json;
     }
 
-    void save(std::ofstream &os) const {
-        os << word_dim << std::endl
-            << hidden_dim << std::endl
-            << dropout << std::endl
-            << batch_size << std::endl
-            << beam_size << std::endl
-            << learning_rate << std::endl
-	    << word_cutoff << std::endl
-	    << word_finetune << std::endl
-            << flag() << std::endl;
-    }
-
-    void load(std::ifstream &is) {
-        float f;
-        is >> word_dim >> hidden_dim >> dropout >> batch_size >> beam_size >> learning_rate >>
-            word_cutoff >> word_finetune >> f;
-        if (abs(f - flag()) > 0.001) {
-            std::cerr << boost::format(
-                    "loading hyper params error, s is %1%, but computed flag is %2%") % f % flag()
-                << std::endl;
-        }
+    void fromJson(const Json::Value &json) {
+        word_dim = json["word_dim"].asInt();
+        hidden_dim = json["hidden_dim"].asInt();
+        dropout = json["dropout"].asFloat();
+        batch_size = json["batch_size"].asInt();
+        beam_size = json["beam_size"].asInt();
+        learning_rate = json["learning_rate"].asFloat();
+        word_cutoff = json["word_cutoff"].asInt();
+        word_file = json["word_file"].asString();
+        word_finetune = json["word_finetune"].asBool();
     }
 
     void print() const {

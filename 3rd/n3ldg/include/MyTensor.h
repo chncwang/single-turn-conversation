@@ -1,7 +1,5 @@
 #ifndef BasicTensor
-
 #define BasicTensor
-
 
 #include "Eigen/Dense"
 #include <unsupported/Eigen/CXX11/Tensor>
@@ -11,21 +9,15 @@
 #include <map>
 #include <memory>
 #include "Def.h"
+#include "serializable.h"
 #include <boost/format.hpp>
+#include <iostream>
 
 using namespace Eigen;
 
-class Serializable {
-//    typedef nlohmann::json json;
-
-//    std::unique_ptr<json> toJson() const;
-
-//    void fromJson(const json &);
-};
-
 namespace n3ldg_cpu {
 
-struct Tensor1D {
+struct Tensor1D : public N3LDGSerializable {
     dtype *v;
     int dim;
 
@@ -114,37 +106,27 @@ struct Tensor1D {
         }
     }
 
-    void save(std::ostream &os) const {
-        os << dim << std::endl;
-        dtype sum = 0.0f;
-        os << v[0];
-        for (int idx = 0; idx < dim; idx++) {
-            os << " " << v[idx];
-            sum += v[idx];
+    virtual Json::Value toJson() const {
+        Json::Value json;
+        json["dim"] = dim;
+        Json::Value json_arr;
+        for (int i = 0; i < dim; ++i) {
+            json_arr.append(v[i]);
         }
-        os << std::endl << sum << std::endl;
+        json["value"] = json_arr;
+        return json;
     }
 
-    void load(std::istream &is) {
-        int curDim;
-        is >> curDim;
-        init(curDim);
-        dtype sum = 0.0f;
-        for (int idx = 0; idx < dim; idx++) {
-            is >> v[idx];
-            sum += v[idx];
-        }
-        dtype saved_sum;
-        is >> saved_sum;
-        if (abs(saved_sum - sum) > 0.001) {
-            std::cerr << boost::format(
-                    "loading Tensor1D error, saved_sum is %1%, but computed sum is %2%")
-                % saved_sum % sum << std::endl;
+    virtual void fromJson(const Json::Value &json) {
+        dim = json["dim"].asInt();
+        Json::Value json_arr = json["value"];
+        for (int i = 0; i < dim; ++i) {
+            v[i] = json_arr[i].asFloat();
         }
     }
 };
 
-struct Tensor2D {
+struct Tensor2D : public N3LDGSerializable {
     dtype *v;
     int col, row, size;
 
@@ -261,48 +243,28 @@ struct Tensor2D {
         }
     }
 
-
-    void save(std::ostream &os) const {
-        os << size << " " << row << " " << col << std::endl;
-        if (size <= 0) {
-            std::cerr << "Tensor2D size is " << size << std::endl;
-            abort();
+    virtual Json::Value toJson() const {
+        Json::Value json;
+        json["row"] = row;
+        json["col"] = col;
+        Json::Value json_arr;
+        for (int i = 0; i < row * col; ++i) {
+            json_arr.append(v[i]);
         }
-        dtype sum = 0.0f;
-        os << v[0];
-        for (int idx = 1; idx < size; idx++) {
-            os << " " << v[idx];
-            sum += v[idx];
-        }
-        os << std::endl << sum << std::endl;
+        json["value"] = json_arr;
+        return json;
     }
 
-    void load(std::istream &is) {
-        int curSize, curRow, curCol;
-        is >> curSize;
-        is >> curRow;
-        is >> curCol;
-//        std::cout << "size:" << curSize << " row:" << curRow << " col:" << curCol << std::endl;
-        init(curRow, curCol);
-        dtype sum = 0.0f;
-        for (int idx = 0; idx < size; idx++) {
-//            std::cout << "idx:" << idx << std::endl;
-            std::string t;
-            is >> t;
-            std::cout << "t:" << t << std::endl;
-//            abort();
-            v[idx] = ::atof(t.c_str());
-            sum += v[idx];
-        }
-        dtype saved_sum;
-        is >> saved_sum;
-        if (abs(saved_sum - sum) > 0.01 * abs(saved_sum)) {
-            std::cerr << boost::format(
-                    "loading Tensor2D error, saved_sum is %1%, but computed sum is %2%")
-                % saved_sum % sum << std::endl;
+    virtual void fromJson(const Json::Value &json) {
+        row = json["row"].asInt();
+        col = json["col"].asInt();
+        Json::Value json_arr = json["value"];
+        for (int i = 0; i < row * col; ++i) {
+            v[i] = json_arr[i].asFloat();
         }
     }
 };
+
 }
 
 #if USE_GPU

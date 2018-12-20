@@ -19,9 +19,9 @@
 
 #include <memory>
 
-struct LSTM1Params
+struct LSTM1Params : public N3LDGSerializable
 #if USE_GPU
-: public TransferableComponents
+, public TransferableComponents
 #endif
 {
     UniParams input_hidden;
@@ -34,6 +34,30 @@ struct LSTM1Params
     UniParams cell_input;
 
     LSTM1Params() = default;
+
+    Json::Value toJson() const override {
+        Json::Value json;
+        json["input_hidden"] = input_hidden.toJson();
+        json["input_input"] = input_input.toJson();
+        json["output_hidden"] = output_hidden.toJson();
+        json["output_input"] = output_input.toJson();
+        json["forget_hidden"] = forget_hidden.toJson();
+        json["forget_input"] = forget_input.toJson();
+        json["cell_hidden"] = cell_hidden.toJson();
+        json["cell_input"] = cell_input.toJson();
+        return json;
+    }
+
+    void fromJson(const Json::Value &json) override {
+        input_hidden.fromJson(json["input_hidden"]);
+        input_input.fromJson(json["input_input"]);
+        output_hidden.fromJson(json["output_hidden"]);
+        output_input.fromJson(json["output_input"]);
+        forget_hidden.fromJson(json["forget_hidden"]);
+        forget_input.fromJson(json["forget_input"]);
+        cell_hidden.fromJson(json["cell_hidden"]);
+        cell_input.fromJson(json["cell_input"]);
+    }
 
     void exportAdaParams(ModelUpdate& ada) {
         input_hidden.exportAdaParams(ada);
@@ -63,29 +87,6 @@ struct LSTM1Params
 
     int outDim() {
         return input_input.W.outDim();
-    }
-
-    void save(std::ofstream &os) const {
-        input_hidden.save(os);
-        input_input.save(os);
-        output_hidden.save(os);
-        output_input.save(os);
-        forget_hidden.save(os);
-        forget_input.save(os);
-        cell_hidden.save(os);
-        cell_input.save(os);
-
-    }
-
-    void load(std::ifstream &is) {
-        input_hidden.load(is);
-        input_input.load(is);
-        output_hidden.load(is);
-        output_input.load(is);
-        forget_hidden.load(is);
-        forget_input.load(is);
-        cell_hidden.load(is);
-        cell_input.load(is);
     }
 
 #if USE_GPU

@@ -33,16 +33,6 @@ struct AttentionParams {
         hidden_dim = nHidden;
         guide_dim = nGuide;
     }
-
-
-    void save(std::ofstream &os) const {
-        bi_atten.save(os);
-    }
-
-    void load(std::ifstream &is) {
-        bi_atten.load(is);
-    }
-
 };
 
 class AttentionBuilder {
@@ -131,16 +121,6 @@ struct AttentionVParams {
         hidden_dim = nHidden;
         guide_dim = nGuide;
     }
-
-
-    void save(std::ofstream &os) const {
-        bi_atten.save(os);
-    }
-
-    void load(std::ifstream &is) {
-        bi_atten.load(is);
-    }
-
 };
 
 class AttentionVBuilder {
@@ -223,16 +203,6 @@ struct SelfAttentionParams {
         uni_atten.initial(1, nHidden, false);
         hidden_dim = nHidden;
     }
-
-
-    void save(std::ofstream &os) const {
-        uni_atten.save(os);
-    }
-
-    void load(std::ifstream &is) {
-        uni_atten.load(is);
-    }
-
 };
 
 class SelfAttentionBuilder {
@@ -317,16 +287,6 @@ struct SelfAttentionVParams {
         uni_atten.initial(nHidden, nHidden, false);
         hidden_dim = nHidden;
     }
-
-
-    void save(std::ofstream &os) const {
-        uni_atten.save(os);
-    }
-
-    void load(std::ifstream &is) {
-        uni_atten.load(is);
-    }
-
 };
 
 class SelfAttentionVBuilder {

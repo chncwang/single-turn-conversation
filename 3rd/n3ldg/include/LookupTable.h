@@ -17,9 +17,9 @@
 #include "ModelUpdate.h"
 #include "profiler.h"
 
-class LookupTable
+class LookupTable : public N3LDGSerializable
 #if USE_GPU
-: public TransferableComponents
+, public TransferableComponents
 #endif
 {
 public:
@@ -200,26 +200,22 @@ public:
         return elems->from_string(strFeat);
     }
 
-    void save(std::ofstream &os) const {
-        E.save(os);
-        os << bFineTune << std::endl;
-        os << nDim << std::endl;
-        os << nVSize << std::endl;
-        os << nUNKId << std::endl;
+    Json::Value toJson() const {
+        Json::Value json;
+        json["e"] = E.toJson();
+        json["finetune"] = bFineTune;
+        json["dim"] = nDim;
+        json["vocabulary_size"] = nVSize;
+        json["unkown_id"] = nUNKId;
+        return json;
     }
 
-    //set alpha directly
-    void load(std::ifstream &is, PAlphabet alpha) {
-        E.load(is);
-        is >> bFineTune;
-        is >> nDim;
-        is >> nVSize;
-        is >> nUNKId;
-        elems = alpha;
-    }
-
-    void load(std::ifstream &is, Alphabet &alpha) {
-        this->load(is, &alpha);
+    void fromJson(const Json::Value &json) {
+        E.fromJson(json["e"]);
+        bFineTune = json["finetune"].asBool();
+        nDim = json["dim"].asInt();
+        nVSize = json["vocabulary_size"].asInt();
+        nUNKId = json["unkown_id"].asInt();
     }
 };
 

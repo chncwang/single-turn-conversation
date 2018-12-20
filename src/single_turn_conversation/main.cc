@@ -227,37 +227,47 @@ void analyze(const vector<int> &results, const vector<int> &answers, Metric &met
 
 void saveModel(const HyperParams &hyper_params, ModelParams &model_params,
         const string &filename_prefix, int epoch) {
+    cout << "saving model file..." << endl;
     auto t = time(nullptr);
     auto tm = *localtime(&t);
     ostringstream oss;
     oss << put_time(&tm, "%d-%m-%Y-%H-%M-%S");
-    string filename = filename_prefix + oss.str() + "epoch" + to_string(epoch);
-
-    ofstream os(filename.c_str(), ios_base::out | ios::binary);
-    if (os.is_open()) {
-        cout << "saving model..." << endl;
-        hyper_params.save(os);
+    string filename = filename_prefix + oss.str() + "-epoch" + to_string(epoch);
 #if USE_GPU
-        model_params.copyFromDeviceToHost();
+    model_params.copyFromDeviceToHost();
 #endif
-        model_params.save(os);
-        cout << "model saved" << endl;
-    } else {
-        cerr << format("failed to open os, error when saveing %1%") % filename << endl;
-        abort();
-    }
-    cout << format("model file %1% saved") % filename << endl;
 
-    os.close();
+    Json::Value root;
+    root["hyper_params"] = hyper_params.toJson();
+    root["model_params"] = model_params.toJson();
+    Json::StreamWriterBuilder builder;
+    builder["commentStyle"] = "None";
+    builder["indentation"] = "";
+    std::string json_str = Json::writeString(builder, root);
+    std::ofstream out(filename);
+    out << json_str;
+    out.close();
+
+    cout << format("model file %1% saved") % filename << endl;
 }
 
 void loadModel(HyperParams &hyper_params, ModelParams &model_params, const string &filename) {
     ifstream is(filename.c_str());
     if (is) {
         cout << "loading model..." << endl;
-        hyper_params.load(is);
+        std::stringstream sstr;
+        sstr << is.rdbuf();
+        std::string str = sstr.str();
+        Json::CharReaderBuilder builder;
+        auto reader = std::unique_ptr<Json::CharReader>(builder.newCharReader());
+        Json::Value root;
+        std::string error;
+        if (!reader->parse(str.c_str(), str.c_str() + str.size(), &root, &error)) {
+            std::cerr << boost::format("parse json error:%1%") % error << std::endl;
+            abort();
+        }
+
         hyper_params.print();
-        model_params.load(is);
 #if USE_GPU
         model_params.copyFromHostToDevice();
 #endif

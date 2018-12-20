@@ -45,37 +45,14 @@ class BiParams {
             b.initial(nOSize, 1);
         }
     }
-
-    void save(std::ofstream &os) const {
-        os << bUseB << std::endl;
-        W1.save(os);
-        W2.save(os);
-        if (bUseB) {
-            b.save(os);
-        }
-    }
-
-    void load(std::ifstream &is) {
-        is >> bUseB;
-        W1.load(is);
-        W2.load(is);
-        if (bUseB) {
-            b.load(is);
-        }
-    }
-
 };
 
-// non-linear feed-forward node
-// input nodes should be specified by forward function
-// for input variables, we exploit column vector,
-// which means a concrete input vector x_i is represented by x(0, i), x(1, i), ..., x(n, i)
 class BiNode : public Node {
   public:
     PNode in1, in2;
     BiParams* param;
-    dtype(*activate)(const dtype&);   // activation function
-    dtype(*derivate)(const dtype&, const dtype&);  // derivation function of activation function
+    dtype(*activate)(const dtype&);
+    dtype(*derivate)(const dtype&, const dtype&);
     Tensor1D ty, lty;
 
 

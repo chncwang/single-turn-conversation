@@ -91,13 +91,6 @@ class ModelUpdate {
         for (int idx = 0; idx < _params.size(); idx++) {
             sumNorm += _params[idx]->squareGradNorm();
         }
-        if (std::isnan(double(sumNorm)) || sumNorm > 1e20) { //too large
-#if USE_GPU
-            abort();
-#endif
-            clearGrad();
-            return;
-        }
         dtype norm = sqrt(sumNorm);
         if (maxScale > 0 && norm > maxScale) {
             dtype scale = maxScale / norm;

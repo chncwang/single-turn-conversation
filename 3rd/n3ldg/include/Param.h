@@ -180,21 +180,20 @@ class Param : public BaseParam {
 #endif
     }
 
-    void save(std::ostream &os)const {
-        val.save(os);
-        aux_square.save(os);
-        aux_mean.save(os);
-        os << iter << endl;
+    virtual Json::Value toJson() const {
+        Json::Value json;
+        json["val"] = val.toJson();
+        json["aux_square"] = aux_square.toJson();
+        json["aux_mean"] = aux_mean.toJson();
+        json["iter"] = iter;
+        return json;
     }
 
-    void load(std::istream &is) {
-        val.load(is);
-        int outDim = val.row;
-        int inDim = val.col;
-        grad.init(outDim, inDim);
-        aux_square.load(is);
-        aux_mean.load(is);
-        is >> iter;
+    virtual void fromJson(const Json::Value &json) {
+        val.fromJson(json["val"]);
+        aux_square.fromJson(json["aux_square"]);
+        aux_mean.fromJson(json["aux_mean"]);
+        iter = json["iter"].asInt();
     }
 };
 
