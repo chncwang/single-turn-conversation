@@ -615,7 +615,7 @@ int main(int argc, char *argv[]) {
                     cout << format("loss_sum is %1%, and last loss_sum is %2%") % loss_sum %
                         last_loss_sum << endl;
                     if (loss_sum >= last_loss_sum) {
-                        model_update._alpha *= 0.5f;
+                        model_update._alpha *= 0.9f;
                         cout << "learning_rate:" << model_update._alpha << endl;
                     }
                     last_loss_sum = loss_sum;
