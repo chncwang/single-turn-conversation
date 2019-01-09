@@ -79,6 +79,7 @@ INCLUDE_DIRECTORIES(3rd/jsoncpp)
 INCLUDE_DIRECTORIES(3rd/n3ldg/include 3rd/cxxopts/include src)
 INCLUDE_DIRECTORIES(3rd/inih)
 
+AUX_SOURCE_DIRECTORY(3rd/jsoncpp SRCS)
 AUX_SOURCE_DIRECTORY(src/single_turn_conversation SRCS)
 ADD_EXECUTABLE(main ${SRCS})
 
