@@ -275,7 +275,6 @@ class Transferable {
 public:
     virtual void copyFromHostToDevice() = 0;
     virtual void copyFromDeviceToHost() = 0;
-    virtual std::string name() const = 0;
 };
 
 bool Verify(dtype *host, dtype* device, int len, const char* message);

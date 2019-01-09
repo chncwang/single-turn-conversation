@@ -251,7 +251,9 @@ void saveModel(const HyperParams &hyper_params, ModelParams &model_params,
     cout << format("model file %1% saved") % filename << endl;
 }
 
-void loadModel(HyperParams &hyper_params, ModelParams &model_params, const string &filename) {
+void loadModel(HyperParams &hyper_params, ModelParams &model_params, const string &filename,
+        const std::function<void(const HyperParams &hyper_params, ModelParams &model_params)>
+        &allocate_model_params) {
     ifstream is(filename.c_str());
     if (is) {
         cout << "loading model..." << endl;
@@ -266,8 +268,10 @@ void loadModel(HyperParams &hyper_params, ModelParams &model_params, const strin
             std::cerr << boost::format("parse json error:%1%") % error << std::endl;
             abort();
         }
-
+        hyper_params.fromJson(root["hyper_params"]);
         hyper_params.print();
+        allocate_model_params(hyper_params, model_params);
+        model_params.fromJson(root["model_params"]);
 #if USE_GPU
         model_params.copyFromHostToDevice();
 #endif
@@ -521,21 +525,26 @@ int main(int argc, char *argv[]) {
 
     int beam_size = hyper_params.beam_size;
 
+    auto allocate_model_params = [&alphabet](const HyperParams &hyper_params,
+            ModelParams &model_params) {
+        if(hyper_params.word_file == "") {
+            model_params.lookup_table.initial(&alphabet, hyper_params.word_dim, true);
+        } else {
+            model_params.lookup_table.initial(&alphabet, hyper_params.word_file,
+                    hyper_params.word_finetune);
+        }
+        model_params.encoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
+        model_params.decoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
+        model_params.hidden_to_wordvector_params.initial(hyper_params.word_dim,
+                hyper_params.hidden_dim);
+    };
+
     if (default_config.program_mode != ProgramMode::METRIC) {
         if (default_config.input_model_file == "") {
-            if(hyper_params.word_file == "") {
-                model_params.lookup_table.initial(&alphabet, hyper_params.word_dim, true);
-            } else {
-                model_params.lookup_table.initial(&alphabet, hyper_params.word_file,
-                        hyper_params.word_finetune);
-            }
-	    model_params.encoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
-            model_params.decoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
-            model_params.hidden_to_wordvector_params.initial(hyper_params.word_dim,
-                    hyper_params.hidden_dim);
+            allocate_model_params(hyper_params, model_params);
         } else {
-            model_params.lookup_table.elems = &alphabet;
-            loadModel(hyper_params, model_params, default_config.input_model_file);
+            loadModel(hyper_params, model_params, default_config.input_model_file,
+                    allocate_model_params);
         }
     }
 
@@ -564,7 +573,7 @@ int main(int argc, char *argv[]) {
             cout << format("model_file_path:%1%") % model_file_path << endl;
             ModelParams model_params;
             model_params.lookup_table.elems = &alphabet;
-            loadModel(hyper_params, model_params, model_file_path);
+            loadModel(hyper_params, model_params, model_file_path, allocate_model_params);
             float rep_perplex = metricTestPosts(hyper_params, model_params,
                     test_post_and_responses, post_sentences, response_sentences);
             cout << format("model %1% rep_perplex is %2%") % model_file_path % rep_perplex << endl;

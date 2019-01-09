@@ -17,7 +17,7 @@ struct HyperParams : public N3LDGSerializable {
     string word_file;
     bool word_finetune;
 
-    Json::Value toJson() const {
+    Json::Value toJson() const override {
         Json::Value json;
         json["word_dim"] = word_dim;
         json["hidden_dim"] = hidden_dim;
@@ -31,7 +31,7 @@ struct HyperParams : public N3LDGSerializable {
         return json;
     }
 
-    void fromJson(const Json::Value &json) {
+    void fromJson(const Json::Value &json) override {
         word_dim = json["word_dim"].asInt();
         hidden_dim = json["hidden_dim"].asInt();
         dropout = json["dropout"].asFloat();

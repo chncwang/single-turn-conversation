@@ -16,7 +16,7 @@ struct ModelParams : public N3LDGSerializable
     LSTM1Params encoder_params;
     LSTM1Params decoder_params;
 
-    Json::Value toJson() const {
+    Json::Value toJson() const override {
         Json::Value json;
         json["lookup_table"] = lookup_table.toJson();
         json["hidden_to_wordvector_params"] = hidden_to_wordvector_params.toJson();
@@ -25,16 +25,16 @@ struct ModelParams : public N3LDGSerializable
         return json;
     }
 
-    void fromJson(const Json::Value &) {
+    void fromJson(const Json::Value &json) override {
+        lookup_table.fromJson(json["lookup_table"]);
+        hidden_to_wordvector_params.fromJson(json["hidden_to_wordvector_params"]);
+        encoder_params.fromJson(json["encoder_params"]);
+        decoder_params.fromJson(json["decoder_params"]);
     }
 
 #if USE_GPU
-    std::vector<n3ldg_cuda::Transferable *> transferablePtrs() {
+    std::vector<n3ldg_cuda::Transferable *> transferablePtrs() override {
         return {&lookup_table, &hidden_to_wordvector_params, &encoder_params, &decoder_params};
-    }
-
-    virtual std::string name() const {
-        return "ModelParams";
     }
 #endif
 };

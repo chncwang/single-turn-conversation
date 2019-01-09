@@ -1,7 +1,9 @@
 #ifndef N3LDG_INCLUDE_SERIALIZABLE_H
 #define N3LDG_INCLUDE_SERIALIZABLE_H
 
+#include <iostream>
 #include <json/json.h>
+#include <boost/format.hpp>
 
 class N3LDGSerializable {
 public:
