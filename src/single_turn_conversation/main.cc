@@ -616,6 +616,8 @@ int main(int argc, char *argv[]) {
                         last_loss_sum << endl;
                     if (loss_sum >= last_loss_sum) {
                         model_update._alpha *= 0.9f;
+                        model_update._alpha *= 1.01f;
+                        hyper_params.learning_rate = model_update._alpha;
                         cout << "learning_rate:" << model_update._alpha << endl;
                     }
                     last_loss_sum = loss_sum;
