@@ -85,7 +85,7 @@ class ModelUpdate {
 
     void updateAdam(dtype maxScale) {
 #if TEST_CUDA
-        maxScale = 0.1;
+        maxScale = 10;
 #endif
         dtype sumNorm = 0.0;
         for (int idx = 0; idx < _params.size(); idx++) {

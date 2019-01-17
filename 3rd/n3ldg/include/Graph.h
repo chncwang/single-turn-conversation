@@ -121,7 +121,7 @@ public:
 
     //real executation
     void compute(bool log = false) {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+//        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
 
         int i = 0;
         while (Size(free_nodes) > 0) {

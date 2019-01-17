@@ -78,7 +78,6 @@ class PoolNode : public Node {
     virtual void setMask() = 0;
 
     void compute() {
-        int nSize = ins.size();
         setMask();
         for(int i = 0; i < dim; i++) {
             int mask_i = masks.at(i);

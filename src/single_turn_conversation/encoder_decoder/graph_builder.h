@@ -23,20 +23,6 @@ struct WordIdAndProbability {
     WordIdAndProbability(int wordid, dtype prob) : word_id(wordid), probability(prob) {}
 };
 
-template<typename T>
-std::vector<std::shared_ptr<T>> CopyDecoderComponents(
-        const std::vector<std::shared_ptr<T>> &components_vector) {
-    std::vector<std::shared_ptr<T>> results;
-
-    for (const std::shared_ptr<T> &components : components_vector) {
-        std::shared_ptr<T> new_components(new T);
-        *new_components = *components;
-        results.push_back(new_components);
-    }
-
-    return results;
-}
-
 struct BeamSearchResult {
     int beam_i;
     std::vector<WordIdAndProbability> path;
@@ -101,7 +87,7 @@ std::vector<BeamSearchResult> mostProbableResults(
 
             word_ids.push_back(WordIdAndProbability(j, word_probability));
             if (j == stop_id) {
-                log_probability += 1;
+                log_probability += 3;
             }
             BeamSearchResult beam_search_result(i, word_ids, log_probability);
 
@@ -136,13 +122,17 @@ std::vector<BeamSearchResult> mostProbableResults(
 
 struct GraphBuilder {
     std::vector<std::shared_ptr<LookupNode>> encoder_lookups;
-    DynamicLSTMBuilder encoder;
+    DynamicLSTMBuilder left_to_right_encoder;
+    DynamicLSTMBuilder right_to_left_encoder;
+    std::vector<std::shared_ptr<ConcatNode>> concated_encoder_nodes;
+    ConcatNode concated_last_cell_node;
     BucketNode hidden_bucket;
     BucketNode word_bucket;
 
     void init(const HyperParams &hyper_params) {
         hidden_bucket.init(hyper_params.hidden_dim);
         word_bucket.init(hyper_params.word_dim);
+        concated_last_cell_node.init(2 * hyper_params.hidden_dim);
     }
 
     void forward(Graph &graph, const std::vector<std::string> &sentence,
@@ -160,9 +150,35 @@ struct GraphBuilder {
         }
 
         for (std::shared_ptr<LookupNode> &node : encoder_lookups) {
-            encoder.forward(graph, model_params.encoder_params, *node, hidden_bucket,
+            left_to_right_encoder.forward(graph, model_params.encoder_params, *node, hidden_bucket,
                     hidden_bucket);
         }
+
+        int size = encoder_lookups.size();
+
+        for (int i = size - 1; i >= 0; --i) {
+            right_to_left_encoder.forward(graph, model_params.encoder_params,
+                    *encoder_lookups.at(i), hidden_bucket, hidden_bucket);
+        }
+
+        if (left_to_right_encoder.size() != right_to_left_encoder.size()) {
+            std::cerr << "left_to_right_encoder size is not equal to right_to_left_encoder" <<
+                std::endl;
+            abort();
+        }
+
+        for (int i = 0; i < size; ++i) {
+            std::shared_ptr<ConcatNode> concat_node(new ConcatNode);
+            concat_node->init(2 * hyper_params.hidden_dim);
+            std::vector<Node*> nodes = {left_to_right_encoder._hiddens.at(i).get(),
+                    right_to_left_encoder._hiddens.at(i).get()};
+            concat_node->forward(graph, nodes);
+            concated_encoder_nodes.push_back(concat_node);
+        }
+
+        std::vector<Node *> last_cells = {left_to_right_encoder._cells.at(size - 1).get(),
+            right_to_left_encoder._cells.at(size - 1).get()};
+        concated_last_cell_node.forward(graph, last_cells);
     }
 
     void forwardDecoder(Graph &graph, DecoderComponents &decoder_components,
@@ -193,9 +209,14 @@ struct GraphBuilder {
             last_input = &word_bucket;
         }
 
-        decoder_components.decoder.forward(graph, model_params.decoder_params, *last_input, 
-                *encoder._hiddens.at(encoder._hiddens.size() - 1),
-                *encoder._cells.at(encoder._hiddens.size() - 1));
+        int size = concated_encoder_nodes.size();
+        std::vector<Node *> encoder_hiddens = transferVector<Node *, std::shared_ptr<ConcatNode>>(
+                concated_encoder_nodes, [](const std::shared_ptr<ConcatNode> &concat) {
+                return concat.get();
+                });
+
+        decoder_components.forward(graph, hyper_params, model_params, *last_input,
+                *concated_encoder_nodes.at(size - 1), concated_last_cell_node, encoder_hiddens);
 
         std::shared_ptr<LinearNode> decoder_to_wordvector(new LinearNode);
         decoder_to_wordvector->init(hyper_params.word_dim);
@@ -233,7 +254,6 @@ struct GraphBuilder {
                             decoder_components->wordvector_to_onehots.at(i - 1).get());
                     ++beam_i;
                 }
-                int current_k = k - word_ids_result.size();
                 most_probable_results = mostProbableResults(last_outputs, most_probable_results,
                         k, model_params);
                 auto last_beam = beam;

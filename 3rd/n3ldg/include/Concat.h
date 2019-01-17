@@ -29,7 +29,7 @@ public:
         node_type = "concat";
     }
 
-    void forward(Graph *cg, const vector<PNode>& x) {
+    void forward(Graph &cg, const vector<PNode>& x) {
         if (x.size() == 0) {
             std::cout << "empty inputs for concat" << std::endl;
             abort();
@@ -55,37 +55,7 @@ public:
             std::cout << "input dim size not match" << curDim << "\t" << dim << std::endl;
             abort();
         }
-        cg->addNode(this);
-    }
-
-    void forward(Graph *cg, PNode x1) {
-        std::vector<PNode> ins = {x1};
-        forward(cg, ins);
-    }
-
-    void forward(Graph *cg, PNode x1, PNode x2) {
-        std::vector<PNode> ins = {x1, x2};
-        forward(cg, ins);
-    }
-
-    void forward(Graph *cg, PNode x1, PNode x2, PNode x3) {
-        std::vector<PNode> ins = {x1, x2, x3};
-        forward(cg, ins);
-    }
-
-    void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4) {
-        std::vector<PNode> ins = {x1, x2, x3, x4};
-        forward(cg, ins);
-    }
-
-    void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4, PNode x5) {
-        std::vector<PNode> ins = {x1, x2, x3, x4, x5};
-        forward(cg, ins);
-    }
-
-    void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4, PNode x5, PNode x6) {
-        std::vector<PNode> ins = {x1, x2, x3, x4, x5, x6};
-        forward(cg, ins);
+        cg.addNode(this);
     }
 
     PExecute generate();

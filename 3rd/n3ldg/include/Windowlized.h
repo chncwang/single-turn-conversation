@@ -51,7 +51,7 @@ class WindowBuilder {
         _bucket.init(_inDim);
     }
 
-    void forward(Graph *cg, const vector<PNode>& x) {
+    void forward(Graph &cg, const vector<PNode>& x) {
         if (x.size() == 0) {
             std::cout << "empty inputs for windowlized operation" << std::endl;
             return;

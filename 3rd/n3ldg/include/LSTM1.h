@@ -495,6 +495,10 @@ struct DynamicLSTMBuilder {
     std::vector<std::shared_ptr<TanhNode>> _halfhiddens;
     std::vector<std::shared_ptr<PMultiNode>> _hiddens;
 
+    int size() {
+        return _hiddens.size();
+    }
+
     void forward(Graph &graph, LSTM1Params &lstm_params, Node &input, Node &h0, Node &c0) {
         Node *last_hidden, *last_cell;
         int len = _hiddens.size();

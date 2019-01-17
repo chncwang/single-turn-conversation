@@ -282,10 +282,6 @@ class UniExecute :public Execute {
         n3ldg_cuda::ActivatedEnum activatedEnum = ToActivatedEnum(activate);
         n3ldg_cuda::Activated(activatedEnum, ty.value, ys, y.value, outDim);
 
-        for (int i = 0; i<batch.size(); ++i) {
-            UniNode *n = static_cast<UniNode*>(batch.at(i));
-        }
-
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];

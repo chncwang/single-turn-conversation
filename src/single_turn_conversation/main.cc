@@ -173,9 +173,6 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
     hyper_params.word_cutoff = word_cutoff;
 
     bool word_finetune = ini_reader.GetBoolean("hyper", "word_finetune", -1);
-    if(word_finetune == -1){
-        cerr << "word_finetune read error" << endl;
-    }
     hyper_params.word_finetune = word_finetune;
 
     string word_file = ini_reader.Get("hyper", "word_file", "");
@@ -537,6 +534,10 @@ int main(int argc, char *argv[]) {
         model_params.decoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
         model_params.hidden_to_wordvector_params.initial(hyper_params.word_dim,
                 hyper_params.hidden_dim);
+        model_params.transformed_c0_params.initial(hyper_params.hidden_dim,
+                2 * hyper_params.hidden_dim);
+        model_params.transformed_h0_params.initial(hyper_params.hidden_dim,
+                2 * hyper_params.hidden_dim);
     };
 
     if (default_config.program_mode != ProgramMode::METRIC) {
@@ -600,30 +601,16 @@ int main(int argc, char *argv[]) {
         profiler.SetEnabled(false);
         profiler.BeginEvent("total");
 
-        int check_learning_rate_iteration = 10000 / hyper_params.batch_size;
         int iteration = 0;
 
         for (int epoch = 0; ; ++epoch) {
             cout << "epoch:" << epoch << endl;
             shuffle(begin(train_conversation_pairs), end(train_conversation_pairs), engine);
-            unique_ptr<Metric> metric = unique_ptr<Metric>(new Metric);
 
+            unique_ptr<Metric> metric = unique_ptr<Metric>(new Metric);
             for (int batch_i = 0; batch_i < train_conversation_pairs.size() /
                     hyper_params.batch_size; ++batch_i) {
                 cout << format("batch_i:%1% iteration:%2%") % batch_i % iteration << endl;
-                if (iteration % check_learning_rate_iteration == 0) {
-                    cout << format("loss_sum is %1%, and last loss_sum is %2%") % loss_sum %
-                        last_loss_sum << endl;
-                    if (loss_sum >= last_loss_sum) {
-                        model_update._alpha *= 0.9f;
-                        model_update._alpha *= 1.01f;
-                        hyper_params.learning_rate = model_update._alpha;
-                        cout << "learning_rate:" << model_update._alpha << endl;
-                    }
-                    last_loss_sum = loss_sum;
-                    loss_sum = 0.0f;
-                }
-
                 Graph graph;
                 vector<shared_ptr<GraphBuilder>> graph_builders;
                 vector<shared_ptr<DecoderComponents>> decoder_components_vector;
@@ -745,10 +732,20 @@ int main(int argc, char *argv[]) {
                 ++iteration;
             }
 
+            cout << "loss_sum:" << loss_sum << " last_loss_sum:" << endl;
+            if (loss_sum > last_loss_sum) {
+                model_update._alpha *= 0.1f;
+                hyper_params.learning_rate = model_update._alpha;
+                cout << "learning_rate decay:" << model_update._alpha << endl;
+            }
+
             saveModel(hyper_params, model_params, default_config.output_model_file_prefix, epoch);
+
+            last_loss_sum = loss_sum;
+            loss_sum = 0;
+
             profiler.EndCudaEvent();
             profiler.Print();
-
         }
     } else {
         abort();

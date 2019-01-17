@@ -24,7 +24,6 @@ struct CandidateAndReferences {
 
 float mostMatchedCount(const CandidateAndReferences &candidate_and_references,
         int gram_len) {
-    float sum = 0.0f;
     int max_mached_count = 0;
     const auto &references = candidate_and_references.references;
     const auto &candidate = candidate_and_references.candidate;
