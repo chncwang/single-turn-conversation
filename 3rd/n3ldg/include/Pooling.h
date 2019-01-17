@@ -362,7 +362,6 @@ public:
         }
 
         for (int idx = 0; idx < count; idx++) {
-            int in_i = 0;
             for (Node *n : static_cast<MaxPoolNode*>(batch[idx])->ins) {
                 n3ldg_cuda::Assert(n->loss.verify("max pooling backward"));
             }
@@ -452,7 +451,6 @@ public:
         }
 
         for (int idx = 0; idx < count; idx++) {
-            int in_i = 0;
             for (Node *n : static_cast<MaxPoolNode*>(batch[idx])->ins) {
                 n3ldg_cuda::Assert(n->loss.verify("max pooling backward"));
             }

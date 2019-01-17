@@ -317,7 +317,6 @@ public:
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            int xid = static_cast<LookupNode*>(batch[idx])->xid;
             n3ldg_cuda::Assert(batch[idx]->val.verify("lookup forward"));
         }
 #endif

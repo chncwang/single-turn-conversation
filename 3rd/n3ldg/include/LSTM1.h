@@ -493,13 +493,15 @@ struct DynamicLSTMBuilder {
     std::vector<std::shared_ptr<PAddNode>> _cells;
 
     std::vector<std::shared_ptr<TanhNode>> _halfhiddens;
-    std::vector<std::shared_ptr<PMultiNode>> _hiddens;
+    std::vector<std::shared_ptr<PMultiNode>> _hiddens_before_dropout;
+    std::vector<std::shared_ptr<DropoutNode>> _hiddens;
 
     int size() {
         return _hiddens.size();
     }
 
-    void forward(Graph &graph, LSTM1Params &lstm_params, Node &input, Node &h0, Node &c0) {
+    void forward(Graph &graph, LSTM1Params &lstm_params, Node &input, Node &h0, Node &c0,
+            dtype dropout) {
         Node *last_hidden, *last_cell;
         int len = _hiddens.size();
         if (len == 0) {
@@ -579,8 +581,13 @@ struct DynamicLSTMBuilder {
         halfhidden->node_name = "halfhidden";
         _halfhiddens.push_back(halfhidden);
 
-        shared_ptr<PMultiNode> hidden(new PMultiNode);
-        hidden->init(out_dim);
+        shared_ptr<PMultiNode> hidden_before_dropout(new PMultiNode);
+        hidden_before_dropout->init(out_dim);
+        hidden_before_dropout->node_name = "hidden_before_dropout";
+        _hiddens_before_dropout.push_back(hidden_before_dropout);
+
+        shared_ptr<DropoutNode> hidden(new DropoutNode);
+        hidden->init(out_dim, dropout);
         hidden->node_name = "hidden";
         _hiddens.push_back(hidden);
 
@@ -652,7 +659,9 @@ struct DynamicLSTMBuilder {
         _forgetfilters.at(len)->forward(graph, *last_cell, *_forgetgates.at(len));
         _cells.at(len)->forward(graph, *_inputfilters.at(len), *_forgetfilters.at(len));
         _halfhiddens.at(len)->forward(graph, *_cells.at(len));
-        _hiddens.at(len)->forward(graph, *_halfhiddens.at(len), *_outputgates.at(len));
+        _hiddens_before_dropout.at(len)->forward(graph, *_halfhiddens.at(len),
+                *_outputgates.at(len));
+        _hiddens.at(len)->forward(graph, *_hiddens_before_dropout.at(len));
     }
 };
 

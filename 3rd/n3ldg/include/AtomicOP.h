@@ -586,6 +586,13 @@ public:
         }
     }
 
+    void forward(Graph &graph, Node &x) {
+        in = &x;
+        degree = 0;
+        in->addParent(this);
+        graph.addNode(this);
+    }
+
     void compute() override {
         if (is_training) {
 #if !TEST_CUDA
@@ -594,11 +601,15 @@ public:
         } else {
             drop_mask = 1 - drop_value;
         }
-        val.vec() = val.vec() * drop_mask.vec();
+//        std::cout << "before compute:" << in->val.toString() << std::endl;
+        val.vec() = in->val.vec() * drop_mask.vec();
+//        std::cout << "after compute:" << val.toString() << std::endl;
     }
 
     void backward() override {
-        loss.vec() = loss.vec() * drop_mask.vec();
+//        std::cout << "before backward:" << loss.toString() << std::endl;
+        in->loss.vec() += loss.vec() * drop_mask.vec();
+//        std::cout << "after backward:" << in->loss.toString() << std::endl;
     }
 
     bool typeEqual(Node *other) override {
@@ -698,6 +709,7 @@ PExecute DropoutNode::generate() {
     DropoutExecute* exec = new DropoutExecute();
     exec->batch.push_back(this);
     exec->is_training = is_training;
+    exec->dim = dim;
     return exec;
 }
 

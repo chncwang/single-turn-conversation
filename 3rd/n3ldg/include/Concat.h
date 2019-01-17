@@ -158,6 +158,9 @@ class ConcatExecute : public Execute {
                 losses, count, inCount, outDim);
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
+            batch[idx]->backward();
+        }
+        for (int idx = 0; idx < count; idx++) {
             for (int j = 0; j < inCount; ++j) {
                 n3ldg_cuda::Assert(static_cast<ConcatNode *>(batch[idx])->
                         ins[j]->loss.verify("concat backward"));

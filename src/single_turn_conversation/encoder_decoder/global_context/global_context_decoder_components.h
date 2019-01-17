@@ -25,7 +25,8 @@ struct GlobalContextDecoderComponents : DecoderComponents {
             transformed_h0.forward(graph, h0);
             transformed_c0.forward(graph, c0);
         }
-        decoder.forward(graph, model_params.encoder_params, input, transformed_h0, transformed_c0);
+        decoder.forward(graph, model_params.encoder_params, input, transformed_h0, transformed_c0,
+                hyper_params.dropout);
     }
 };
 

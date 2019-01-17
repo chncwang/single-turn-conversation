@@ -47,6 +47,10 @@ struct Tensor1D : public N3LDGSerializable {
         }
     }
 
+    std::string toString() {
+        return toJson().toStyledString();
+    }
+
     const Mat mat() const {
         return Mat(v, dim, 1);
     }

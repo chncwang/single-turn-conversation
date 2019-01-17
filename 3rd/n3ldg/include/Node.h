@@ -115,7 +115,7 @@ class Execute;
 // one Node means a vector
 // the col should be 1, because we aimed for NLP only
 class Node {
-  public:
+public:
     std::vector<Node*> parents;
     Tensor1D val;
     Tensor1D loss;
@@ -124,7 +124,6 @@ class Node {
     int depth = 0;
     string node_type;
     string node_name;
-
     int node_index;
 
     Node() : node_type("interface") {
@@ -158,7 +157,6 @@ class Node {
     }
 #endif
 
-  public:
     virtual void compute() = 0;
     virtual void backward() = 0;
 
@@ -178,7 +176,6 @@ class Node {
         return std::hash<std::string>{}(node_type) ^ std::hash<int>{}(dim);
     }
 
-  public:
     virtual void addParent(Node* parent) {
         if (degree >= 0) {
             parents.push_back(parent);

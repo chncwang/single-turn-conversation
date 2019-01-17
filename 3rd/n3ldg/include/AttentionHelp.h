@@ -187,9 +187,7 @@ public:
 #if TEST_CUDA
         for (Node *n : batch) {
             n->compute();
-            AttentionSoftMaxNode *att = static_cast<AttentionSoftMaxNode*>(n);
-            n3ldg_cuda::Assert(n->val.verify(
-                        "AttentionSoftMaxExecute forward"));
+            n3ldg_cuda::Assert(n->val.verify("AttentionSoftMaxExecute forward"));
         }
 #endif
     }
@@ -457,10 +455,7 @@ public:
 #if TEST_CUDA
         for (Node *n : batch) {
             n->compute();
-            AttentionSoftMaxVNode *att =
-                static_cast<AttentionSoftMaxVNode*>(n);
-            n3ldg_cuda::Assert(n->val.verify(
-                        "AttentionSoftMaxVExecute forward"));
+            n3ldg_cuda::Assert(n->val.verify("AttentionSoftMaxVExecute forward"));
         }
 #endif
     }

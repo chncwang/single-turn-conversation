@@ -83,10 +83,6 @@ class UniParams : public N3LDGSerializable
 };
 
 
-// non-linear feed-forward node
-// input nodes should be specified by forward function
-// for input variables, we exploit column vector,
-// which means a concrete input vector x_i is represented by x(0, i), x(1, i), ..., x(n, i)
 class UniNode : public Node {
   public:
     PNode in;
