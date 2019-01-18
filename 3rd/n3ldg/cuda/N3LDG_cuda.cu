@@ -1054,6 +1054,16 @@ bool Verify(int *host, int *device, int len, const char* message) {
     return success;
 }
 
+MemoryPool& MemoryPool::Ins() {
+    static MemoryPool *p;
+    if (p == NULL) {
+        p = new MemoryPool;
+        p->free_blocks_.resize(100);
+        p->busy_blocks_.reserve(10000);
+    }
+    return *p;
+}
+
 cudaError_t MemoryPool::Malloc(void **p, int size) {
     assert(*p == NULL);
     Profiler &profiler = Profiler::Ins();
@@ -1073,13 +1083,16 @@ cudaError_t MemoryPool::Malloc(void **p, int size) {
         fit_size <<= 1;
         ++n;
     }
-    cudaError_t status = cudaSuccess;
+    cudaError_t status = cudaErrorMemoryAllocation;
     if (free_blocks_.at(n).empty()) {
-        status = cudaMalloc(p, fit_size);
+        while (status != cudaSuccess) {
+            status = cudaMalloc(p, fit_size);
+        }
         CallCuda(status);
         MemoryBlock block(*p, fit_size);
         busy_blocks_.insert(std::make_pair(*p, block));
     } else {
+        status = cudaSuccess;
         int this_size = free_blocks_.at(n).size();
         MemoryBlock &block = free_blocks_.at(n).at(this_size - 1);
         *p = block.p;

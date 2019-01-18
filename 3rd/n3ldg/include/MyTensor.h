@@ -194,11 +194,10 @@ struct Tensor2D : public N3LDGSerializable {
         return &(v[icol*row]);  // no boundary check?
     }
 
-    //use it carefully
-    Tensor2D& operator=(const dtype &a) { // assign a to every element
-        for (int i = 0; i < size; i++)
+    void assignAll(dtype a) {
+        for (int i = 0; i < size; i++) {
             v[i] = a;
-        return *this;
+        }
     }
 
     Tensor2D& operator=(const std::vector<dtype> &a) { // assign a to every element

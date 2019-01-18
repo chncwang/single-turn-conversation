@@ -110,6 +110,7 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
 
     default_config.max_sample_count = ini_reader.GetInteger(SECTION, "max_sample_count",
             1000000000);
+    default_config.hold_batch_size = ini_reader.GetInteger(SECTION, "hold_batch_size", 100);
     default_config.dev_size = ini_reader.GetInteger(SECTION, "dev_size", 0);
     default_config.test_size = ini_reader.GetInteger(SECTION, "test_size", 0);
     default_config.device_id = ini_reader.GetInteger(SECTION, "device_id", 0);

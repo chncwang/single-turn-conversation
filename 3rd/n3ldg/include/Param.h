@@ -37,8 +37,12 @@ public:
         aux_mean.init(outDim, inDim);
 #endif
         grad.init(outDim, inDim);
-        dtype bound = sqrt(6.0 / (outDim + inDim + 1));
-        val.random(bound);
+        if (isBias()) {
+            val.assignAll(0.0f);
+        } else {
+            dtype bound = sqrt(6.0 / (outDim + inDim + 1));
+            val.random(bound);
+        }
         iter = 0;
 #if USE_GPU
         n3ldg_cuda::Memset(grad.value, outDim * inDim, 0.0f);

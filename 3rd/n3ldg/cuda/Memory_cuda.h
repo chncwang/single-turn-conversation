@@ -27,15 +27,7 @@ struct MemoryBlock {
 class MemoryPool {
 public:
     MemoryPool(const MemoryPool &) = delete;
-    static MemoryPool& Ins() {
-        static MemoryPool *p;
-        if (p == NULL) {
-            p = new MemoryPool;
-            p->free_blocks_.resize(100);
-            p->busy_blocks_.reserve(10000);
-        }
-        return *p;
-    }
+    static MemoryPool& Ins();
 
     cudaError_t Malloc(void **p, int size);
     cudaError_t Free(void *p);
@@ -43,6 +35,8 @@ private:
     MemoryPool() = default;
     std::vector<std::vector<MemoryBlock>> free_blocks_;
     std::unordered_map<void *, MemoryBlock> busy_blocks_;
+    void *hold_block = nullptr;
+    int64_t hold_block_size = 10000000000L;
 };
 
 }
