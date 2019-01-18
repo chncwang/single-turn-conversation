@@ -3,29 +3,33 @@
 
 #include <iostream>
 #include <memory>
+#include <vector>
 #include "single_turn_conversation/encoder_decoder/decoder_components.h"
 
 struct GlobalContextDecoderComponents : DecoderComponents {
-    LinearNode transformed_h0;
-    LinearNode transformed_c0;
-    bool initiated = false;
+    vector<shared_ptr<ConcatNode>> concat_nodes;
 
-    void init(const HyperParams &hyper_params, ModelParams &model_params) {
-        transformed_h0.init(hyper_params.hidden_dim);
-        transformed_h0.setParam(model_params.transformed_h0_params);
-        transformed_c0.init(hyper_params.hidden_dim);
-        transformed_c0.setParam(model_params.transformed_c0_params);
-        initiated = true;
+    shared_ptr<BucketNode> bucket(int dim, Graph &graph) {
+        static shared_ptr<BucketNode> node(new BucketNode);
+        static bool init;
+        if (!init) {
+            init = true;
+            node->init(dim);
+            node->forward(graph, 0);
+        }
+        return node;
     }
 
     void forward(Graph &graph, const HyperParams &hyper_params, ModelParams &model_params,
-            Node &input, Node &h0, Node &c0, const std::vector<Node *> &encoder_hiddens) override {
-        if (!initiated) {
-            init(hyper_params, model_params);
-            transformed_h0.forward(graph, h0);
-            transformed_c0.forward(graph, c0);
-        }
-        decoder.forward(graph, model_params.encoder_params, input, transformed_h0, transformed_c0,
+            Node &input, const vector<Node *> &encoder_hiddens) override {
+        shared_ptr<ConcatNode> concat(new ConcatNode);
+        concat->init(hyper_params.word_dim + hyper_params.hidden_dim * 2);
+        vector<Node *> ins = {&input, encoder_hiddens.at(encoder_hiddens.size() - 1)};
+        concat->forward(graph, ins);
+        concat_nodes.push_back(concat);
+
+        decoder.forward(graph, model_params.encoder_params, *concat,
+                *bucket(hyper_params.hidden_dim, graph), *bucket(hyper_params.hidden_dim, graph),
                 hyper_params.dropout);
     }
 };

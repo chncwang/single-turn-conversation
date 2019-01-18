@@ -121,18 +121,17 @@ std::vector<BeamSearchResult> mostProbableResults(
 }
 
 struct GraphBuilder {
-    std::vector<std::shared_ptr<LookupNode>> encoder_lookups;
+    std::vector<std::shared_ptr<LookupNode>> encoder_lookups_before_dropout;
+    std::vector<std::shared_ptr<DropoutNode>> encoder_lookups;
     DynamicLSTMBuilder left_to_right_encoder;
     DynamicLSTMBuilder right_to_left_encoder;
     std::vector<std::shared_ptr<ConcatNode>> concated_encoder_nodes;
-    ConcatNode concated_last_cell_node;
     BucketNode hidden_bucket;
     BucketNode word_bucket;
 
     void init(const HyperParams &hyper_params) {
         hidden_bucket.init(hyper_params.hidden_dim);
         word_bucket.init(hyper_params.word_dim);
-        concated_last_cell_node.init(2 * hyper_params.hidden_dim);
     }
 
     void forward(Graph &graph, const std::vector<std::string> &sentence,
@@ -146,15 +145,20 @@ struct GraphBuilder {
             input_lookup->init(hyper_params.word_dim);
             input_lookup->setParam(model_params.lookup_table);
             input_lookup->forward(graph, word);
-            encoder_lookups.push_back(input_lookup);
+            encoder_lookups_before_dropout.push_back(input_lookup);
+
+            std::shared_ptr<DropoutNode> dropout_node(new DropoutNode);
+            dropout_node->init(hyper_params.word_dim, hyper_params.dropout);
+            dropout_node->forward(graph, *input_lookup);
+            encoder_lookups.push_back(dropout_node);
         }
 
-        for (std::shared_ptr<LookupNode> &node : encoder_lookups) {
+        for (std::shared_ptr<DropoutNode> &node : encoder_lookups) {
             left_to_right_encoder.forward(graph, model_params.encoder_params, *node, hidden_bucket,
                     hidden_bucket, hyper_params.dropout);
         }
 
-        int size = encoder_lookups.size();
+        int size = encoder_lookups_before_dropout.size();
 
         for (int i = size - 1; i >= 0; --i) {
             right_to_left_encoder.forward(graph, model_params.encoder_params,
@@ -175,10 +179,6 @@ struct GraphBuilder {
             concat_node->forward(graph, nodes);
             concated_encoder_nodes.push_back(concat_node);
         }
-
-        std::vector<Node *> last_cells = {left_to_right_encoder._cells.at(size - 1).get(),
-            right_to_left_encoder._cells.at(size - 1).get()};
-        concated_last_cell_node.forward(graph, last_cells);
     }
 
     void forwardDecoder(Graph &graph, DecoderComponents &decoder_components,
@@ -199,24 +199,27 @@ struct GraphBuilder {
             ModelParams &model_params) {
         Node *last_input;
         if (i > 0) {
-            std::shared_ptr<LookupNode> decoder_lookup(new LookupNode);
-            decoder_lookup->init(hyper_params.word_dim);
-            decoder_lookup->setParam(model_params.lookup_table);
-            decoder_lookup->forward(graph, *answer);
+            std::shared_ptr<LookupNode> before_dropout(new LookupNode);
+            before_dropout->init(hyper_params.word_dim);
+            before_dropout->setParam(model_params.lookup_table);
+            before_dropout->forward(graph, *answer);
+            decoder_components.decoder_lookups_before_dropout.push_back(before_dropout);
+            std::shared_ptr<DropoutNode> decoder_lookup(new DropoutNode);
+            decoder_lookup->init(hyper_params.word_dim, hyper_params.dropout);
+            decoder_lookup->forward(graph, *before_dropout);
             decoder_components.decoder_lookups.push_back(decoder_lookup);
             last_input = decoder_components.decoder_lookups.at(i - 1).get();
         } else {
             last_input = &word_bucket;
         }
 
-        int size = concated_encoder_nodes.size();
         std::vector<Node *> encoder_hiddens = transferVector<Node *, std::shared_ptr<ConcatNode>>(
                 concated_encoder_nodes, [](const std::shared_ptr<ConcatNode> &concat) {
                 return concat.get();
                 });
 
         decoder_components.forward(graph, hyper_params, model_params, *last_input,
-                *concated_encoder_nodes.at(size - 1), concated_last_cell_node, encoder_hiddens);
+                encoder_hiddens);
 
         std::shared_ptr<LinearNode> decoder_to_wordvector(new LinearNode);
         decoder_to_wordvector->init(hyper_params.word_dim);

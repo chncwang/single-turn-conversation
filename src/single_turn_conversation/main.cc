@@ -539,7 +539,8 @@ int main(int argc, char *argv[]) {
                     hyper_params.word_finetune);
         }
         model_params.encoder_params.init(hyper_params.hidden_dim, hyper_params.word_dim);
-        model_params.decoder_params.init(hyper_params.hidden_dim, hyper_params.word_dim);
+        model_params.decoder_params.init(hyper_params.hidden_dim,
+                hyper_params.word_dim + 2 * hyper_params.hidden_dim);
         model_params.hidden_to_wordvector_params.init(hyper_params.word_dim,
                 hyper_params.hidden_dim);
         model_params.transformed_c0_params.init(hyper_params.hidden_dim,
