@@ -44,8 +44,8 @@ public:
     }
 #endif
 
-    // allow sparse and dense parameters have different parameter initialization methods
-    void initial(int outDim, int inDim) {
+    // allow sparse and dense parameters have different parameter initization methods
+    void init(int outDim, int inDim) {
         //not in the aligned memory pool
 #if USE_GPU
         val.initOnMemoryAndDevice(outDim, inDim);

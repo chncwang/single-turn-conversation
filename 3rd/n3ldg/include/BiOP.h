@@ -37,12 +37,12 @@ class BiParams {
         }
     }
 
-    void initial(int nOSize, int nISize1, int nISize2, bool useB = true) {
-        W1.initial(nOSize, nISize1);
-        W2.initial(nOSize, nISize2);
+    void init(int nOSize, int nISize1, int nISize2, bool useB = true) {
+        W1.init(nOSize, nISize1);
+        W2.init(nOSize, nISize2);
         bUseB = useB;
         if (bUseB) {
-            b.initial(nOSize, 1);
+            b.init(nOSize, 1);
         }
     }
 };
@@ -369,16 +369,16 @@ class BiExecute :public Execute {
         n3ldg_cuda::Assert(lty.verify("BiExecute backward lty"));
 #endif
 #if TEST_CUDA
-        n3ldg_cuda::Assert(param->W1.grad.verify("bi backward W grad initial"));
-        n3ldg_cuda::Assert(param->W2.grad.verify("bi backward W grad initial"));
+        n3ldg_cuda::Assert(param->W1.grad.verify("bi backward W grad init"));
+        n3ldg_cuda::Assert(param->W2.grad.verify("bi backward W grad init"));
 #endif
         n3ldg_cuda::MatrixMultiplyMatrix(lty.value, x1.value,
                 param->W1.grad.value, outDim, count, inDim1, true, true, false);
         n3ldg_cuda::MatrixMultiplyMatrix(lty.value, x2.value,
                 param->W2.grad.value, outDim, count, inDim2, true, true, false);
 #if TEST_CUDA
-        n3ldg_cuda::Assert(param->W1.val.verify("bi W1.val initial"));
-        n3ldg_cuda::Assert(param->W2.val.verify("bi W2.val initial"));
+        n3ldg_cuda::Assert(param->W1.val.verify("bi W1.val init"));
+        n3ldg_cuda::Assert(param->W2.val.verify("bi W2.val init"));
 #endif
         n3ldg_cuda::MatrixMultiplyMatrix(param->W1.val.value, lty.value,
                 lx1.value, inDim1, outDim, count, false, false, true);
@@ -398,7 +398,7 @@ class BiExecute :public Execute {
         }
 #if TEST_CUDA
         n3ldg_cuda::Assert(param->b.grad.verify(
-                    "bi backward param b initial"));
+                    "bi backward param b init"));
 #endif
         n3ldg_cuda::AddLtyToParamBiasAndAddLxToInputLossesForBiBackward(
                 lty.value, lx1.value, lx2.value, param->b.grad.value,

@@ -222,7 +222,7 @@ void analyze(const vector<int> &results, const vector<int> &answers, Metric &met
     }
 }
 
-void saveModel(const HyperParams &hyper_params, ModelParams &model_params,
+string saveModel(const HyperParams &hyper_params, ModelParams &model_params,
         const string &filename_prefix, int epoch) {
     cout << "saving model file..." << endl;
     auto t = time(nullptr);
@@ -240,43 +240,50 @@ void saveModel(const HyperParams &hyper_params, ModelParams &model_params,
     Json::StreamWriterBuilder builder;
     builder["commentStyle"] = "None";
     builder["indentation"] = "";
-    std::string json_str = Json::writeString(builder, root);
-    std::ofstream out(filename);
+    string json_str = Json::writeString(builder, root);
+    ofstream out(filename);
     out << json_str;
     out.close();
-
     cout << format("model file %1% saved") % filename << endl;
+    return filename;
 }
 
-void loadModel(HyperParams &hyper_params, ModelParams &model_params, const string &filename,
-        const std::function<void(const HyperParams &hyper_params, ModelParams &model_params)>
-        &allocate_model_params) {
+shared_ptr<Json::Value> loadModel(const string &filename) {
     ifstream is(filename.c_str());
+    shared_ptr<Json::Value> root(new Json::Value);
     if (is) {
         cout << "loading model..." << endl;
-        std::stringstream sstr;
+        stringstream sstr;
         sstr << is.rdbuf();
-        std::string str = sstr.str();
+        string str = sstr.str();
         Json::CharReaderBuilder builder;
-        auto reader = std::unique_ptr<Json::CharReader>(builder.newCharReader());
-        Json::Value root;
-        std::string error;
-        if (!reader->parse(str.c_str(), str.c_str() + str.size(), &root, &error)) {
-            std::cerr << boost::format("parse json error:%1%") % error << std::endl;
+        auto reader = unique_ptr<Json::CharReader>(builder.newCharReader());
+        string error;
+        if (!reader->parse(str.c_str(), str.c_str() + str.size(), root.get(), &error)) {
+            cerr << boost::format("parse json error:%1%") % error << endl;
             abort();
         }
-        hyper_params.fromJson(root["hyper_params"]);
-        hyper_params.print();
-        allocate_model_params(hyper_params, model_params);
-        model_params.fromJson(root["model_params"]);
-#if USE_GPU
-        model_params.copyFromHostToDevice();
-#endif
         cout << "model loaded" << endl;
     } else {
         cerr << format("failed to open is, error when loading %1%") % filename << endl;
         abort();
     }
+
+    return root;
+}
+
+void loadModel(HyperParams &hyper_params, ModelParams &model_params, const string &filename,
+        const function<void(const HyperParams &hyper_params, ModelParams &model_params)>
+        &allocate_model_params) {
+    shared_ptr<Json::Value> root_ptr = loadModel(filename);
+    Json::Value &root = *root_ptr;
+    hyper_params.fromJson(root["hyper_params"]);
+    hyper_params.print();
+    allocate_model_params(hyper_params, model_params);
+    model_params.fromJson(root["model_params"]);
+#if USE_GPU
+    model_params.copyFromHostToDevice();
+#endif
     cout << format("model file %1% loaded") % filename << endl;
 }
 
@@ -291,7 +298,7 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
         cout << "post:" << endl;
         print(post_sentences.at(post_and_responses.post_id));
 
-        const std::vector<int> &response_ids = post_and_responses.response_ids;
+        const vector<int> &response_ids = post_and_responses.response_ids;
         float min_perplex = -1.0f;
         cout << "response size:" << response_ids.size() << endl;
         for (int response_id : response_ids) {
@@ -302,7 +309,7 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
             graph_builder.init(hyper_params);
             graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id),
                     hyper_params, model_params);
-            std::shared_ptr<DecoderComponents> decoder_components(buildDecoderComponents());
+            shared_ptr<DecoderComponents> decoder_components(buildDecoderComponents());
             graph_builder.forwardDecoder(graph, *decoder_components,
                     response_sentences.at(response_id), hyper_params, model_params);
             graph.compute();
@@ -331,20 +338,20 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         const vector<vector<string>> &response_sentences) {
     cout << "decodeTestPosts begin" << endl;
     hyper_params.print();
-    std::vector<CandidateAndReferences> candidate_and_references_vector;
+    vector<CandidateAndReferences> candidate_and_references_vector;
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
         Graph graph;
         GraphBuilder graph_builder;
         graph_builder.init(hyper_params);
         graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id), hyper_params,
                 model_params);
-        std::vector<shared_ptr<DecoderComponents>> decoder_components_vector;
+        vector<shared_ptr<DecoderComponents>> decoder_components_vector;
         for (int i = 0; i < hyper_params.beam_size; ++i) {
             decoder_components_vector.push_back(buildDecoderComponents());
         }
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
                 hyper_params.beam_size, hyper_params, model_params);
-        const std::vector<WordIdAndProbability> &word_ids_and_probability = pair.first;
+        const vector<WordIdAndProbability> &word_ids_and_probability = pair.first;
         cout << "post:" << endl;
         print(post_sentences.at(post_and_responses.post_id));
         cout << "response:" << endl;
@@ -355,20 +362,20 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
             continue;
         }
 
-        std::vector<int> decoded_word_ids = transferVector<int, WordIdAndProbability>(
+        vector<int> decoded_word_ids = transferVector<int, WordIdAndProbability>(
                 word_ids_and_probability, [](const WordIdAndProbability &w)->int {
             return w.word_id;
         });
-        const std::vector<int> &response_ids = post_and_responses.response_ids;
-        std::vector<std::vector<std::string>> str_references =
-            transferVector<std::vector<std::string>, int>(response_ids,
-                    [&](int response_id) -> std::vector<std::string> {
+        const vector<int> &response_ids = post_and_responses.response_ids;
+        vector<vector<string>> str_references =
+            transferVector<vector<string>, int>(response_ids,
+                    [&](int response_id) -> vector<string> {
                     return response_sentences.at(response_id);
                     });
-        std::vector<std::vector<int>> id_references;
-        for (const std::vector<std::string> &strs : str_references) {
-            std::vector<int> ids = transferVector<int, std::string>(strs,
-                    [&](const std::string &w) -> int {
+        vector<vector<int>> id_references;
+        for (const vector<string> &strs : str_references) {
+            vector<int> ids = transferVector<int, string>(strs,
+                    [&](const string &w) -> int {
                     return model_params.lookup_table.getElemId(w);
                     });
             id_references.push_back(ids);
@@ -386,7 +393,7 @@ void interact(const HyperParams &hyper_params, ModelParams &model_params) {
     hyper_params.print();
     while (true) {
         string post;
-        std::getline(cin >> ws, post);
+        getline(cin >> ws, post);
         vector<string> words;
         split(words, post, is_any_of(" "));
         words.push_back(STOP_SYMBOL);
@@ -395,13 +402,13 @@ void interact(const HyperParams &hyper_params, ModelParams &model_params) {
         GraphBuilder graph_builder;
         graph_builder.init(hyper_params);
         graph_builder.forward(graph, words, hyper_params, model_params);
-        std::vector<std::shared_ptr<DecoderComponents>> decoder_components_vector;
+        vector<shared_ptr<DecoderComponents>> decoder_components_vector;
         decoder_components_vector.push_back(buildDecoderComponents());
         cout << format("decodeTestPosts - beam_size:%1% decoder_components_vector.size:%2%") %
             hyper_params.beam_size % decoder_components_vector.size() << endl;
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
                 hyper_params.beam_size, hyper_params, model_params);
-        const std::vector<WordIdAndProbability> &word_ids = pair.first;
+        const vector<WordIdAndProbability> &word_ids = pair.first;
         cout << "post:" << endl;
         cout << post << endl;
         cout << "response:" << endl;
@@ -444,8 +451,8 @@ int main(int argc, char *argv[]) {
     cout << "post_and_responses_vector size:" << post_and_responses_vector.size() << endl;
 
     const int SEED = 0;
-    std::default_random_engine engine(SEED);
-    std::shuffle(std::begin(post_and_responses_vector), std::end(post_and_responses_vector),
+    default_random_engine engine(SEED);
+    shuffle(begin(post_and_responses_vector), end(post_and_responses_vector),
             engine);
     vector<PostAndResponses> dev_post_and_responses, test_post_and_responses,
         train_post_and_responses;
@@ -456,7 +463,7 @@ int main(int argc, char *argv[]) {
             train_post_and_responses.push_back(post_and_responses);
             vector<ConversationPair> conversation_pairs = toConversationPairs(post_and_responses);
             for (ConversationPair &conversation_pair : conversation_pairs) {
-                train_conversation_pairs.push_back(std::move(conversation_pair));
+                train_conversation_pairs.push_back(move(conversation_pair));
             }
         };
         if (i < default_config.dev_size) {
@@ -515,7 +522,7 @@ int main(int argc, char *argv[]) {
     word_counts[unknownkey] = 1000000000;
     word_counts[STOP_SYMBOL] = 1000000000;
     Alphabet alphabet;
-    alphabet.initial(word_counts, hyper_params.word_cutoff);
+    alphabet.init(word_counts, hyper_params.word_cutoff);
     cout << "the size of alphabet is: ";
     cout << alphabet.size() <<endl;
     ModelParams model_params;
@@ -525,18 +532,18 @@ int main(int argc, char *argv[]) {
     auto allocate_model_params = [&alphabet](const HyperParams &hyper_params,
             ModelParams &model_params) {
         if(hyper_params.word_file == "") {
-            model_params.lookup_table.initial(&alphabet, hyper_params.word_dim, true);
+            model_params.lookup_table.init(&alphabet, hyper_params.word_dim, true);
         } else {
-            model_params.lookup_table.initial(&alphabet, hyper_params.word_file,
+            model_params.lookup_table.init(&alphabet, hyper_params.word_file,
                     hyper_params.word_finetune);
         }
-        model_params.encoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
-        model_params.decoder_params.initial(hyper_params.hidden_dim, hyper_params.word_dim);
-        model_params.hidden_to_wordvector_params.initial(hyper_params.word_dim,
+        model_params.encoder_params.init(hyper_params.hidden_dim, hyper_params.word_dim);
+        model_params.decoder_params.init(hyper_params.hidden_dim, hyper_params.word_dim);
+        model_params.hidden_to_wordvector_params.init(hyper_params.word_dim,
                 hyper_params.hidden_dim);
-        model_params.transformed_c0_params.initial(hyper_params.hidden_dim,
+        model_params.transformed_c0_params.init(hyper_params.hidden_dim,
                 2 * hyper_params.hidden_dim);
-        model_params.transformed_h0_params.initial(hyper_params.hidden_dim,
+        model_params.transformed_h0_params.init(hyper_params.hidden_dim,
                 2 * hyper_params.hidden_dim);
     };
 
@@ -602,6 +609,7 @@ int main(int argc, char *argv[]) {
         profiler.BeginEvent("total");
 
         int iteration = 0;
+        string last_saved_model;
 
         for (int epoch = 0; ; ++epoch) {
             cout << "epoch:" << epoch << endl;
@@ -702,8 +710,7 @@ int main(int argc, char *argv[]) {
                         graph_builder.forward(graph, post_sentences.at(conversation_pair.post_id),
                                 hyper_params, model_params);
 
-                        std::shared_ptr<DecoderComponents> decoder_components(
-                                buildDecoderComponents());
+                        shared_ptr<DecoderComponents> decoder_components(buildDecoderComponents());
                         graph_builder.forwardDecoder(graph, *decoder_components,
                                 response_sentences.at(conversation_pair.response_id),
                                 hyper_params, model_params);
@@ -734,12 +741,22 @@ int main(int argc, char *argv[]) {
 
             cout << "loss_sum:" << loss_sum << " last_loss_sum:" << endl;
             if (loss_sum > last_loss_sum) {
+                if (epoch == 0) {
+                    cerr << "loss is larger than last epoch but epoch is 0" << endl;
+                    abort();
+                }
                 model_update._alpha *= 0.1f;
                 hyper_params.learning_rate = model_update._alpha;
                 cout << "learning_rate decay:" << model_update._alpha << endl;
+                std::shared_ptr<Json::Value> root = loadModel(last_saved_model);
+                model_params.fromJson((*root)["model_params"]);
+#if USE_GPU
+                model_params.copyFromHostToDevice();
+#endif
+            } else {
+                last_saved_model = saveModel(hyper_params, model_params,
+                        default_config.output_model_file_prefix, epoch);
             }
-
-            saveModel(hyper_params, model_params, default_config.output_model_file_prefix, epoch);
 
             last_loss_sum = loss_sum;
             loss_sum = 0;

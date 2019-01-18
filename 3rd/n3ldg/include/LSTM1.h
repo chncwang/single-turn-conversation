@@ -70,15 +70,15 @@ struct LSTM1Params : public N3LDGSerializable
         cell_input.exportAdaParams(ada);
     }
 
-    void initial(int nOSize, int nISize) {
-        input_hidden.initial(nOSize, nOSize, false);
-        input_input.initial(nOSize, nISize, true);
-        output_hidden.initial(nOSize, nOSize, false);
-        output_input.initial(nOSize, nISize, true);
-        forget_hidden.initial(nOSize, nOSize, false);
-        forget_input.initial(nOSize, nISize, true);
-        cell_hidden.initial(nOSize, nOSize, false);
-        cell_input.initial(nOSize, nISize, true);
+    void init(int nOSize, int nISize) {
+        input_hidden.init(nOSize, nOSize, false);
+        input_input.init(nOSize, nISize, true);
+        output_hidden.init(nOSize, nOSize, false);
+        output_input.init(nOSize, nISize, true);
+        forget_hidden.init(nOSize, nOSize, false);
+        forget_input.init(nOSize, nISize, true);
+        cell_hidden.init(nOSize, nOSize, false);
+        cell_input.init(nOSize, nISize, true);
     }
 
     int inDim() {

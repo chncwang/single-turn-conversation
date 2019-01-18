@@ -142,7 +142,7 @@ class basic_quark {
         }
     }
 
-    void initial(const unordered_map<string, int>& elem_stat, int cutOff = 0) {
+    void init(const unordered_map<string, int>& elem_stat, int cutOff = 0) {
         unordered_map<string, int>::const_iterator elem_iter;
         for (elem_iter = elem_stat.begin(); elem_iter != elem_stat.end(); elem_iter++) {
             if (elem_iter->second > cutOff) {
@@ -154,7 +154,7 @@ class basic_quark {
     }
 
     // initial by a file (first column), always an embedding file
-    void initial(const string& inFile, bool bUseUnknown = true) {
+    void init(const string& inFile, bool bUseUnknown = true) {
         ifstream inf;
         inf.open(inFile.c_str());
 

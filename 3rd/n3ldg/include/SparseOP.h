@@ -33,18 +33,18 @@ class SparseParams {
         ada.addParam(&W);
     }
 
-    void initialWeights(int nOSize) {
+    void initWeights(int nOSize) {
         if (nVSize == 0) {
             std::cout << "please check the alphabet" << std::endl;
             return;
         }
         nDim = nOSize;
-        W.initial(nOSize, nVSize);
+        W.init(nOSize, nVSize);
     }
 
 
-    //random initialization
-    void initial(PAlphabet alpha, int nOSize, int base = 1) {
+    //random initization
+    void init(PAlphabet alpha, int nOSize, int base = 1) {
         assert(base >= 1);
         elems = alpha;
         nVSize = base * elems->size();
@@ -52,7 +52,7 @@ class SparseParams {
             std::cout << "nVSize: " << nVSize << ", Alpha Size = " << elems->size()  << ", Require more Alpha."<< std::endl;
             elems->set_fixed_flag(false);
         }
-        initialWeights(nOSize);
+        initWeights(nOSize);
     }
 
     int getFeatureId(const string& strFeat) {

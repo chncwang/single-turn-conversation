@@ -3034,7 +3034,7 @@ void Rescale(dtype *v, int len, dtype scale) {
     CheckCudaError();
 }
 
-__global__ void KernelUpdateAdam(dtype *val, dtype *grad, int row, int col,
+__global__ void KernelUpdateAdam(dtype *val, dtype *grad, int row, int col, bool is_bias,
         dtype *aux_mean,
         dtype *aux_square,
         int iter,
@@ -3048,7 +3048,7 @@ __global__ void KernelUpdateAdam(dtype *val, dtype *grad, int row, int col,
     int step = DeviceDefaultStep();
     int len = row * col;
     for (int i = index; i < len; i += step) {
-        if (row > 1 && col > 1) {
+        if (!is_bias) {
             grad[i] += val[i] * reg;
         }
         aux_mean[i] = belta1 * aux_mean[i] + (1 - belta1) * grad[i];
@@ -3060,7 +3060,7 @@ __global__ void KernelUpdateAdam(dtype *val, dtype *grad, int row, int col,
     }
 }
 
-void UpdateAdam(dtype *val, dtype *grad, int row, int col, dtype *aux_mean,
+void UpdateAdam(dtype *val, dtype *grad, int row, int col, bool is_bias, dtype *aux_mean,
         dtype *aux_square,
         int iter,
         dtype belta1,
@@ -3070,7 +3070,7 @@ void UpdateAdam(dtype *val, dtype *grad, int row, int col, dtype *aux_mean,
         dtype eps) {
     int block_count = DefaultBlockCount(row * col);
     dtype x = 1.0f / (1 - pow(belta1, iter + 1));
-    KernelUpdateAdam<<<block_count, TPB>>>(val, grad, row, col, aux_mean,
+    KernelUpdateAdam<<<block_count, TPB>>>(val, grad, row, col, is_bias, aux_mean,
             aux_square,
             iter,
             belta1,

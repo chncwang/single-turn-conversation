@@ -401,7 +401,7 @@ std::pair<dtype, std::vector<int>> SoftMaxLoss(const std::vector<const dtype *> 
 dtype SquareSum(const dtype *v, int len);
 dtype SquareSum(const dtype *v, const bool *indexers, int count, int dim);
 void Rescale(dtype *v, int len, dtype scale);
-void UpdateAdam(dtype *val, dtype *grad, int row, int col, dtype *aux_mean,
+void UpdateAdam(dtype *val, dtype *grad, int row, int col, bool is_bias, dtype *aux_mean,
         dtype *aux_square,
         int iter,
         dtype belta1,

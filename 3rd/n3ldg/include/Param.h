@@ -16,13 +16,17 @@
 
 // Notice: aux is an auxiliary variable to help parameter updating
 class Param : public BaseParam {
-  public:
+public:
     Tensor2D aux_square;
     Tensor2D aux_mean;
     int iter;
 
+    Param() = default;
+
+    Param(bool is_bias) : BaseParam(is_bias) {}
+
     // allow sparse and dense parameters have different parameter initialization methods
-    void initial(int outDim, int inDim) {
+    void init(int outDim, int inDim) {
 #if USE_GPU
         val.initOnMemoryAndDevice(outDim, inDim);
         aux_square.initOnMemoryAndDevice(outDim, inDim);
@@ -81,13 +85,13 @@ class Param : public BaseParam {
         n3ldg_cuda::UpdateAdagrad(val.value, grad.value, val.row, val.col,
                 aux_square.value, alpha, reg, eps);
 #if TEST_CUDA
-        if (val.col > 1 && val.row > 1)grad.vec() = grad.vec() + val.vec() * reg;
+        if (!isBias()) grad.vec() = grad.vec() + val.vec() * reg;
         aux_square.vec() = aux_square.vec() + grad.vec().square();
         val.vec() = val.vec() - grad.vec() * alpha / (aux_square.vec() + eps).sqrt();
         n3ldg_cuda::Assert(val.verify("Param adagrad"));
 #endif
 #else
-        if (val.col > 1 && val.row > 1)grad.vec() = grad.vec() + val.vec() * reg;
+        if (!isBias()) grad.vec() = grad.vec() + val.vec() * reg;
         aux_square.vec() = aux_square.vec() + grad.vec().square();
         val.vec() = val.vec() - grad.vec() * alpha / (aux_square.vec() + eps).sqrt();
 #endif
@@ -101,7 +105,7 @@ class Param : public BaseParam {
         n3ldg_cuda::Assert(aux_mean.verify("Param adam begin aux_mean"));
         n3ldg_cuda::Assert(aux_square.verify("Param adam begin aux_square"));
 #endif
-        n3ldg_cuda::UpdateAdam(val.value, grad.value, val.row, val.col,
+        n3ldg_cuda::UpdateAdam(val.value, grad.value, val.row, val.col, isBias(),
                 aux_mean.value,
                 aux_square.value,
                 iter,
@@ -111,7 +115,7 @@ class Param : public BaseParam {
                 reg,
                 eps);
 #if TEST_CUDA
-        if (val.col > 1 && val.row > 1)grad.vec() = grad.vec() + val.vec() * reg;
+        if (!isBias()) grad.vec() = grad.vec() + val.vec() * reg;
         aux_mean.vec() = belta1 * aux_mean.vec() + (1 - belta1) * grad.vec();
         aux_square.vec() = belta2 * aux_square.vec() + (1 - belta2) * grad.vec().square();
         dtype lr_t = alpha * sqrt(1 - pow(belta2, iter + 1)) / (1 - pow(belta1, iter + 1));
@@ -119,7 +123,7 @@ class Param : public BaseParam {
         n3ldg_cuda::Assert(val.verify("Param adam"));
 #endif
 #else
-        if (val.col > 1 && val.row > 1)grad.vec() = grad.vec() + val.vec() * reg;
+        if (!isBias())grad.vec() = grad.vec() + val.vec() * reg;
         aux_mean.vec() = belta1 * aux_mean.vec() + (1 - belta1) * grad.vec();
         aux_square.vec() = belta2 * aux_square.vec() + (1 - belta2) * grad.vec().square();
         dtype lr_t = alpha * sqrt(1 - pow(belta2, iter + 1)) / (1 - pow(belta1, iter + 1));

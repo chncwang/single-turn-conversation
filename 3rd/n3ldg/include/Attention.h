@@ -28,8 +28,8 @@ struct AttentionParams {
         bi_atten.exportAdaParams(ada);
     }
 
-    void initial(int nHidden, int nGuide) {
-        bi_atten.initial(1, nHidden, nGuide, false);
+    void init(int nHidden, int nGuide) {
+        bi_atten.init(1, nHidden, nGuide, false);
         hidden_dim = nHidden;
         guide_dim = nGuide;
     }
@@ -116,8 +116,8 @@ struct AttentionVParams {
         bi_atten.exportAdaParams(ada);
     }
 
-    void initial(int nHidden, int nGuide) {
-        bi_atten.initial(nHidden, nHidden, nGuide, false);
+    void init(int nHidden, int nGuide) {
+        bi_atten.init(nHidden, nHidden, nGuide, false);
         hidden_dim = nHidden;
         guide_dim = nGuide;
     }
@@ -199,8 +199,8 @@ struct SelfAttentionParams {
         uni_atten.exportAdaParams(ada);
     }
 
-    void initial(int nHidden) {
-        uni_atten.initial(1, nHidden, false);
+    void init(int nHidden) {
+        uni_atten.init(1, nHidden, false);
         hidden_dim = nHidden;
     }
 };
@@ -283,8 +283,8 @@ struct SelfAttentionVParams {
         uni_atten.exportAdaParams(ada);
     }
 
-    void initial(int nHidden) {
-        uni_atten.initial(nHidden, nHidden, false);
+    void init(int nHidden) {
+        uni_atten.init(nHidden, nHidden, false);
         hidden_dim = nHidden;
     }
 };

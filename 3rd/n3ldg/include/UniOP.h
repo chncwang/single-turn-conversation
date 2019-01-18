@@ -27,11 +27,9 @@ class UniParams : public N3LDGSerializable
   public:
     Param W;
     Param b;
-    bool bUseB;
+    bool bUseB = true;
 
-    UniParams() {
-        bUseB = true;
-    }
+    UniParams() : b(true) {}
 
     void exportAdaParams(ModelUpdate& ada) {
         ada.addParam(&W);
@@ -40,12 +38,12 @@ class UniParams : public N3LDGSerializable
         }
     }
 
-    void initial(int nOSize, int nISize, bool useB = true) {
-        W.initial(nOSize, nISize);
+    void init(int nOSize, int nISize, bool useB = true) {
+        W.init(nOSize, nISize);
 
         bUseB = useB;
         if (bUseB) {
-            b.initial(nOSize, 1);
+            b.init(nOSize, 1);
         }
     }
 
@@ -367,12 +365,12 @@ class UniExecute :public Execute {
                 y.value, lty.value, count, outDim);
 #if TEST_CUDA
         n3ldg_cuda::Assert(param->W.grad.verify(
-                    "uni backward W grad initial"));
+                    "uni backward W grad init"));
 #endif
         n3ldg_cuda::MatrixMultiplyMatrix(lty.value, x.value,
                 param->W.grad.value, outDim, count, inDim, true, true, false);
 #if TEST_CUDA
-        n3ldg_cuda::Assert(param->W.val.verify("uni W.val initial"));
+        n3ldg_cuda::Assert(param->W.val.verify("uni W.val init"));
 #endif
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, lty.value,
                 lx.value, inDim, outDim, count, false, false, true);
@@ -385,7 +383,7 @@ class UniExecute :public Execute {
 
 #if TEST_CUDA
         n3ldg_cuda::Assert(
-                param->b.grad.verify("uni backward param b initial"));
+                param->b.grad.verify("uni backward param b init"));
 #endif
         n3ldg_cuda::AddLtyToParamBiasAndAddLxToInputLossesForUniBackward(
                 lty.value, lx.value, param->b.grad.value, losses, count,

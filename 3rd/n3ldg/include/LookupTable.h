@@ -48,29 +48,29 @@ public:
     }
 #endif
 
-    //random initialization
-    void initial(PAlphabet alpha, int dim, bool fineTune = true) {
+    //random initization
+    void init(PAlphabet alpha, int dim, bool fineTune = true) {
         elems = alpha;
         nVSize = elems->size();
         nUNKId = elems->from_string(unknownkey);
-        initialWeights(dim, fineTune);
+        initWeights(dim, fineTune);
     }
 
     //initialization by pre-trained embeddings
-    bool initial(PAlphabet alpha, const string& inFile, bool fineTune = true, dtype norm = -1) {
+    bool init(PAlphabet alpha, const string& inFile, bool fineTune = true, dtype norm = -1) {
         elems = alpha;
         nVSize = elems->size();
         nUNKId = elems->from_string(unknownkey);
-        return initialWeights(inFile, fineTune, norm);
+        return initWeights(inFile, fineTune, norm);
     }
 
-    void initialWeights(int dim, bool tune) {
+    void initWeights(int dim, bool tune) {
         if (dim <=0 || nVSize == 0 || (nVSize == 1 && nUNKId >= 0)) {
             std::cout << "please check the alphabet" << std::endl;
             return;
         }
         nDim = dim;
-        E.initial(nDim, nVSize);
+        E.init(nDim, nVSize);
         E.val.random(sqrt(1.0 / nDim));
         //E.val.norm2one();
         bFineTune = tune;
@@ -80,7 +80,7 @@ public:
     }
 
     // default should be fineTune, just for initialization
-    bool initialWeights(const string& inFile, bool tune, dtype norm = -1) {
+    bool initWeights(const string& inFile, bool tune, dtype norm = -1) {
         if (nVSize == 0 || !elems->is_fixed() || (nVSize == 1 && nUNKId >= 0)) {
             std::cout << "please check the alphabet" << std::endl;
             return false;
@@ -118,7 +118,7 @@ public:
         split_bychar(sLines[0], vecInfo, ' ');
         nDim = vecInfo.size() - 1;
 
-        E.initial(nDim, nVSize);
+        E.init(nDim, nVSize);
 
         std::cout << "word embedding dim is " << nDim << std::endl;
 

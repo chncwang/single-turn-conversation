@@ -37,21 +37,24 @@ public:
 };
 #endif
 
-struct BaseParam : public N3LDGSerializable
+class BaseParam : public N3LDGSerializable
 #if USE_GPU
 , public TransferableComponents
 #endif
 {
+public:
     Tensor2D val;
     Tensor2D grad;
-    int index;
 
-    BaseParam() {
-        static int s_index;
-        index = s_index++;
+    BaseParam() = default;
+
+    BaseParam(bool is_bias) : is_bias_(is_bias) {}
+
+    bool isBias() const {
+        return is_bias_;
     }
 
-    virtual void initial(int outDim, int inDim) = 0;
+    virtual void init(int outDim, int inDim) = 0;
     virtual void updateAdagrad(dtype alpha, dtype reg, dtype eps) = 0;
     virtual void updateAdam(dtype belta1, dtype belta2, dtype alpha, dtype reg, dtype eps) = 0;
     virtual int outDim() = 0;
@@ -67,6 +70,9 @@ struct BaseParam : public N3LDGSerializable
         return {&val};
     }
 #endif
+
+private:
+    bool is_bias_ = false;
 };
 
 #endif /* BasePARAM_H_ */
