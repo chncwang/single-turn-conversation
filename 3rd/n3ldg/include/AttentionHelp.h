@@ -19,8 +19,8 @@ public:
     vector<dtype> masks, mask_losses;
     vector<dtype> unnormed_masks;
     dtype sum;
-    vector<PNode> unnormeds;
-    vector<PNode> ins;
+    vector<Node *> unnormeds;
+    vector<Node *> ins;
 
     AttentionSoftMaxNode() : Node() {
         unnormeds.clear();
@@ -31,8 +31,7 @@ public:
         Node::init(ndim);
     }
 
-  public:
-    void forward(Graph *cg, const vector<PNode>& x, const vector<PNode>& a) {
+    void forward(Graph &cg, vector<Node *>& x, vector<Node *>& a) {
         if (x.empty() == 0) {
             std::cerr << "empty inputs for attention help node" << std::endl;
             abort();
@@ -59,19 +58,14 @@ public:
             unnormeds[i]->addParent(this);
         }
 
-        cg->addNode(this);
+        cg.addNode(this);
     }
 
-
-  public:
     PExecute generate();
 
-    // better to rewrite for deep understanding
-    bool typeEqual(PNode other) {
+    bool typeEqual(Node * other) {
         return Node::typeEqual(other);
     }
-
-  public:
 
     void compute() {
         int nSize = ins.size();
@@ -220,24 +214,7 @@ public:
     }
 };
 #else
-class AttentionSoftMaxExecute : public Execute {
-  public:
-    void  forward() {
-        int count = batch.size();
-        //#pragma omp parallel for
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->compute();
-        }
-    }
-
-    void backward() {
-        int count = batch.size();
-        //#pragma omp parallel for
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->backward();
-        }
-    }
-};
+class AttentionSoftMaxExecute : public Execute {};
 #endif
 
 PExecute AttentionSoftMaxNode::generate() {
@@ -255,8 +232,8 @@ class AttentionSoftMaxVNode : public Node {
     vector<Tensor1D> masks, mask_losses;
     vector<Tensor1D> unnormed_masks;
     Tensor1D sum;
-    vector<PNode> unnormeds;
-    vector<PNode> ins;
+    vector<Node *> unnormeds;
+    vector<Node *> ins;
 
   public:
     AttentionSoftMaxVNode() : Node() {
@@ -295,7 +272,7 @@ class AttentionSoftMaxVNode : public Node {
     }
 
   public:
-    void forward(Graph *cg, const vector<PNode>& x, const vector<PNode>& a) {
+    void forward(Graph *cg, const vector<Node *>& x, const vector<Node *>& a) {
         if (x.size() == 0) {
             std::cout << "empty inputs for attention help node" << std::endl;
             return;
@@ -330,7 +307,7 @@ class AttentionSoftMaxVNode : public Node {
     PExecute generate();
 
     // better to rewrite for deep understanding
-    bool typeEqual(PNode other) {
+    bool typeEqual(Node * other) {
         return Node::typeEqual(other);
     }
 

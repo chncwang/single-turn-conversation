@@ -48,15 +48,13 @@ class BiParams {
 };
 
 class BiNode : public Node {
-  public:
+public:
     PNode in1, in2;
     BiParams* param;
     dtype(*activate)(const dtype&);
     dtype(*derivate)(const dtype&, const dtype&);
     Tensor1D ty, lty;
 
-
-  public:
     BiNode() : Node() {
         in1 = in2 = NULL;
         activate = ftanh;
@@ -80,17 +78,14 @@ class BiNode : public Node {
     }
 
     void setParam(BiParams& paramInit) {
-        param = paramInit;
+        param = &paramInit;
     }
 
-    // define the activate function and its derivation form
     void setFunctions(dtype(*f)(const dtype&), dtype(*f_deri)(const dtype&, const dtype&)) {
         activate = f;
         derivate = f_deri;
     }
 
-
-  public:
     void forward(Graph *cg, PNode x1, PNode x2) {
         in1 = x1;
         in2 = x2;
@@ -100,7 +95,10 @@ class BiNode : public Node {
         cg->addNode(this);
     }
 
-  public:
+    void forward(Graph &cg, Node &x1, Node &x2) {
+        this->forward(&cg, &x1, &x2);
+    }
+
     void compute() {
         ty.mat() = param->W1.val.mat() * in1->val.mat() + param->W2.val.mat() * in2->val.mat();
         if (param->bUseB) {
@@ -126,7 +124,6 @@ class BiNode : public Node {
   public:
     PExecute generate();
 
-    // better to rewrite for deep understanding
     bool typeEqual(PNode other) override {
         bool result = Node::typeEqual(other);
         if (!result) return false;
@@ -151,10 +148,6 @@ class BiNode : public Node {
 };
 
 
-// non-linear feed-forward node
-// input nodes should be specified by forward function
-// for input variables, we exploit column vector,
-// which means a concrete input vector x_i is represented by x(0, i), x(1, i), ..., x(n, i)
 class LinearBiNode : public Node {
   public:
     PNode in1, in2;
