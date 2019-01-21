@@ -23,25 +23,9 @@ public:
     vector<PNode> ins;
 
     AttentionSoftMaxNode() : Node() {
-        ins.clear();
         unnormeds.clear();
         node_type = "AttentionSoftmax";
     }
-
-    ~AttentionSoftMaxNode() {
-        masks.clear();
-        mask_losses.clear();
-        unnormed_masks.clear();
-        ins.clear();
-        unnormeds.clear();
-    }
-
-    void setParam(int maxsize) {
-        masks.resize(maxsize);
-        mask_losses.resize(maxsize);
-        unnormed_masks.resize(maxsize);
-    }
-
 
     void init(int ndim) {
         Node::init(ndim);
@@ -49,20 +33,20 @@ public:
 
   public:
     void forward(Graph *cg, const vector<PNode>& x, const vector<PNode>& a) {
-        if (x.size() == 0) {
-            std::cout << "empty inputs for attention help node" << std::endl;
-            return;
+        if (x.empty() == 0) {
+            std::cerr << "empty inputs for attention help node" << std::endl;
+            abort();
         }
         if (x.size() != a.size()) {
-            std::cout << "the number of input nodes does not equal the number of attention factors." << std::endl;
-            return;
+            std::cerr <<
+                "the number of input nodes does not equal the number of attention factors." <<
+                std::endl;
+            abort();
         }
         int nSize = x.size();
-        ins.clear();
-        unnormeds.clear();
         for (int i = 0; i < nSize; i++) {
             if (x[i]->val.dim != dim || a[i]->val.dim != 1) {
-                std::cout << "input matrixes are not matched" << std::endl;
+                std::cerr << "input matrixes are not matched" << std::endl;
                 abort();
             }
             ins.push_back(x[i]);

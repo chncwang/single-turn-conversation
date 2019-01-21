@@ -15,6 +15,7 @@
 #include "UniOP.h"
 #include "Graph.h"
 #include "AttentionHelp.h"
+#include <memory>
 
 struct AttentionParams {
     BiParams bi_atten;
@@ -36,66 +37,42 @@ struct AttentionParams {
 };
 
 class AttentionBuilder {
-  public:
-    int _nSize;
-    int _nHiddenDim;
-    int _nGuideDim;
-
-    vector<BiNode> _weights;
+public:
+    vector<shared_ptr<BiNode>> _weights;
     AttentionSoftMaxNode _hidden;
 
     AttentionParams* _param;
 
-  public:
-    AttentionBuilder() {
-        clear();
+    void init(AttentionParams &paramInit) {
+        _param = &paramInit;
+
+//        int maxsize = _weights.size();
+//        for (int idx = 0; idx < maxsize; idx++) {
+//            _weights[idx].setParam(&_param->bi_atten);
+//            _weights[idx].init(1);
+//        }
+        _hidden.init(paramInit.hidden_dim);
     }
 
-    ~AttentionBuilder() {
-        clear();
-    }
-
-  public:
-    void resize(int maxsize) {
-        _weights.resize(maxsize);
-        _hidden.setParam(maxsize);
-    }
-
-    void clear() {
-        _weights.clear();
-    }
-
-  public:
-    void init(AttentionParams* paramInit) {
-        _param = paramInit;
-        _nHiddenDim = _param->hidden_dim;
-        _nGuideDim = _param->guide_dim;
-
-        int maxsize = _weights.size();
-        for (int idx = 0; idx < maxsize; idx++) {
-            _weights[idx].setParam(&_param->bi_atten);
-            _weights[idx].init(1);
-        }
-        _hidden.init(_nHiddenDim);
-    }
-
-  public:
     void forward(Graph *cg, const vector<PNode>& x, PNode guide) {
         if (x.size() == 0) {
-            std::cout << "empty inputs for lstm operation" << std::endl;
-            return;
+            std::cerr << "empty inputs for lstm operation" << std::endl;
+            abort();
         }
-        _nSize = x.size();
-        if (x[0]->dim != _nHiddenDim || guide->dim != _nGuideDim) {
-            std::cout << "input dim does not match for attention  operation" << std::endl;
-            return;
+        if (x[0]->dim != _param->hidden_dim || guide->dim != _param->guide_dim) {
+            std::cerr << "input dim does not match for attention  operation" << std::endl;
+            abort();
         }
 
-        vector<PNode> aligns;
-        for (int idx = 0; idx < _nSize; idx++) {
-            _weights[idx].forward(cg, x[idx], guide);
-            aligns.push_back(&_weights[idx]);
+        for (int idx = 0; idx < x.size(); idx++) {
+            shared_ptr<BiNode> bi_node(new BiNode);
+            bi_node->setParam(_param->bi_atten);
+            bi_node->init(1);
+            bi_node->forward(cg, x.at(idx), guide);
+            _weights.push_back(bi_node);
         }
+
+        toNodePointers(_weights);
 
         _hidden.forward(cg, x, aligns);
     }

@@ -79,6 +79,10 @@ class BiNode : public Node {
         param = paramInit;
     }
 
+    void setParam(BiParams& paramInit) {
+        param = paramInit;
+    }
+
     // define the activate function and its derivation form
     void setFunctions(dtype(*f)(const dtype&), dtype(*f_deri)(const dtype&, const dtype&)) {
         activate = f;
