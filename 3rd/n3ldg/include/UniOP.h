@@ -24,7 +24,7 @@ class UniParams : public N3LDGSerializable
 , public TransferableComponents 
 #endif
 {
-  public:
+public:
     Param W;
     Param b;
     bool bUseB = true;
@@ -82,15 +82,13 @@ class UniParams : public N3LDGSerializable
 
 
 class UniNode : public Node {
-  public:
+public:
     PNode in;
     UniParams* param;
     dtype(*activate)(const dtype&);   // activation function
     dtype(*derivate)(const dtype&, const dtype&);  // derivation function of activation function
     Tensor1D ty, lty;
 
-
-  public:
     UniNode() : Node() {
         in = NULL;
         activate = ftanh;

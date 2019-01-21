@@ -309,10 +309,10 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
             GraphBuilder graph_builder;
             graph_builder.init(hyper_params);
             graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id),
-                    hyper_params, model_params);
+                    hyper_params, model_params, false);
             shared_ptr<DecoderComponents> decoder_components(buildDecoderComponents());
             graph_builder.forwardDecoder(graph, *decoder_components,
-                    response_sentences.at(response_id), hyper_params, model_params);
+                    response_sentences.at(response_id), hyper_params, model_params, false);
             graph.compute();
             vector<Node*> nodes = toNodePointers(decoder_components->wordvector_to_onehots);
             vector<int> word_ids = transferVector<int, string>(response_sentences.at(response_id),
@@ -345,13 +345,13 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         GraphBuilder graph_builder;
         graph_builder.init(hyper_params);
         graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id), hyper_params,
-                model_params);
+                model_params, false);
         vector<shared_ptr<DecoderComponents>> decoder_components_vector;
         for (int i = 0; i < hyper_params.beam_size; ++i) {
             decoder_components_vector.push_back(buildDecoderComponents());
         }
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
-                hyper_params.beam_size, hyper_params, model_params);
+                hyper_params.beam_size, hyper_params, model_params, false);
         const vector<WordIdAndProbability> &word_ids_and_probability = pair.first;
         cout << "post:" << endl;
         print(post_sentences.at(post_and_responses.post_id));
@@ -402,13 +402,13 @@ void interact(const HyperParams &hyper_params, ModelParams &model_params) {
         Graph graph;
         GraphBuilder graph_builder;
         graph_builder.init(hyper_params);
-        graph_builder.forward(graph, words, hyper_params, model_params);
+        graph_builder.forward(graph, words, hyper_params, model_params, false);
         vector<shared_ptr<DecoderComponents>> decoder_components_vector;
         decoder_components_vector.push_back(buildDecoderComponents());
         cout << format("decodeTestPosts - beam_size:%1% decoder_components_vector.size:%2%") %
             hyper_params.beam_size % decoder_components_vector.size() << endl;
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
-                hyper_params.beam_size, hyper_params, model_params);
+                hyper_params.beam_size, hyper_params, model_params, false);
         const vector<WordIdAndProbability> &word_ids = pair.first;
         cout << "post:" << endl;
         cout << post << endl;
@@ -634,13 +634,13 @@ int main(int argc, char *argv[]) {
                     conversation_pair_in_batch.push_back(train_conversation_pairs.at(
                                 instance_index));
                     graph_builder->forward(graph, post_sentences.at(post_id), hyper_params,
-                            model_params);
+                            model_params, true);
                     int response_id = train_conversation_pairs.at(instance_index).response_id;
                     shared_ptr<DecoderComponents> decoder_components(buildDecoderComponents());
                     decoder_components_vector.push_back(decoder_components);
                     graph_builder->forwardDecoder(graph, *decoder_components,
                             response_sentences.at(response_id),
-                            hyper_params, model_params);
+                            hyper_params, model_params, true);
                 }
 
                 graph.compute();
@@ -710,12 +710,12 @@ int main(int argc, char *argv[]) {
                         Graph graph;
 
                         graph_builder.forward(graph, post_sentences.at(conversation_pair.post_id),
-                                hyper_params, model_params);
+                                hyper_params, model_params, false);
 
                         shared_ptr<DecoderComponents> decoder_components(buildDecoderComponents());
                         graph_builder.forwardDecoder(graph, *decoder_components,
                                 response_sentences.at(conversation_pair.response_id),
-                                hyper_params, model_params);
+                                hyper_params, model_params, false);
 
                         graph.compute();
 

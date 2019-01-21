@@ -86,9 +86,9 @@ std::vector<BeamSearchResult> mostProbableResults(
             }
 
             word_ids.push_back(WordIdAndProbability(j, word_probability));
-            if (j == stop_id) {
-                log_probability += 3;
-            }
+//            if (j == stop_id) {
+//                log_probability += 3;
+//            }
             BeamSearchResult beam_search_result(i, word_ids, log_probability);
 
             if (queue.size() < k) {
@@ -136,7 +136,8 @@ struct GraphBuilder {
 
     void forward(Graph &graph, const std::vector<std::string> &sentence,
             const HyperParams &hyper_params,
-            ModelParams &model_params) {
+            ModelParams &model_params,
+            bool is_training) {
         hidden_bucket.forward(graph);
         word_bucket.forward(graph);
 
@@ -149,6 +150,7 @@ struct GraphBuilder {
 
             std::shared_ptr<DropoutNode> dropout_node(new DropoutNode);
             dropout_node->init(hyper_params.word_dim, hyper_params.dropout);
+            dropout_node->is_training = is_training;
             dropout_node->forward(graph, *input_lookup);
             encoder_lookups.push_back(dropout_node);
         }
@@ -184,19 +186,19 @@ struct GraphBuilder {
     void forwardDecoder(Graph &graph, DecoderComponents &decoder_components,
             const std::vector<std::string> &answer,
             const HyperParams &hyper_params,
-            ModelParams &model_params) {
+            ModelParams &model_params,
+            bool is_training) {
         for (int i = 0; i < answer.size(); ++i) {
             forwardDecoderByOneStep(graph, decoder_components, i,
-                    i == 0 ? nullptr : &answer.at(i - 1),
-                    hyper_params,
-                    model_params);
+                    i == 0 ? nullptr : &answer.at(i - 1), hyper_params, model_params, is_training);
         }
     }
 
     void forwardDecoderByOneStep(Graph &graph, DecoderComponents &decoder_components, int i,
             const std::string *answer,
             const HyperParams &hyper_params,
-            ModelParams &model_params) {
+            ModelParams &model_params,
+            bool is_training) {
         Node *last_input;
         if (i > 0) {
             std::shared_ptr<LookupNode> before_dropout(new LookupNode);
@@ -206,6 +208,7 @@ struct GraphBuilder {
             decoder_components.decoder_lookups_before_dropout.push_back(before_dropout);
             std::shared_ptr<DropoutNode> decoder_lookup(new DropoutNode);
             decoder_lookup->init(hyper_params.word_dim, hyper_params.dropout);
+            decoder_lookup->is_training = is_training;
             decoder_lookup->forward(graph, *before_dropout);
             decoder_components.decoder_lookups.push_back(decoder_lookup);
             last_input = decoder_components.decoder_lookups.at(i - 1).get();
@@ -238,7 +241,8 @@ struct GraphBuilder {
             const std::vector<std::shared_ptr<DecoderComponents>> &decoder_components_beam,
             int k,
             const HyperParams &hyper_params,
-            ModelParams &model_params) {
+            ModelParams &model_params,
+            bool is_training) {
         auto beam = decoder_components_beam;
 //        std::cout << boost::format(
 //                "forwardDecoderUsingBeamSearch - decoder_components_beam size:%1%") %
@@ -292,9 +296,8 @@ struct GraphBuilder {
             for (int beam_i = 0; beam_i < beam.size(); ++beam_i) {
                 DecoderComponents &decoder_components = *beam.at(beam_i);
                 forwardDecoderByOneStep(graph, decoder_components, i,
-                        i == 0 ? nullptr : &last_answers.at(beam_i),
-                        hyper_params,
-                        model_params);
+                        i == 0 ? nullptr : &last_answers.at(beam_i), hyper_params,
+                        model_params, is_training);
             }
 
             graph.compute();
