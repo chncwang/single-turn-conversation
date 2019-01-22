@@ -112,10 +112,13 @@ public:
         param = paramInit;
     }
 
-    // define the activate function and its derivation form
     void setFunctions(dtype(*f)(const dtype&), dtype(*f_deri)(const dtype&, const dtype&)) {
         activate = f;
         derivate = f_deri;
+    }
+
+    void forward(Graph &graph, Node &x) {
+        this->forward(&graph, &x);
     }
 
     void forward(Graph *cg, PNode x) {

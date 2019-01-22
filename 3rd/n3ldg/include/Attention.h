@@ -15,14 +15,18 @@
 #include "UniOP.h"
 #include "Graph.h"
 #include "AttentionHelp.h"
+#include <memory>
 
-struct AttentionParams {
+struct AttentionParams : public N3LDGSerializable
+#if USE_GPU
+, public TransferableComponents
+#endif
+{
     BiParams bi_atten;
     int hidden_dim;
     int guide_dim;
 
-    AttentionParams() {
-    }
+    AttentionParams() = default;
 
     void exportAdaParams(ModelUpdate& ada) {
         bi_atten.exportAdaParams(ada);
@@ -33,73 +37,65 @@ struct AttentionParams {
         hidden_dim = nHidden;
         guide_dim = nGuide;
     }
+
+    Json::Value toJson() const override {
+        Json::Value json;
+        json["bi_atten"] = bi_atten.toJson();
+        json["hidden_dim"] = hidden_dim;
+        json["guide_dim"] = guide_dim;
+        return json;
+    }
+
+    void fromJson(const Json::Value &json) override {
+        bi_atten.fromJson(json["bi_atten"]);
+        hidden_dim = json["hidden_dim"].asInt();
+        guide_dim = json["guide_dim"].asInt();
+    }
+
+#if USE_GPU
+    std::vector<Transferable *> transferablePtrs() override {
+        return {&bi_atten};
+    }
+
+    virtual std::string name() const {
+        return "AttentionParams";
+    }
+#endif
 };
 
 class AttentionBuilder {
-  public:
-    int _nSize;
-    int _nHiddenDim;
-    int _nGuideDim;
-
-    vector<BiNode> _weights;
+public:
+    vector<shared_ptr<BiNode>> _weights;
     AttentionSoftMaxNode _hidden;
 
-    AttentionParams* _param;
+    AttentionParams* _param = nullptr;
 
-  public:
-    AttentionBuilder() {
-        clear();
+    void init(AttentionParams &paramInit) {
+        _param = &paramInit;
+        _hidden.init(paramInit.hidden_dim);
     }
 
-    ~AttentionBuilder() {
-        clear();
-    }
-
-  public:
-    void resize(int maxsize) {
-        _weights.resize(maxsize);
-        _hidden.setParam(maxsize);
-    }
-
-    void clear() {
-        _weights.clear();
-    }
-
-  public:
-    void init(AttentionParams* paramInit) {
-        _param = paramInit;
-        _nHiddenDim = _param->hidden_dim;
-        _nGuideDim = _param->guide_dim;
-
-        int maxsize = _weights.size();
-        for (int idx = 0; idx < maxsize; idx++) {
-            _weights[idx].setParam(&_param->bi_atten);
-            _weights[idx].init(1);
-        }
-        _hidden.init(_nHiddenDim);
-    }
-
-  public:
-    void forward(Graph *cg, const vector<PNode>& x, PNode guide) {
+    void forward(Graph &cg, vector<Node *>& x, Node& guide) {
         if (x.size() == 0) {
-            std::cout << "empty inputs for lstm operation" << std::endl;
-            return;
-        }
-        _nSize = x.size();
-        if (x[0]->dim != _nHiddenDim || guide->dim != _nGuideDim) {
-            std::cout << "input dim does not match for attention  operation" << std::endl;
-            return;
+            std::cerr << "empty inputs for lstm operation" << std::endl;
+            abort();
         }
 
-        vector<PNode> aligns;
-        for (int idx = 0; idx < _nSize; idx++) {
-            _weights[idx].forward(cg, x[idx], guide);
-            aligns.push_back(&_weights[idx]);
+        if (x.at(0)->dim != _param->hidden_dim || guide.dim != _param->guide_dim) {
+            std::cerr << "input dim does not match for attention  operation" << std::endl;
+            abort();
         }
 
-        _hidden.forward(cg, x, aligns);
+        for (int idx = 0; idx < x.size(); idx++) {
+            shared_ptr<BiNode> weight_node(new BiNode);
+            weight_node->setParam(_param->bi_atten);
+            weight_node->init(1);
+            weight_node->forward(cg, *x.at(idx), guide);
+            _weights.push_back(weight_node);
+        }
+        vector<Node *> weights = toNodePointers<BiNode>(_weights);
+        _hidden.forward(cg, x, weights);
     }
-
 };
 
 
@@ -160,28 +156,28 @@ class AttentionVBuilder {
 
         int maxsize = _weights.size();
         for (int idx = 0; idx < maxsize; idx++) {
-            _weights[idx].setParam(&_param->bi_atten);
-            _weights[idx].init(_nHiddenDim);
+            _weights.at(idx).setParam(&_param->bi_atten);
+            _weights.at(idx).init(_nHiddenDim);
         }
         _hidden.init(_nHiddenDim);
     }
 
   public:
-    void forward(Graph *cg, const vector<PNode>& x, PNode guide) {
+    void forward(Graph *cg, const vector<Node *>& x, Node * guide) {
         if (x.size() == 0) {
             std::cout << "empty inputs for lstm operation" << std::endl;
             return;
         }
         _nSize = x.size();
-        if (x[0]->dim != _nHiddenDim || guide->dim != _nGuideDim) {
+        if (x.at(0)->dim != _nHiddenDim || guide->dim != _nGuideDim) {
             std::cout << "input dim does not match for attention  operation" << std::endl;
             return;
         }
 
-        vector<PNode> aligns;
+        vector<Node *> aligns;
         for (int idx = 0; idx < _nSize; idx++) {
-            _weights[idx].forward(cg, x[idx], guide);
-            aligns.push_back(&_weights[idx]);
+            _weights.at(idx).forward(cg, x.at(idx), guide);
+            aligns.push_back(&_weights.at(idx));
         }
         _hidden.forward(cg, x, aligns);
     }
@@ -206,7 +202,7 @@ struct SelfAttentionParams {
 };
 
 class SelfAttentionBuilder {
-  public:
+public:
     int _nSize;
     int _nHiddenDim;
 
@@ -215,59 +211,37 @@ class SelfAttentionBuilder {
 
     SelfAttentionParams* _param;
 
-  public:
-    SelfAttentionBuilder() {
-        clear();
-    }
-
-    ~SelfAttentionBuilder() {
-        clear();
-    }
-
-  public:
-    void resize(int maxsize) {
-        _weights.resize(maxsize);
-        _hidden.setParam(maxsize);
-    }
-
-    void clear() {
-        _weights.clear();
-    }
-
-  public:
     void init(SelfAttentionParams* paramInit) {
         _param = paramInit;
         _nHiddenDim = _param->hidden_dim;
 
         int maxsize = _weights.size();
         for (int idx = 0; idx < maxsize; idx++) {
-            _weights[idx].setParam(&_param->uni_atten);
-            _weights[idx].init(1);
+            _weights.at(idx).setParam(&_param->uni_atten);
+            _weights.at(idx).init(1);
         }
         _hidden.init(_nHiddenDim);
     }
 
-  public:
-    void forward(Graph *cg, const vector<PNode>& x) {
+    void forward(Graph &cg, vector<Node *>& x) {
         if (x.size() == 0) {
             std::cout << "empty inputs for lstm operation" << std::endl;
             return;
         }
         _nSize = x.size();
-        if (x[0]->dim != _nHiddenDim) {
+        if (x.at(0)->dim != _nHiddenDim) {
             std::cout << "input dim does not match for attention  operation" << std::endl;
             return;
         }
 
-        vector<PNode> aligns;
+        vector<Node *> aligns;
         for (int idx = 0; idx < _nSize; idx++) {
-            _weights[idx].forward(cg, x[idx]);
-            aligns.push_back(&_weights[idx]);
+            _weights.at(idx).forward(cg, *x.at(idx));
+            aligns.push_back(&_weights.at(idx));
         }
 
         _hidden.forward(cg, x, aligns);
     }
-
 };
 
 
@@ -324,28 +298,28 @@ class SelfAttentionVBuilder {
 
         int maxsize = _weights.size();
         for (int idx = 0; idx < maxsize; idx++) {
-            _weights[idx].setParam(&_param->uni_atten);
-            _weights[idx].init(_nHiddenDim);
+            _weights.at(idx).setParam(&_param->uni_atten);
+            _weights.at(idx).init(_nHiddenDim);
         }
         _hidden.init(_nHiddenDim);
     }
 
   public:
-    void forward(Graph *cg, const vector<PNode>& x) {
+    void forward(Graph *cg, const vector<Node *>& x) {
         if (x.size() == 0) {
             std::cout << "empty inputs for lstm operation" << std::endl;
             return;
         }
         _nSize = x.size();
-        if (x[0]->dim != _nHiddenDim) {
+        if (x.at(0)->dim != _nHiddenDim) {
             std::cout << "input dim does not match for attention  operation" << std::endl;
             return;
         }
 
-        vector<PNode> aligns;
+        vector<Node *> aligns;
         for (int idx = 0; idx < _nSize; idx++) {
-            _weights[idx].forward(cg, x[idx]);
-            aligns.push_back(&_weights[idx]);
+            _weights.at(idx).forward(cg, x.at(idx));
+            aligns.push_back(&_weights.at(idx));
         }
         _hidden.forward(cg, x, aligns);
     }

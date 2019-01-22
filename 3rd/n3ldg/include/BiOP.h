@@ -16,15 +16,18 @@
 #include "Graph.h"
 #include "ModelUpdate.h"
 
-class BiParams {
-  public:
+class BiParams : public N3LDGSerializable
+#if USE_GPU
+, public TransferableComponents
+#endif
+{
+public:
     Param W1;
     Param W2;
     Param b;
 
     bool bUseB;
 
-  public:
     BiParams() {
         bUseB = true;
     }
@@ -45,18 +48,50 @@ class BiParams {
             b.init(nOSize, 1);
         }
     }
+
+    Json::Value toJson() const override {
+        Json::Value json;
+        json["use_b"] = bUseB;
+        json["w1"] = W1.toJson();
+        json["w2"] = W2.toJson();
+        if (bUseB) {
+            json["b"] = b.toJson();
+        }
+        return json;
+    }
+
+    void fromJson(const Json::Value &json) {
+        bUseB = json["use_b"].asBool();
+        W1.fromJson(json["w1"]);
+        W2.fromJson(json["w2"]);
+        if (bUseB) {
+            b.fromJson(json["b"]);
+        }
+    }
+
+#if USE_GPU
+    std::vector<n3ldg_cuda::Transferable *> transferablePtrs() override {
+        std::vector<Transferable *> ptrs = {&W1, &W2, &b};
+        if (bUseB) {
+            ptrs.push_back(&b);
+        }
+        return ptrs;
+    }
+
+    virtual std::string name() const {
+        return "BiParams";
+    }
+#endif
 };
 
 class BiNode : public Node {
-  public:
+public:
     PNode in1, in2;
     BiParams* param;
     dtype(*activate)(const dtype&);
     dtype(*derivate)(const dtype&, const dtype&);
     Tensor1D ty, lty;
 
-
-  public:
     BiNode() : Node() {
         in1 = in2 = NULL;
         activate = ftanh;
@@ -79,14 +114,15 @@ class BiNode : public Node {
         param = paramInit;
     }
 
-    // define the activate function and its derivation form
+    void setParam(BiParams& paramInit) {
+        param = &paramInit;
+    }
+
     void setFunctions(dtype(*f)(const dtype&), dtype(*f_deri)(const dtype&, const dtype&)) {
         activate = f;
         derivate = f_deri;
     }
 
-
-  public:
     void forward(Graph *cg, PNode x1, PNode x2) {
         in1 = x1;
         in2 = x2;
@@ -96,7 +132,10 @@ class BiNode : public Node {
         cg->addNode(this);
     }
 
-  public:
+    void forward(Graph &cg, Node &x1, Node &x2) {
+        this->forward(&cg, &x1, &x2);
+    }
+
     void compute() {
         ty.mat() = param->W1.val.mat() * in1->val.mat() + param->W2.val.mat() * in2->val.mat();
         if (param->bUseB) {
@@ -122,7 +161,6 @@ class BiNode : public Node {
   public:
     PExecute generate();
 
-    // better to rewrite for deep understanding
     bool typeEqual(PNode other) override {
         bool result = Node::typeEqual(other);
         if (!result) return false;
@@ -147,10 +185,6 @@ class BiNode : public Node {
 };
 
 
-// non-linear feed-forward node
-// input nodes should be specified by forward function
-// for input variables, we exploit column vector,
-// which means a concrete input vector x_i is represented by x(0, i), x(1, i), ..., x(n, i)
 class LinearBiNode : public Node {
   public:
     PNode in1, in2;
