@@ -32,7 +32,7 @@ public:
     }
 
     void forward(Graph &cg, vector<Node *>& x, vector<Node *>& a) {
-        if (x.empty() == 0) {
+        if (x.empty()) {
             std::cerr << "empty inputs for attention help node" << std::endl;
             abort();
         }
@@ -44,18 +44,18 @@ public:
         }
         int nSize = x.size();
         for (int i = 0; i < nSize; i++) {
-            if (x[i]->val.dim != dim || a[i]->val.dim != 1) {
+            if (x.at(i)->val.dim != dim || a.at(i)->val.dim != 1) {
                 std::cerr << "input matrixes are not matched" << std::endl;
                 abort();
             }
-            ins.push_back(x[i]);
-            unnormeds.push_back(a[i]);
+            ins.push_back(x.at(i));
+            unnormeds.push_back(a.at(i));
         }
 
         degree = 0;
         for (int i = 0; i < nSize; i++) {
-            ins[i]->addParent(this);
-            unnormeds[i]->addParent(this);
+            ins.at(i)->addParent(this);
+            unnormeds.at(i)->addParent(this);
         }
 
         cg.addNode(this);
@@ -69,38 +69,41 @@ public:
 
     void compute() {
         int nSize = ins.size();
+        unnormed_masks.resize(nSize);
+        masks.resize(nSize);
 
         sum = 0;
         for (int i = 0; i < nSize; ++i) {
-            unnormed_masks[i] = fexp(unnormeds[i]->val[0]);
-            sum += unnormed_masks[i];
+            unnormed_masks.at(i) = fexp(unnormeds.at(i)->val[0]);
+            sum += unnormed_masks.at(i);
         }
 
         for (int i = 0; i < nSize; ++i) {
-            masks[i] = unnormed_masks[i] / sum;
+            masks.at(i) = unnormed_masks.at(i) / sum;
         }
 
         val.zero();
         for (int i = 0; i < nSize; ++i) {
-            val.vec() += masks[i] * ins[i]->val.vec();
+            val.vec() += masks.at(i) * ins.at(i)->val.vec();
         }
     }
 
     void backward() {
         int nSize = ins.size();
+        mask_losses.resize(nSize);
         for (int i = 0; i < nSize; i++) {
-            ins[i]->loss.vec() += loss.vec() * masks[i];
-            mask_losses[i] = 0;
+            ins.at(i)->loss.vec() += loss.vec() * masks.at(i);
+            mask_losses.at(i) = 0;
             for (int idx = 0; idx < dim; idx++) {
-                mask_losses[i] += loss[idx] * ins[i]->val[idx];
+                mask_losses.at(i) += loss[idx] * ins.at(i)->val[idx];
             }
         }
 
         for (int i = 0; i < nSize; i++) {
             for (int j = 0; j < nSize; j++) {
-                unnormeds[i]->loss[0] -= masks[i] * masks[j] * mask_losses[j];
+                unnormeds.at(i)->loss[0] -= masks.at(i) * masks.at(j) * mask_losses.at(j);
                 if (i == j) {
-                    unnormeds[i]->loss[0] += masks[i] * mask_losses[i];
+                    unnormeds.at(i)->loss[0] += masks.at(i) * mask_losses.at(i);
                 }
             }
         }
@@ -285,18 +288,18 @@ class AttentionSoftMaxVNode : public Node {
         ins.clear();
         unnormeds.clear();
         for (int i = 0; i < nSize; i++) {
-            if (x[i]->val.dim != dim || a[i]->val.dim != dim) {
+            if (x.at(i)->val.dim != dim || a.at(i)->val.dim != dim) {
                 std::cout << "input matrixes are not matched" << std::endl;
                 abort();
             }
-            ins.push_back(x[i]);
-            unnormeds.push_back(a[i]);
+            ins.push_back(x.at(i));
+            unnormeds.push_back(a.at(i));
         }
 
         degree = 0;
         for (int i = 0; i < nSize; i++) {
-            ins[i]->addParent(this);
-            unnormeds[i]->addParent(this);
+            ins.at(i)->addParent(this);
+            unnormeds.at(i)->addParent(this);
         }
 
         cg->addNode(this);
@@ -318,33 +321,33 @@ class AttentionSoftMaxVNode : public Node {
 
         sum.zero();
         for (int i = 0; i < nSize; ++i) {
-            unnormed_masks[i].vec() = unnormeds[i]->val.vec().unaryExpr(ptr_fun(fexp));
-            sum.vec() += unnormed_masks[i].vec();
+            unnormed_masks.at(i).vec() = unnormeds.at(i)->val.vec().unaryExpr(ptr_fun(fexp));
+            sum.vec() += unnormed_masks.at(i).vec();
         }
 
         for (int i = 0; i < nSize; ++i) {
-            masks[i].vec() = unnormed_masks[i].vec() / sum.vec();
+            masks.at(i).vec() = unnormed_masks.at(i).vec() / sum.vec();
         }
 
         val.zero();
         for (int i = 0; i < nSize; ++i) {
-            val.vec() += masks[i].vec() * ins[i]->val.vec();
+            val.vec() += masks.at(i).vec() * ins.at(i)->val.vec();
         }
     }
 
     void backward() {
         int nSize = ins.size();
         for (int i = 0; i < nSize; i++) {
-            ins[i]->loss.vec() += loss.vec() * masks[i].vec();
-            mask_losses[i].vec() = loss.vec() * ins[i]->val.vec();
+            ins.at(i)->loss.vec() += loss.vec() * masks.at(i).vec();
+            mask_losses.at(i).vec() = loss.vec() * ins.at(i)->val.vec();
         }
 
         for (int idx = 0; idx < dim; idx++) {
             for (int i = 0; i < nSize; i++) {
                 for (int j = 0; j < nSize; j++) {
-                    unnormeds[i]->loss[idx] -= masks[i][idx] * masks[j][idx] * mask_losses[j][idx];
+                    unnormeds.at(i)->loss[idx] -= masks.at(i)[idx] * masks.at(j)[idx] * mask_losses[j][idx];
                     if (i == j) {
-                        unnormeds[i]->loss[idx] += masks[i][idx] * mask_losses[i][idx];
+                        unnormeds.at(i)->loss[idx] += masks[i][idx] * mask_losses[i][idx];
                     }
                 }
             }

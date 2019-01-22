@@ -3,9 +3,11 @@
 
 #include <memory>
 #include "single_turn_conversation/encoder_decoder/global_context/global_context_decoder_components.h"
+#include "single_turn_conversation/encoder_decoder/attention_context/attention_context_decoder.h"
 
 std::shared_ptr<DecoderComponents> buildDecoderComponents() {
-    return std::shared_ptr<GlobalContextDecoderComponents>(new GlobalContextDecoderComponents);
+    return std::shared_ptr<AttentionContextDecoderComponents>(
+            new AttentionContextDecoderComponents);
 }
 
 #endif

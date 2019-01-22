@@ -24,7 +24,7 @@ class UniParams : public N3LDGSerializable
 , public TransferableComponents 
 #endif
 {
-  public:
+public:
     Param W;
     Param b;
     bool bUseB = true;

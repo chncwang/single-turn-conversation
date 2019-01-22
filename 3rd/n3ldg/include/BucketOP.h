@@ -20,13 +20,17 @@ using namespace Eigen;
 
 
 class BucketNode : public Node {
-  public:
+public:
     BucketNode() : Node() {
         node_type = "bucket";
     }
-  public:
+
     virtual void init(int ndim) {
+#if USE_GPU
+        Node::initOnHostAndDevice(ndim);
+#else
         Node::init(ndim);
+#endif
     }
 
     void forward(Graph &graph, dtype value) {
@@ -57,7 +61,6 @@ class BucketNode : public Node {
         this->forward(&graph);
     }
 
-    //value already assigned
     void forward(Graph *cg) {
 #if USE_GPU
         n3ldg_cuda::Memset(loss.value, dim, 0.0f);
@@ -69,27 +72,17 @@ class BucketNode : public Node {
     }
 
     void forwardArr(Graph *cg, dtype *value) {
-#if USE_GPU
-      abort();
-#else
-      Vec(val.v, dim) = Vec(value, dim);
       degree = 0;
+      Vec(val.v, dim) = Vec(value, dim);
       cg->addNode(this);
-#endif
     }
 
-    void compute() {
+    void compute() {}
 
-    }
+    void backward() {}
 
-    void backward() {
-
-    }
-
-  public:
     PExecute generate();
 
-    // better to rewrite for deep understanding
     bool typeEqual(PNode other) {
         return Node::typeEqual(other);
     }

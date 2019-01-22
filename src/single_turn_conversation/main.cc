@@ -41,6 +41,7 @@ void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
     model_params.encoder_params.exportAdaParams(model_update);
     model_params.hidden_to_wordvector_params.exportAdaParams(model_update);
     model_params.lookup_table.exportAdaParams(model_update);
+    model_params.attention_parrams.exportAdaParams(model_update);
 }
 
 void exportToGradChecker(ModelParams &model_params, CheckGrad &grad_checker) {
@@ -48,6 +49,9 @@ void exportToGradChecker(ModelParams &model_params, CheckGrad &grad_checker) {
     grad_checker.add(model_params.hidden_to_wordvector_params.W, "hidden_to_wordvector_params W");
     grad_checker.add(model_params.hidden_to_wordvector_params.b, "hidden_to_wordvector_params b");
     grad_checker.add(model_params.encoder_params.cell_hidden.W, "encoder cell_hidden W");
+    grad_checker.add(model_params.attention_parrams.bi_atten.W1, "attention W1");
+    grad_checker.add(model_params.attention_parrams.bi_atten.W2, "attention W2");
+    grad_checker.add(model_params.attention_parrams.bi_atten.b, "attention b");
 }
 
 void addWord(unordered_map<string, int> &word_counts, const string &word) {
@@ -547,6 +551,7 @@ int main(int argc, char *argv[]) {
                 2 * hyper_params.hidden_dim);
         model_params.transformed_h0_params.init(hyper_params.hidden_dim,
                 2 * hyper_params.hidden_dim);
+        model_params.attention_parrams.init(hyper_params.hidden_dim * 2, hyper_params.hidden_dim);
     };
 
     if (default_config.program_mode != ProgramMode::METRIC) {

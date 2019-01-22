@@ -16,15 +16,18 @@
 #include "Graph.h"
 #include "ModelUpdate.h"
 
-class BiParams {
-  public:
+class BiParams : public N3LDGSerializable
+#if USE_GPU
+, public TransferableComponents
+#endif
+{
+public:
     Param W1;
     Param W2;
     Param b;
 
     bool bUseB;
 
-  public:
     BiParams() {
         bUseB = true;
     }
@@ -45,6 +48,40 @@ class BiParams {
             b.init(nOSize, 1);
         }
     }
+
+    Json::Value toJson() const override {
+        Json::Value json;
+        json["use_b"] = bUseB;
+        json["w1"] = W1.toJson();
+        json["w2"] = W2.toJson();
+        if (bUseB) {
+            json["b"] = b.toJson();
+        }
+        return json;
+    }
+
+    void fromJson(const Json::Value &json) {
+        bUseB = json["use_b"].asBool();
+        W1.fromJson(json["w1"]);
+        W2.fromJson(json["w2"]);
+        if (bUseB) {
+            b.fromJson(json["b"]);
+        }
+    }
+
+#if USE_GPU
+    std::vector<n3ldg_cuda::Transferable *> transferablePtrs() override {
+        std::vector<Transferable *> ptrs = {&W1, &W2, &b};
+        if (bUseB) {
+            ptrs.push_back(&b);
+        }
+        return ptrs;
+    }
+
+    virtual std::string name() const {
+        return "BiParams";
+    }
+#endif
 };
 
 class BiNode : public Node {

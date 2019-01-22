@@ -17,13 +17,16 @@
 #include "AttentionHelp.h"
 #include <memory>
 
-struct AttentionParams {
+struct AttentionParams : public N3LDGSerializable
+#if USE_GPU
+, public TransferableComponents
+#endif
+{
     BiParams bi_atten;
     int hidden_dim;
     int guide_dim;
 
-    AttentionParams() {
-    }
+    AttentionParams() = default;
 
     void exportAdaParams(ModelUpdate& ada) {
         bi_atten.exportAdaParams(ada);
@@ -34,6 +37,30 @@ struct AttentionParams {
         hidden_dim = nHidden;
         guide_dim = nGuide;
     }
+
+    Json::Value toJson() const override {
+        Json::Value json;
+        json["bi_atten"] = bi_atten.toJson();
+        json["hidden_dim"] = hidden_dim;
+        json["guide_dim"] = guide_dim;
+        return json;
+    }
+
+    void fromJson(const Json::Value &json) override {
+        bi_atten.fromJson(json["bi_atten"]);
+        hidden_dim = json["hidden_dim"].asInt();
+        guide_dim = json["guide_dim"].asInt();
+    }
+
+#if USE_GPU
+    std::vector<Transferable *> transferablePtrs() override {
+        return {&bi_atten};
+    }
+
+    virtual std::string name() const {
+        return "AttentionParams";
+    }
+#endif
 };
 
 class AttentionBuilder {
@@ -41,7 +68,7 @@ public:
     vector<shared_ptr<BiNode>> _weights;
     AttentionSoftMaxNode _hidden;
 
-    AttentionParams* _param;
+    AttentionParams* _param = nullptr;
 
     void init(AttentionParams &paramInit) {
         _param = &paramInit;

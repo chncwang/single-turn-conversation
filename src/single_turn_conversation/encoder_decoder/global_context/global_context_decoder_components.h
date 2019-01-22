@@ -21,7 +21,7 @@ struct GlobalContextDecoderComponents : DecoderComponents {
     }
 
     void forward(Graph &graph, const HyperParams &hyper_params, ModelParams &model_params,
-            Node &input, const vector<Node *> &encoder_hiddens) override {
+            Node &input, vector<Node *> &encoder_hiddens) override {
         shared_ptr<ConcatNode> concat(new ConcatNode);
         concat->init(hyper_params.word_dim + hyper_params.hidden_dim * 2);
         vector<Node *> ins = {&input, encoder_hiddens.at(encoder_hiddens.size() - 1)};
