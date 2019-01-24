@@ -246,6 +246,10 @@ public:
         }
     }
 
+    void backwardFully() {
+        backward();
+    }
+
     virtual void backward() {
         for (Node *node : batch) {
             node->backward();

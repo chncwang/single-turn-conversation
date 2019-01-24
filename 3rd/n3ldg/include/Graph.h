@@ -95,7 +95,7 @@ public:
     void backward() {
         int count = execs.size();
         for (int idx = count - 1; idx >= 0; idx--) {
-            execs.at(idx)->backward();
+            execs.at(idx)->backwardFully();
         }
     }
 

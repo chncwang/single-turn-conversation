@@ -139,8 +139,6 @@ public:
     void randpoint(int& idx, int &idy) {
         //select indexes randomly
         std::vector<int> idRows, idCols;
-        idRows.clear();
-        idCols.clear();
         for (int i = 0; i < val.row; i++)
             idRows.push_back(i);
         for (int i = 0; i < val.col; i++)
@@ -149,8 +147,8 @@ public:
         random_shuffle(idRows.begin(), idRows.end());
         random_shuffle(idCols.begin(), idCols.end());
 
-        idy = idRows[0];
-        idx = idCols[0];
+        idy = idRows.at(0);
+        idx = idCols.at(0);
     }
 
     dtype squareGradNorm() {

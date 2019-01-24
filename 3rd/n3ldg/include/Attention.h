@@ -23,6 +23,7 @@ struct AttentionParams : public N3LDGSerializable
 #endif
 {
     BiParams bi_atten;
+    UniParams to_scalar_params;
     int hidden_dim;
     int guide_dim;
 
@@ -33,7 +34,8 @@ struct AttentionParams : public N3LDGSerializable
     }
 
     void init(int nHidden, int nGuide) {
-        bi_atten.init(1, nHidden, nGuide, false);
+        bi_atten.init(nHidden + nGuide, nHidden, nGuide, true);
+        to_scalar_params.init(1, nHidden + nGuide, false);
         hidden_dim = nHidden;
         guide_dim = nGuide;
     }
@@ -41,6 +43,7 @@ struct AttentionParams : public N3LDGSerializable
     Json::Value toJson() const override {
         Json::Value json;
         json["bi_atten"] = bi_atten.toJson();
+        json["to_scalar_params"] = to_scalar_params.toJson();
         json["hidden_dim"] = hidden_dim;
         json["guide_dim"] = guide_dim;
         return json;
@@ -48,13 +51,14 @@ struct AttentionParams : public N3LDGSerializable
 
     void fromJson(const Json::Value &json) override {
         bi_atten.fromJson(json["bi_atten"]);
+        to_scalar_params.fromJson(json["to_scalar_params"]);
         hidden_dim = json["hidden_dim"].asInt();
         guide_dim = json["guide_dim"].asInt();
     }
 
 #if USE_GPU
     std::vector<Transferable *> transferablePtrs() override {
-        return {&bi_atten};
+        return {&bi_atten, &to_scalar_params};
     }
 
     virtual std::string name() const {
@@ -65,7 +69,8 @@ struct AttentionParams : public N3LDGSerializable
 
 class AttentionBuilder {
 public:
-    vector<shared_ptr<BiNode>> _weights;
+    vector<shared_ptr<LinearNode>> _weights;
+    vector<shared_ptr<BiNode>> _intermediate_nodes;
     AttentionSoftMaxNode _hidden;
 
     AttentionParams* _param = nullptr;
@@ -87,13 +92,19 @@ public:
         }
 
         for (int idx = 0; idx < x.size(); idx++) {
-            shared_ptr<BiNode> weight_node(new BiNode);
-            weight_node->setParam(_param->bi_atten);
-            weight_node->init(1);
-            weight_node->forward(cg, *x.at(idx), guide);
-            _weights.push_back(weight_node);
+            shared_ptr<BiNode> intermediate_node(new BiNode);
+            intermediate_node->setParam(_param->bi_atten);
+            intermediate_node->init(_param->guide_dim + _param->hidden_dim);
+            intermediate_node->forward(cg, *x.at(idx), guide);
+            _intermediate_nodes.push_back(intermediate_node);
+
+            shared_ptr<LinearNode> uni_node(new LinearNode);
+            uni_node->setParam(_param->to_scalar_params);
+            uni_node->init(1);
+            uni_node->forward(cg, *intermediate_node);
+            _weights.push_back(uni_node);
         }
-        vector<Node *> weights = toNodePointers<BiNode>(_weights);
+        vector<Node *> weights = toNodePointers<LinearNode>(_weights);
         _hidden.forward(cg, x, weights);
     }
 };

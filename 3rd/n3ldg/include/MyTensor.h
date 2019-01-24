@@ -194,7 +194,7 @@ struct Tensor2D : public N3LDGSerializable {
         return &(v[icol*row]);  // no boundary check?
     }
 
-    void assignAll(dtype a) {
+    virtual void assignAll(dtype a) {
         for (int i = 0; i < size; i++) {
             v[i] = a;
         }
@@ -299,11 +299,13 @@ struct Tensor1D : public n3ldg_cpu::Tensor1D, public Transferable {
     }
 
     Tensor1D& operator=(const Tensor1D &tensor) {
-        abort();
+        n3ldg_cpu::Tensor1D::operator=(tensor);
+        copyFromHostToDevice();
     }
 
     Tensor1D& operator=(dtype v) {
-        abort();
+        n3ldg_cpu::Tensor1D::operator=(v);
+        copyFromHostToDevice();
     }
 
     void random(dtype bound) {
@@ -353,9 +355,7 @@ struct Tensor2D : public n3ldg_cpu::Tensor2D, public Transferable {
 
     void random(dtype bound) {
         n3ldg_cpu::Tensor2D::random(bound);
-#if USE_GPU
         copyFromHostToDevice();
-#endif
     }
 
     bool verify(const char* message) {
@@ -364,6 +364,11 @@ struct Tensor2D : public n3ldg_cpu::Tensor2D, public Transferable {
 #else
         return true;
 #endif
+    }
+
+    void assignAll(dtype a) {
+        n3ldg_cpu::Tensor2D::assignAll(a);
+        copyFromHostToDevice();
     }
 
     void initOnMemoryAndDevice(int row, int col);

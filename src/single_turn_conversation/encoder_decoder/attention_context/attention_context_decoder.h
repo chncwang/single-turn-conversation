@@ -32,11 +32,12 @@ struct AttentionContextDecoderComponents : DecoderComponents {
 
         shared_ptr<ConcatNode> concat(new ConcatNode);
         concat->init(hyper_params.word_dim + hyper_params.hidden_dim * 2);
+        attention_builder->_hidden.node_name = "attention_output";
         vector<Node *> ins = {&input, &attention_builder->_hidden};
         concat->forward(graph, ins);
         concat_nodes.push_back(concat);
 
-        decoder.forward(graph, model_params.encoder_params, *concat,
+        decoder.forward(graph, model_params.decoder_params, *concat,
                 *bucket(hyper_params.hidden_dim, graph), *bucket(hyper_params.hidden_dim, graph),
                 hyper_params.dropout);
     }

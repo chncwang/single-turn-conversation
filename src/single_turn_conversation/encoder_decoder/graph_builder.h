@@ -156,14 +156,14 @@ struct GraphBuilder {
         }
 
         for (std::shared_ptr<DropoutNode> &node : encoder_lookups) {
-            left_to_right_encoder.forward(graph, model_params.encoder_params, *node, hidden_bucket,
-                    hidden_bucket, hyper_params.dropout);
+            left_to_right_encoder.forward(graph, model_params.left_to_right_encoder_params, *node,
+                    hidden_bucket, hidden_bucket, hyper_params.dropout);
         }
 
         int size = encoder_lookups_before_dropout.size();
 
         for (int i = size - 1; i >= 0; --i) {
-            right_to_left_encoder.forward(graph, model_params.encoder_params,
+            right_to_left_encoder.forward(graph, model_params.right_to_left_encoder_params,
                     *encoder_lookups.at(i), hidden_bucket, hidden_bucket, hyper_params.dropout);
         }
 

@@ -38,7 +38,8 @@ using boost::filesystem::directory_iterator;
 
 void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
     model_params.decoder_params.exportAdaParams(model_update);
-    model_params.encoder_params.exportAdaParams(model_update);
+    model_params.left_to_right_encoder_params.exportAdaParams(model_update);
+    model_params.right_to_left_encoder_params.exportAdaParams(model_update);
     model_params.hidden_to_wordvector_params.exportAdaParams(model_update);
     model_params.lookup_table.exportAdaParams(model_update);
     model_params.attention_parrams.exportAdaParams(model_update);
@@ -48,10 +49,13 @@ void exportToGradChecker(ModelParams &model_params, CheckGrad &grad_checker) {
     grad_checker.add(model_params.lookup_table.E, "lookup_table");
     grad_checker.add(model_params.hidden_to_wordvector_params.W, "hidden_to_wordvector_params W");
     grad_checker.add(model_params.hidden_to_wordvector_params.b, "hidden_to_wordvector_params b");
-    grad_checker.add(model_params.encoder_params.cell_hidden.W, "encoder cell_hidden W");
+    grad_checker.add(model_params.decoder_params.cell_hidden.W, "decoder cell_hidden W");
+    grad_checker.add(model_params.left_to_right_encoder_params.cell_hidden.W,
+            "left to right encoder cell_hidden W");
+    grad_checker.add(model_params.right_to_left_encoder_params.cell_hidden.W,
+            "right to left encoder cell_hidden W");
     grad_checker.add(model_params.attention_parrams.bi_atten.W1, "attention W1");
     grad_checker.add(model_params.attention_parrams.bi_atten.W2, "attention W2");
-    grad_checker.add(model_params.attention_parrams.bi_atten.b, "attention b");
 }
 
 void addWord(unordered_map<string, int> &word_counts, const string &word) {
@@ -542,7 +546,10 @@ int main(int argc, char *argv[]) {
             model_params.lookup_table.init(&alphabet, hyper_params.word_file,
                     hyper_params.word_finetune);
         }
-        model_params.encoder_params.init(hyper_params.hidden_dim, hyper_params.word_dim);
+        model_params.left_to_right_encoder_params.init(hyper_params.hidden_dim,
+                hyper_params.word_dim);
+        model_params.right_to_left_encoder_params.init(hyper_params.hidden_dim,
+                hyper_params.word_dim);
         model_params.decoder_params.init(hyper_params.hidden_dim,
                 hyper_params.word_dim + 2 * hyper_params.hidden_dim);
         model_params.hidden_to_wordvector_params.init(hyper_params.word_dim,

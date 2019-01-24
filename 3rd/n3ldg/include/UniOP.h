@@ -312,7 +312,7 @@ class UniExecute :public Execute {
         }
 
         n3ldg_cuda::Assert(ty.verify("forward ty"));
-        n3ldg_cuda::Assert(y.verify("forward y"));
+        n3ldg_cuda::Assert(y.verify("Uni forward y"));
 #endif
 #else
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
@@ -530,7 +530,7 @@ public:
         }
 
         n3ldg_cuda::Assert(x.verify("forward x"));
-        n3ldg_cuda::Assert(y.verify("forward y"));
+        n3ldg_cuda::Assert(y.verify("linear forward y"));
 
         for (int idx = 0; idx < count; idx++) {
             LinearNode* ptr = (LinearNode*)batch[idx];
@@ -773,7 +773,7 @@ struct LinearWordVectorExecute : public Execute {
 
         y.mat() = param->val.mat().transpose() * x.mat();
         n3ldg_cuda::Assert(x.verify("forward x"));
-        n3ldg_cuda::Assert(y.verify("forward y"));
+        n3ldg_cuda::Assert(y.verify("linear word forward y"));
 
         for (int idx = 0; idx < count; idx++) {
             LinearNode* ptr = (LinearNode*)batch[idx];

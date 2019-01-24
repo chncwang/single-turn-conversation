@@ -23,7 +23,6 @@ public:
     vector<Node *> ins;
 
     AttentionSoftMaxNode() : Node() {
-        unnormeds.clear();
         node_type = "AttentionSoftmax";
     }
 
