@@ -136,6 +136,7 @@ public:
 
     virtual void init(int ndim) {
         if (ndim <= 0) {
+            cerr << "dim is less than 0:" << ndim << endl;
             abort();
         }
         dim = ndim;
