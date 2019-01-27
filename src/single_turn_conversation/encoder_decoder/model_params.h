@@ -26,6 +26,7 @@ struct ModelParams : public N3LDGSerializable
         json["hidden_to_wordvector_params"] = hidden_to_wordvector_params.toJson();
         json["left_to_right_encoder_params"] = left_to_right_encoder_params.toJson();
         json["right_to_left_encoder_params"] = right_to_left_encoder_params.toJson();
+        json["decoder_params"] = decoder_params.toJson();
         json["transformed_h0_params"] = transformed_h0_params.toJson();
         json["transformed_c0_params"] = transformed_c0_params.toJson();
         json["attention_parrams"] = attention_parrams.toJson();
