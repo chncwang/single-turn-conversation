@@ -14,7 +14,9 @@ struct DecoderComponents {
     DynamicLSTMBuilder decoder;
 
     virtual void forward(Graph &graph, const HyperParams &hyper_params, ModelParams &model_params,
-            Node &input, std::vector<Node *> &encoder_hiddens) = 0;
+            Node &input,
+            std::vector<Node *> &encoder_hiddens,
+            bool is_training) = 0;
 };
 
 #endif

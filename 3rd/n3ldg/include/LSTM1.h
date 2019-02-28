@@ -138,7 +138,7 @@ struct DynamicLSTMBuilder {
     }
 
     void forward(Graph &graph, LSTM1Params &lstm_params, Node &input, Node &h0, Node &c0,
-            dtype dropout) {
+            dtype dropout, bool is_training) {
         Node *last_hidden, *last_cell;
         int len = _hiddens.size();
         if (len == 0) {
@@ -225,6 +225,7 @@ struct DynamicLSTMBuilder {
 
         shared_ptr<DropoutNode> hidden(new DropoutNode);
         hidden->init(out_dim, dropout);
+        hidden->is_training = is_training;
         hidden->node_name = "hidden";
         _hiddens.push_back(hidden);
 

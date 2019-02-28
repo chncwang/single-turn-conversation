@@ -81,10 +81,6 @@ std::vector<BeamSearchResult> mostProbableResults(
                 word_ids = last_results.at(i).path;
             }
 
-            if (exp(log_probability) < 1e-30) {
-                continue;
-            }
-
             word_ids.push_back(WordIdAndProbability(j, word_probability));
 //            if (j == stop_id) {
 //                log_probability += 3;
@@ -157,14 +153,15 @@ struct GraphBuilder {
 
         for (std::shared_ptr<DropoutNode> &node : encoder_lookups) {
             left_to_right_encoder.forward(graph, model_params.left_to_right_encoder_params, *node,
-                    hidden_bucket, hidden_bucket, hyper_params.dropout);
+                    hidden_bucket, hidden_bucket, hyper_params.dropout, is_training);
         }
 
         int size = encoder_lookups_before_dropout.size();
 
         for (int i = size - 1; i >= 0; --i) {
             right_to_left_encoder.forward(graph, model_params.right_to_left_encoder_params,
-                    *encoder_lookups.at(i), hidden_bucket, hidden_bucket, hyper_params.dropout);
+                    *encoder_lookups.at(i), hidden_bucket, hidden_bucket, hyper_params.dropout,
+                    is_training);
         }
 
         if (left_to_right_encoder.size() != right_to_left_encoder.size()) {
@@ -222,7 +219,7 @@ struct GraphBuilder {
                 });
 
         decoder_components.forward(graph, hyper_params, model_params, *last_input,
-                encoder_hiddens);
+                encoder_hiddens, is_training);
 
         std::shared_ptr<LinearNode> decoder_to_wordvector(new LinearNode);
         decoder_to_wordvector->init(hyper_params.word_dim);

@@ -22,7 +22,9 @@ struct AttentionContextDecoderComponents : DecoderComponents {
     }
 
     void forward(Graph &graph, const HyperParams &hyper_params, ModelParams &model_params,
-            Node &input, vector<Node *> &encoder_hiddens) override {
+            Node &input,
+            vector<Node *> &encoder_hiddens,
+            bool is_training) override {
         shared_ptr<AttentionBuilder> attention_builder(new AttentionBuilder);
         attention_builder->init(model_params.attention_parrams);
         attention_builder->forward(graph, encoder_hiddens,
@@ -39,7 +41,7 @@ struct AttentionContextDecoderComponents : DecoderComponents {
 
         decoder.forward(graph, model_params.decoder_params, *concat,
                 *bucket(hyper_params.hidden_dim, graph), *bucket(hyper_params.hidden_dim, graph),
-                hyper_params.dropout);
+                hyper_params.dropout, is_training);
     }
 };
 
