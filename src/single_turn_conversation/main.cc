@@ -532,8 +532,8 @@ int main(int argc, char *argv[]) {
     word_counts[STOP_SYMBOL] = 1000000000;
     Alphabet alphabet;
     alphabet.init(word_counts, hyper_params.word_cutoff);
-    cout << "the size of alphabet is: ";
-    cout << alphabet.size() <<endl;
+    cout << boost::format("alphabet size:%1% fixed:%2%") % alphabet.size() % alphabet.is_fixed()
+        << endl;
     ModelParams model_params;
 
     int beam_size = hyper_params.beam_size;

@@ -35,8 +35,8 @@ class SparseParams {
 
     void initWeights(int nOSize) {
         if (nVSize == 0) {
-            std::cout << "please check the alphabet" << std::endl;
-            return;
+            std::cerr << "nVSize is 0" << std::endl;
+            abort();
         }
         nDim = nOSize;
         W.init(nOSize, nVSize);
@@ -44,14 +44,9 @@ class SparseParams {
 
 
     //random initization
-    void init(PAlphabet alpha, int nOSize, int base = 1) {
-        assert(base >= 1);
+    void init(PAlphabet alpha, int nOSize) {
         elems = alpha;
-        nVSize = base * elems->size();
-        if (base > 1) {
-            std::cout << "nVSize: " << nVSize << ", Alpha Size = " << elems->size()  << ", Require more Alpha."<< std::endl;
-            elems->set_fixed_flag(false);
-        }
+        nVSize = elems->size();
         initWeights(nOSize);
     }
 

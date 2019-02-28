@@ -28,7 +28,6 @@ class basic_quark {
     StringToId m_string_to_id;
     IdToString m_id_to_string;
     bool m_b_fixed;
-    bool m_v_done;
     int m_size;
 
   public:
@@ -47,7 +46,7 @@ class basic_quark {
             m_id_to_string.push_back(str);
             m_string_to_id.insert(std::pair<std::string, int>(str, newid));
             m_size++;
-            if (m_size >= max_capacity)m_b_fixed = true;
+            if (m_size >= max_capacity) abort();
             return newid;
         } else {
             return -1;
@@ -61,15 +60,14 @@ class basic_quark {
      *  @param  def         Default value if the ID was out of range.
      *  @return           String value associated with the ID.
      */
-    const std::string& from_id(const int& qid, const std::string& def = "") const {
+    const std::string& from_id(const int& qid) const {
         if (qid < 0 || m_size <= qid) {
-            return def;
+            cerr << "qid:" << qid << endl;
+            abort();
         } else {
             return m_id_to_string[qid];
         }
     }
-
-
 
     /**
      * Convert string value into the associated ID value.
@@ -81,10 +79,6 @@ class basic_quark {
         if (it != m_string_to_id.end()) {
             return it->second;
         } else if (!m_b_fixed) {
-            if (m_v_done) {
-                StringToId::const_iterator i = m_string_to_id.find(unknownkey); 
-                return i->second;
-            }
             int newid = m_size;
             m_id_to_string.push_back(str);
             m_string_to_id.insert(std::pair<std::string, int>(str, newid));
@@ -99,12 +93,9 @@ class basic_quark {
     void set_fixed_flag(bool bfixed) {
         m_b_fixed = bfixed;
         if (!m_b_fixed && m_size >= max_capacity) {
-            m_b_fixed = true;
+            abort();
         }
     }
-    void set_v_Done(bool bvdone) {
-        m_v_done = bvdone;
-    }	
 
     bool is_fixed() const {
         return m_b_fixed;
@@ -132,7 +123,6 @@ class basic_quark {
         if (m_size > 0) {
             set_fixed_flag(true);
         }
-        m_v_done = true;
     }
 
     void write(std::ofstream &outf) const {
@@ -149,8 +139,7 @@ class basic_quark {
                 from_string(elem_iter->first);
             }
         }
-        set_v_Done(true);
-        m_v_done = true;
+        set_fixed_flag(true);
     }
 
     // initial by a file (first column), always an embedding file
@@ -175,8 +164,6 @@ class basic_quark {
         if (m_size > 0) {
             set_fixed_flag(true);
         }
-
-        m_v_done = true;
     }
 
 };

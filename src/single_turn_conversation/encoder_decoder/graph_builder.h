@@ -68,10 +68,6 @@ std::vector<BeamSearchResult> mostProbableResults(
         auto tuple = toExp(node);
 
         for (int j = 0; j < nodes.at(i)->dim; ++j) {
-            if (j == model_params.lookup_table.nUNKId) {
-                continue;
-            }
-
             dtype value = node.val.v[j] - std::get<1>(tuple).second;
             dtype log_probability = value - log(std::get<2>(tuple));
             dtype word_probability = exp(log_probability);
@@ -275,7 +271,7 @@ struct GraphBuilder {
 //                            most_probable_results.size() % j << std::endl;
                         word_ids_result.push_back(std::make_pair(word_ids,
                                     beam_search_result.final_log_probability));
-                    } else if (i < 50) {
+                    } else {
                         stop_removed_results.push_back(beam_search_result);
                         last_answers.push_back(word);
                         beam.push_back(last_beam.at(beam_search_result.beam_i));
@@ -286,7 +282,7 @@ struct GraphBuilder {
                 most_probable_results = stop_removed_results;
             }
 
-            if (beam.empty() || i >= 50) {
+            if (beam.empty()) {
                 break;
             }
 

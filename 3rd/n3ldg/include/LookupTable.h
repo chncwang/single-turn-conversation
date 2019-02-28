@@ -66,8 +66,8 @@ public:
 
     void initWeights(int dim, bool tune) {
         if (dim <=0 || nVSize == 0 || (nVSize == 1 && nUNKId >= 0)) {
-            std::cout << "please check the alphabet" << std::endl;
-            return;
+            std::cerr << "please check the alphabet" << std::endl;
+            abort();
         }
         nDim = dim;
         E.init(nDim, nVSize);
@@ -82,8 +82,10 @@ public:
     // default should be fineTune, just for initialization
     bool initWeights(const string& inFile, bool tune, dtype norm = -1) {
         if (nVSize == 0 || !elems->is_fixed() || (nVSize == 1 && nUNKId >= 0)) {
-            std::cout << "please check the alphabet" << std::endl;
-            return false;
+            cout << "nVSize:" << nVSize << " is_fixed:" << elems->is_fixed() << " nUNKId:" <<
+                nUNKId << endl;
+            std::cerr << "please check the alphabet" << std::endl;
+            abort();
         }
 
         ifstream inf;
