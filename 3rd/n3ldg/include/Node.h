@@ -112,8 +112,6 @@ dtype fselu(const dtype& x) {
 
 class Execute;
 
-// one Node means a vector
-// the col should be 1, because we aimed for NLP only
 class Node {
 public:
     std::vector<Node*> parents;
@@ -189,10 +187,10 @@ public:
 typedef Node* PNode;
 
 template<typename T>
-std::vector<Node*> toNodePointers(const std::vector<std::shared_ptr<T>> &vec) {
+std::vector<Node*> toNodePointers(std::vector<T *> &vec) {
     std::vector<Node *> results;
-    for (const std::shared_ptr<T> &p : vec) {
-        results.push_back(p.get());
+    for (T *p : vec) {
+        results.push_back(p);
     }
     return results;
 }

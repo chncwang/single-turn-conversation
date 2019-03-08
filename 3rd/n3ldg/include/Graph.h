@@ -1,20 +1,12 @@
 #ifndef BasicGraph
 #define BasicGraph
 
-/*
-*  Graph.h:
-*  manage nodes in a neural network model
-*
-*  Created on: Apr 21, 2017
-*      Author: mszhang
-*/
-
-
 #include "Eigen/Dense"
 #include "Node.h"
 #include "MyLib.h"
 #include <set>
 #include <map>
+#include <memory>
 #include <unordered_map>
 #include "profiler.h"
 #include <vector>
@@ -67,12 +59,10 @@ int Size(const NodeMap &map) {
     return sum;
 }
 
-// one Node means a vector
-// the col should be 1, because we aimed for NLP only
 class Graph {
 protected:
-    vector<PExecute> execs; //backward
-    vector<PNode> nodes; //forward
+    vector<PExecute> execs;
+    vector<Node *> nodes;
     NodeMap free_nodes;
     std::map<size_t, std::pair<int, int>> node_type_depth;
     vector<PNode> finish_nodes;
@@ -86,10 +76,10 @@ public:
         for (int idx = 0; idx < count; idx++) {
             delete execs.at(idx);
         }
-        execs.clear();
-        nodes.clear();
-        free_nodes.clear();
-        node_type_depth.clear();
+
+        for (Node *n : nodes) {
+            delete n;
+        }
     }
 
     void backward() {
@@ -99,7 +89,7 @@ public:
         }
     }
 
-    void addNode(PNode x) {
+    void addNode(Node *x) {
         static int index;
         x->node_index = index++;
         nodes.push_back(x);
@@ -119,7 +109,6 @@ public:
         }
     }
 
-    //real executation
     void compute(bool log = false) {
 //        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
 

@@ -7,10 +7,10 @@
 #include "single_turn_conversation/encoder_decoder/decoder_components.h"
 
 struct GlobalContextDecoderComponents : DecoderComponents {
-    vector<shared_ptr<ConcatNode>> concat_nodes;
+//    vector<shared_ptr<ConcatNode>> concat_nodes;
 
-    shared_ptr<BucketNode> bucket(int dim, Graph &graph) {
-        static shared_ptr<BucketNode> node(new BucketNode);
+    BucketNode* bucket(int dim, Graph &graph) {
+        static BucketNode* node(new BucketNode);
         static bool init;
         if (!init) {
             init = true;
@@ -24,11 +24,10 @@ struct GlobalContextDecoderComponents : DecoderComponents {
             Node &input,
             vector<Node *> &encoder_hiddens,
             bool is_training) override {
-        shared_ptr<ConcatNode> concat(new ConcatNode);
+        ConcatNode *concat(new ConcatNode);
         concat->init(hyper_params.word_dim + hyper_params.hidden_dim * 2);
         vector<Node *> ins = {&input, encoder_hiddens.at(encoder_hiddens.size() - 1)};
         concat->forward(graph, ins);
-        concat_nodes.push_back(concat);
 
         decoder.forward(graph, model_params.decoder_params, *concat,
                 *bucket(hyper_params.hidden_dim, graph), *bucket(hyper_params.hidden_dim, graph),

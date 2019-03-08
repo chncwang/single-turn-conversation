@@ -26,12 +26,11 @@ PDotNode
 #include "ModelUpdate.h"
 
 class ActivateNode :public Node {
-  public:
-    PNode in;
-    dtype(*activate)(const dtype&);   // activation function
-    dtype(*derivate)(const dtype&, const dtype&);  // derivation function of activation function
+public:
+    Node* in;
+    dtype(*activate)(const dtype&);
+    dtype(*derivate)(const dtype&, const dtype&);
 
-  public:
     ActivateNode() : Node() {
         in = NULL;
         activate = ftanh;
@@ -39,25 +38,20 @@ class ActivateNode :public Node {
         node_type = "activate";
     }
 
-    ~ActivateNode() {
-        in = NULL;
-    }
+    ~ActivateNode() = default;
 
-    // define the activate function and its derivation form
     void setFunctions(dtype(*f)(const dtype&), dtype(*f_deri)(const dtype&, const dtype&)) {
         activate = f;
         derivate = f_deri;
     }
 
-  public:
-    void forward(Graph *cg, PNode x) {
+    void forward(Graph *cg, Node* x) {
         in = x;
         degree = 0;
         in->addParent(this);
         cg->addNode(this);
     }
 
-  public:
     void compute() {
         val.vec() = in->val.vec().unaryExpr(ptr_fun(activate));
     }
@@ -66,11 +60,9 @@ class ActivateNode :public Node {
         in->loss.vec() += loss.vec() * in->val.vec().binaryExpr(val.vec(), ptr_fun(derivate));
     }
 
-  public:
     PExecute generate();
 
-    // better to rewrite for deep understanding
-    bool typeEqual(PNode other) {
+    bool typeEqual(Node* other) {
         bool result = Node::typeEqual(other);
         return result;
     }
@@ -88,7 +80,7 @@ PExecute ActivateNode::generate() {
 
 class TanhNode :public Node {
   public:
-    PNode in;
+    Node* in;
 
   public:
     TanhNode() : Node() {
@@ -105,7 +97,7 @@ class TanhNode :public Node {
         this->forward(&graph, &input);
     }
 
-    void forward(Graph *cg, PNode x) {
+    void forward(Graph *cg, Node* x) {
         in = x;
         degree = 0;
         in->addParent(this);
@@ -125,7 +117,7 @@ class TanhNode :public Node {
     PExecute generate();
 
     // better to rewrite for deep understanding
-    bool typeEqual(PNode other) {
+    bool typeEqual(Node* other) {
         bool result = Node::typeEqual(other);
         return result;
     }
@@ -264,7 +256,7 @@ PExecute TanhNode::generate() {
 
 class SigmoidNode :public Node {
   public:
-    PNode in;
+    Node* in;
 
   public:
     SigmoidNode() : Node() {
@@ -280,7 +272,7 @@ class SigmoidNode :public Node {
         this->forward(&graph, &input);
     }
 
-    void forward(Graph *cg, PNode x) {
+    void forward(Graph *cg, Node* x) {
         in = x;
         degree = 0;
         in->addParent(this);
@@ -300,7 +292,7 @@ class SigmoidNode :public Node {
     PExecute generate();
 
     // better to rewrite for deep understanding
-    bool typeEqual(PNode other) {
+    bool typeEqual(Node* other) {
         bool result = Node::typeEqual(other);
         return result;
     }
@@ -383,7 +375,7 @@ PExecute SigmoidNode::generate() {
 
 class ReluNode :public Node {
   public:
-    PNode in;
+    Node* in;
 
   public:
     ReluNode() : Node() {
@@ -395,7 +387,7 @@ class ReluNode :public Node {
         in = NULL;
     }
 
-    void forward(Graph *cg, PNode x) {
+    void forward(Graph *cg, Node* x) {
         in = x;
         degree = 0;
         in->addParent(this);
@@ -415,7 +407,7 @@ class ReluNode :public Node {
     PExecute generate();
 
     // better to rewrite for deep understanding
-    bool typeEqual(PNode other) {
+    bool typeEqual(Node* other) {
         bool result = Node::typeEqual(other);
         return result;
     }
@@ -432,7 +424,7 @@ PExecute ReluNode::generate() {
 
 class PDotNode : public Node {
 public:
-    PNode in1, in2;
+    Node* in1, *in2;
 
     PDotNode() : Node() {
         in1 = NULL;
@@ -446,7 +438,7 @@ public:
         Node::init(dim);
     }
 
-    void forward(Graph *cg, PNode x1, PNode x2) {
+    void forward(Graph *cg, Node* x1, Node* x2) {
         in1 = x1;
         in2 = x2;
         degree = 0;
@@ -552,7 +544,7 @@ PExecute PDotNode::generate() {
 
 class DropoutNode : public Node {
 public:
-    PNode in = NULL;
+    Node* in = NULL;
     Tensor1D drop_mask;
     dtype drop_value = 0.0f;
     bool is_training = true;

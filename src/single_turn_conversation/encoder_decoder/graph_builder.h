@@ -113,50 +113,48 @@ std::vector<BeamSearchResult> mostProbableResults(
 }
 
 struct GraphBuilder {
-    std::vector<std::shared_ptr<LookupNode>> encoder_lookups_before_dropout;
-    std::vector<std::shared_ptr<DropoutNode>> encoder_lookups;
+    std::vector<DropoutNode *> encoder_lookups;
     DynamicLSTMBuilder left_to_right_encoder;
     DynamicLSTMBuilder right_to_left_encoder;
-    std::vector<std::shared_ptr<ConcatNode>> concated_encoder_nodes;
-    BucketNode hidden_bucket;
-    BucketNode word_bucket;
+    std::vector<ConcatNode *> concated_encoder_nodes;
+    BucketNode *hidden_bucket = new BucketNode;
+    BucketNode *word_bucket = new BucketNode;
 
     void init(const HyperParams &hyper_params) {
-        hidden_bucket.init(hyper_params.hidden_dim);
-        word_bucket.init(hyper_params.word_dim);
+        hidden_bucket->init(hyper_params.hidden_dim);
+        word_bucket->init(hyper_params.word_dim);
     }
 
     void forward(Graph &graph, const std::vector<std::string> &sentence,
             const HyperParams &hyper_params,
             ModelParams &model_params,
             bool is_training) {
-        hidden_bucket.forward(graph);
-        word_bucket.forward(graph);
+        hidden_bucket->forward(graph);
+        word_bucket->forward(graph);
 
         for (const std::string &word : sentence) {
-            std::shared_ptr<LookupNode> input_lookup(new LookupNode);
+            LookupNode* input_lookup(new LookupNode);
             input_lookup->init(hyper_params.word_dim);
             input_lookup->setParam(model_params.lookup_table);
             input_lookup->forward(graph, word);
-            encoder_lookups_before_dropout.push_back(input_lookup);
 
-            std::shared_ptr<DropoutNode> dropout_node(new DropoutNode);
+            DropoutNode* dropout_node(new DropoutNode);
             dropout_node->init(hyper_params.word_dim, hyper_params.dropout);
             dropout_node->is_training = is_training;
             dropout_node->forward(graph, *input_lookup);
             encoder_lookups.push_back(dropout_node);
         }
 
-        for (std::shared_ptr<DropoutNode> &node : encoder_lookups) {
+        for (DropoutNode* node : encoder_lookups) {
             left_to_right_encoder.forward(graph, model_params.left_to_right_encoder_params, *node,
-                    hidden_bucket, hidden_bucket, hyper_params.dropout, is_training);
+                    *hidden_bucket, *hidden_bucket, hyper_params.dropout, is_training);
         }
 
-        int size = encoder_lookups_before_dropout.size();
+        int size = encoder_lookups.size();
 
         for (int i = size - 1; i >= 0; --i) {
             right_to_left_encoder.forward(graph, model_params.right_to_left_encoder_params,
-                    *encoder_lookups.at(i), hidden_bucket, hidden_bucket, hyper_params.dropout,
+                    *encoder_lookups.at(i), *hidden_bucket, *hidden_bucket, hyper_params.dropout,
                     is_training);
         }
 
@@ -167,10 +165,10 @@ struct GraphBuilder {
         }
 
         for (int i = 0; i < size; ++i) {
-            std::shared_ptr<ConcatNode> concat_node(new ConcatNode);
+            ConcatNode* concat_node(new ConcatNode);
             concat_node->init(2 * hyper_params.hidden_dim);
-            std::vector<Node*> nodes = {left_to_right_encoder._hiddens.at(i).get(),
-                    right_to_left_encoder._hiddens.at(i).get()};
+            std::vector<Node*> nodes = {left_to_right_encoder._hiddens.at(i),
+                    right_to_left_encoder._hiddens.at(i)};
             concat_node->forward(graph, nodes);
             concated_encoder_nodes.push_back(concat_node);
         }
@@ -194,36 +192,36 @@ struct GraphBuilder {
             bool is_training) {
         Node *last_input;
         if (i > 0) {
-            std::shared_ptr<LookupNode> before_dropout(new LookupNode);
+            LookupNode* before_dropout(new LookupNode);
             before_dropout->init(hyper_params.word_dim);
             before_dropout->setParam(model_params.lookup_table);
             before_dropout->forward(graph, *answer);
-            decoder_components.decoder_lookups_before_dropout.push_back(before_dropout);
-            std::shared_ptr<DropoutNode> decoder_lookup(new DropoutNode);
+
+            DropoutNode* decoder_lookup(new DropoutNode);
             decoder_lookup->init(hyper_params.word_dim, hyper_params.dropout);
             decoder_lookup->is_training = is_training;
             decoder_lookup->forward(graph, *before_dropout);
             decoder_components.decoder_lookups.push_back(decoder_lookup);
-            last_input = decoder_components.decoder_lookups.at(i - 1).get();
+            last_input = decoder_components.decoder_lookups.at(i - 1);
         } else {
-            last_input = &word_bucket;
+            last_input = word_bucket;
         }
 
-        std::vector<Node *> encoder_hiddens = transferVector<Node *, std::shared_ptr<ConcatNode>>(
-                concated_encoder_nodes, [](const std::shared_ptr<ConcatNode> &concat) {
-                return concat.get();
+        std::vector<Node *> encoder_hiddens = transferVector<Node *, ConcatNode*>(
+                concated_encoder_nodes, [](ConcatNode *concat) {
+                return concat;
                 });
 
         decoder_components.forward(graph, hyper_params, model_params, *last_input,
                 encoder_hiddens, is_training);
 
-        std::shared_ptr<LinearNode> decoder_to_wordvector(new LinearNode);
+        LinearNode *decoder_to_wordvector(new LinearNode);
         decoder_to_wordvector->init(hyper_params.word_dim);
         decoder_to_wordvector->setParam(model_params.hidden_to_wordvector_params);
         decoder_to_wordvector->forward(graph, *decoder_components.decoder._hiddens.at(i));
         decoder_components.decoder_to_wordvectors.push_back(decoder_to_wordvector);
 
-        std::shared_ptr<LinearWordVectorNode> wordvector_to_onehot(new LinearWordVectorNode);
+        LinearWordVectorNode *wordvector_to_onehot(new LinearWordVectorNode);
         wordvector_to_onehot->init(model_params.lookup_table.nVSize);
         wordvector_to_onehot->setParam(model_params.lookup_table.E);
         wordvector_to_onehot->forward(graph, *decoder_to_wordvector);
@@ -251,7 +249,7 @@ struct GraphBuilder {
                 int beam_i = 0;
                 for (std::shared_ptr<DecoderComponents> &decoder_components : beam) {
                     last_outputs.push_back(
-                            decoder_components->wordvector_to_onehots.at(i - 1).get());
+                            decoder_components->wordvector_to_onehots.at(i - 1));
                     ++beam_i;
                 }
                 most_probable_results = mostProbableResults(last_outputs, most_probable_results,

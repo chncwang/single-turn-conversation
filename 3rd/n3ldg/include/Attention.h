@@ -69,15 +69,15 @@ struct AttentionParams : public N3LDGSerializable
 
 class AttentionBuilder {
 public:
-    vector<shared_ptr<LinearNode>> _weights;
-    vector<shared_ptr<BiNode>> _intermediate_nodes;
-    AttentionSoftMaxNode _hidden;
+    vector<LinearNode *> _weights;
+    vector<BiNode *> _intermediate_nodes;
+    AttentionSoftMaxNode* _hidden = new AttentionSoftMaxNode;
 
     AttentionParams* _param = nullptr;
 
     void init(AttentionParams &paramInit) {
         _param = &paramInit;
-        _hidden.init(paramInit.hidden_dim);
+        _hidden->init(paramInit.hidden_dim);
     }
 
     void forward(Graph &cg, vector<Node *>& x, Node& guide) {
@@ -92,20 +92,20 @@ public:
         }
 
         for (int idx = 0; idx < x.size(); idx++) {
-            shared_ptr<BiNode> intermediate_node(new BiNode);
+            BiNode* intermediate_node(new BiNode);
             intermediate_node->setParam(_param->bi_atten);
             intermediate_node->init(_param->guide_dim + _param->hidden_dim);
             intermediate_node->forward(cg, *x.at(idx), guide);
             _intermediate_nodes.push_back(intermediate_node);
 
-            shared_ptr<LinearNode> uni_node(new LinearNode);
+            LinearNode* uni_node(new LinearNode);
             uni_node->setParam(_param->to_scalar_params);
             uni_node->init(1);
             uni_node->forward(cg, *intermediate_node);
             _weights.push_back(uni_node);
         }
         vector<Node *> weights = toNodePointers<LinearNode>(_weights);
-        _hidden.forward(cg, x, weights);
+        _hidden->forward(cg, x, weights);
     }
 };
 
