@@ -4,20 +4,14 @@
 #include <iostream>
 #include <memory>
 #include <vector>
+#include <boost/format.hpp>
 #include "single_turn_conversation/encoder_decoder/decoder_components.h"
 
 struct AttentionContextDecoderComponents : DecoderComponents {
-//    vector<shared_ptr<ConcatNode>> concat_nodes;
-//    vector<shared_ptr<AttentionBuilder>> attention_builders;
-
     BucketNode *bucket(int dim, Graph &graph) {
-        static BucketNode *node(new BucketNode);
-        static bool init;
-        if (!init) {
-            init = true;
-            node->init(dim);
-            node->forward(graph, 0);
-        }
+        BucketNode *node(new BucketNode);
+        node->init(dim);
+        node->forward(graph, 0);
         return node;
     }
 
@@ -27,13 +21,12 @@ struct AttentionContextDecoderComponents : DecoderComponents {
             bool is_training) override {
         shared_ptr<AttentionBuilder> attention_builder(new AttentionBuilder);
         attention_builder->init(model_params.attention_parrams);
-        attention_builder->forward(graph, encoder_hiddens,
-                decoder.size() == 0 ? static_cast<Node&>(*bucket(hyper_params.hidden_dim, graph)) :
-                static_cast<Node&>(*decoder._hiddens.at(decoder.size() - 1)));
+        Node *guide = decoder.size() == 0 ? static_cast<Node*>(bucket(hyper_params.hidden_dim,
+                    graph)) : static_cast<Node*>(decoder._hiddens.at(decoder.size() - 1));
+        attention_builder->forward(graph, encoder_hiddens, *guide);
 
         ConcatNode* concat = new ConcatNode;
         concat->init(hyper_params.word_dim + hyper_params.hidden_dim * 2);
-        attention_builder->_hidden->node_name = "attention_output";
         vector<Node *> ins = {&input, attention_builder->_hidden};
         concat->forward(graph, ins);
 

@@ -16,6 +16,7 @@
 #include "Graph.h"
 #include "AttentionHelp.h"
 #include <memory>
+#include <boost/format.hpp>
 
 struct AttentionParams : public N3LDGSerializable
 #if USE_GPU
@@ -88,6 +89,7 @@ public:
 
         if (x.at(0)->dim != _param->hidden_dim || guide.dim != _param->guide_dim) {
             std::cerr << "input dim does not match for attention  operation" << std::endl;
+            cerr << boost::format("x.at(0)->dim:%1%, _param->hidden_dim:%2% guide.dim:%3% _param->guide_dim:%4%") % x.at(0)->dim % _param->hidden_dim % guide.dim % _param->guide_dim << endl;
             abort();
         }
 
