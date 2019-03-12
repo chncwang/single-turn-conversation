@@ -2,16 +2,22 @@
 #define SINGLE_TURN_CONVERSATION_SRC_BASIC_DATA_MANAGER_H
 
 #include <string>
+#include <unordered_map>
+#include <codecvt>
 #include <fstream>
+#include <iterator>
 #include <regex>
 #include <iostream>
 #include <utility>
 #include "single_turn_conversation/conversation_structure.h"
 #include "single_turn_conversation/def.h"
 #include "single_turn_conversation/default_config.h"
+#include <boost/format.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/regex.hpp>
 #include <boost/algorithm/string/regex.hpp>
+
+using boost::format;
 
 std::vector<PostAndResponses> readPostAndResponsesVector(const std::string &filename) {
     DefaultConfig &default_config = GetDefaultConfig();
@@ -102,6 +108,49 @@ std::vector<std::vector<std::string>> readSentences(const std::string &filename)
     }
 
     return results;
+}
+
+bool isPureChinese(const string &word) {
+    std::regex expression("^[\u4e00-\u9fff]+$");
+    return std::regex_search(word, expression);
+}
+
+vector<vector<string>> reprocessSentences(const vector<vector<string>> &sentences,
+        const unordered_map<string, int> &word_counts,
+        int min_occurences) {
+    cout << boost::format("sentences size:%1%") % sentences.size() << endl;
+    vector<vector<string>> result;
+    int i = 0;
+    for (const auto &sentence : sentences) {
+        if (i % 1000 == 0) {
+            cout << static_cast<float>(i) / sentences.size() << endl;
+        }
+        vector<string> processed_sentence;
+        for (const string &word : sentence) {
+            if (isPureChinese(word)) {
+                auto it = word_counts.find(word);
+                int occurence;
+                if (it == word_counts.end()) {
+                    cout << format("word not found:%1%\n") % word;
+                    occurence = 0;
+                } else {
+                    occurence = it->second;
+                }
+                if (occurence <= min_occurences) {
+                    for (int i = 0; i < word.size(); i += 3) {
+                        processed_sentence.push_back(word.substr(i, 3));
+                    }
+                } else {
+                    processed_sentence.push_back(word);
+                }
+            } else {
+                processed_sentence.push_back(word);
+            }
+        }
+        result.push_back(processed_sentence);
+        ++i;
+    }
+    return result;
 }
 
 #endif

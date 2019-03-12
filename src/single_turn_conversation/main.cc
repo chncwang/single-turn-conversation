@@ -115,6 +115,8 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
     default_config.learn_test = ini_reader.GetBoolean(SECTION, "learn_test", false);
     default_config.save_model_per_batch = ini_reader.GetBoolean(SECTION, "save_model_per_batch",
             false);
+    default_config.split_unknown_words = ini_reader.GetBoolean(SECTION, "split_unknown_words",
+            true);
 
     default_config.max_sample_count = ini_reader.GetInteger(SECTION, "max_sample_count",
             1000000000);
@@ -495,38 +497,53 @@ int main(int argc, char *argv[]) {
         dev_post_and_responses.size() << " test size:" << test_post_and_responses.size() << endl;
 
     vector<vector<string>> post_sentences = readSentences(default_config.post_file);
-
     vector<vector<string>> response_sentences = readSentences(default_config.response_file);
 
     unordered_map<string, int> word_counts;
-    for (const ConversationPair &conversation_pair : train_conversation_pairs) {
-        const vector<string> &post_sentence = post_sentences.at(conversation_pair.post_id);
-        addWord(word_counts, post_sentence);
 
-        const vector<string> &response_sentence = response_sentences.at(
-                conversation_pair.response_id);
-        addWord(word_counts, response_sentence);
+    auto wordStat = [&]() {
+        for (const ConversationPair &conversation_pair : train_conversation_pairs) {
+            const vector<string> &post_sentence = post_sentences.at(conversation_pair.post_id);
+            addWord(word_counts, post_sentence);
+
+            const vector<string> &response_sentence = response_sentences.at(
+                    conversation_pair.response_id);
+            addWord(word_counts, response_sentence);
+        }
+
+        if (hyper_params.word_file != "" && !hyper_params.word_finetune) {
+            for (const PostAndResponses &dev : dev_post_and_responses){
+                const vector<string>&post_sentence = post_sentences.at(dev.post_id);
+                addWord(word_counts, post_sentence);
+
+                for(int i=0; i<dev.response_ids.size(); i++){
+                    const vector<string>&resp_sentence = response_sentences.at(
+                            dev.response_ids.at(i));
+                    addWord(word_counts, resp_sentence);
+                }
+            }
+
+            for (const PostAndResponses &test : test_post_and_responses){
+                const vector<string>&post_sentence = post_sentences.at(test.post_id);
+                addWord(word_counts, post_sentence);
+
+                for(int i =0; i<test.response_ids.size(); i++){
+                    const vector<string>&resp_sentence =
+                        response_sentences.at(test.response_ids.at(i));
+                    addWord(word_counts, resp_sentence);
+                }
+            } 
+        }
+    };
+    wordStat();
+
+    if (default_config.split_unknown_words) {
+        post_sentences = reprocessSentences(post_sentences, word_counts, hyper_params.word_cutoff);
+        response_sentences = reprocessSentences(response_sentences, word_counts,
+                hyper_params.word_cutoff);
+        word_counts.clear();
+        wordStat();
     }
-    
-    for (const PostAndResponses &dev : dev_post_and_responses){
-    	const vector<string>&post_sentence = post_sentences.at(dev.post_id);
-	addWord(word_counts, post_sentence);
-
-	for(int i=0; i<dev.response_ids.size(); i++){
-	    const vector<string>&resp_sentence = response_sentences.at(dev.response_ids.at(i));
-	    addWord(word_counts, resp_sentence);
-	}
-    }
-    
-    for (const PostAndResponses &test : test_post_and_responses){
-        const vector<string>&post_sentence = post_sentences.at(test.post_id);
-	addWord(word_counts, post_sentence);
-
-	for(int i =0; i<test.response_ids.size(); i++){
-	    const vector<string>&resp_sentence = response_sentences.at(test.response_ids.at(i));
-	    addWord(word_counts, resp_sentence);
-	}
-    } 
 
     word_counts[unknownkey] = 1000000000;
     word_counts[STOP_SYMBOL] = 1000000000;
