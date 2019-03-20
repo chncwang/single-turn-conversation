@@ -301,11 +301,13 @@ struct Tensor1D : public n3ldg_cpu::Tensor1D, public Transferable {
     Tensor1D& operator=(const Tensor1D &tensor) {
         n3ldg_cpu::Tensor1D::operator=(tensor);
         copyFromHostToDevice();
+        return *this;
     }
 
     Tensor1D& operator=(dtype v) {
         n3ldg_cpu::Tensor1D::operator=(v);
         copyFromHostToDevice();
+        return *this;
     }
 
     void random(dtype bound) {

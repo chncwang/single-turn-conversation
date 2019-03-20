@@ -2,6 +2,7 @@
 #include <array>
 #include <boost/format.hpp>
 #include <cstdlib>
+#include <cstddef>
 #include <vector>
 #include <algorithm>
 #include <cmath>
@@ -14,6 +15,7 @@
 #include <curand_kernel.h>
 #include "cnmem.h"
 #include <string>
+#include <utility>
 #include <cstring>
 #include <cstdint>
 #include <chrono>
@@ -1054,14 +1056,27 @@ bool Verify(int *host, int *device, int len, const char* message) {
     return success;
 }
 
+constexpr int MAX_BLOCK_POWER = 100;
+
 MemoryPool& MemoryPool::Ins() {
     static MemoryPool *p;
     if (p == NULL) {
         p = new MemoryPool;
-        p->free_blocks_.resize(100);
+        p->free_blocks_.resize(MAX_BLOCK_POWER + 1);
         p->busy_blocks_.reserve(10000);
     }
     return *p;
+}
+
+void appendFreeBlock(const MemoryBlock &memory_block, vector<vector<MemoryBlock>> &free_blocks,
+        int i,
+        const unordered_map<void*, MemoryBlock> &busy_blocks) {
+    if (memory_block.size != (1 << i)) {
+        cerr << boost::format("incorrect block size %1%, but i is %2%") % memory_block.size % i <<
+            endl;
+        abort();
+    }
+    free_blocks.at(i).push_back(memory_block);
 }
 
 cudaError_t MemoryPool::Malloc(void **p, int size) {
@@ -1084,24 +1099,137 @@ cudaError_t MemoryPool::Malloc(void **p, int size) {
         ++n;
     }
     cudaError_t status = cudaErrorMemoryAllocation;
-    if (free_blocks_.at(n).empty()) {
-        while (status != cudaSuccess) {
-            status = cudaMalloc(p, fit_size);
+    int loop = 0;
+    while (status != cudaSuccess) {
+        //cout << "n:" << n << endl;
+        if (free_blocks_.at(n).empty()) {
+            //cout << "free_blocks_.at(n).empty()" << endl;
+            int higher_power = n + 1;
+            //cout << "higher_power:" << higher_power << endl;
+            while (higher_power <= MAX_BLOCK_POWER && free_blocks_.at(higher_power).empty()) {
+                ++higher_power;
+            }
+            //cout << "higher_power:" << higher_power << endl;
+            if (higher_power > MAX_BLOCK_POWER) {
+                while (status != cudaSuccess) {
+                    status = cudaMalloc(p, fit_size);
+                }
+                CallCuda(status);
+                MemoryBlock block(*p, fit_size);
+                busy_blocks_.insert(std::make_pair(*p, block));
+                //cout << "malloc successfully" << endl;
+            } else {
+                //cout << "higher_power:" << higher_power << endl;
+                vector<MemoryBlock> &v = free_blocks_.at(higher_power);
+                MemoryBlock &to_split = v.at(v.size() - 1);
+                int half_size = to_split.size >> 1;
+                void *half_address = static_cast<void*>(static_cast<char*>(to_split.p) +
+                        half_size);
+                MemoryBlock low_block(to_split.p, half_size, to_split.buddy),
+                            high_block(half_address, half_size, to_split.p);
+                v.resize(v.size() - 1);
+                appendFreeBlock(low_block, free_blocks_, higher_power - 1, busy_blocks_);
+                appendFreeBlock(high_block, free_blocks_, higher_power - 1, busy_blocks_);
+            }
+        } else {
+            status = cudaSuccess;
+            int this_size = free_blocks_.at(n).size();
+            MemoryBlock &block = free_blocks_.at(n).at(this_size - 1);
+            *p = block.p;
+            busy_blocks_.insert(std::make_pair(block.p, block));
+            free_blocks_.at(n).resize(this_size - 1);
         }
-        CallCuda(status);
-        MemoryBlock block(*p, fit_size);
-        busy_blocks_.insert(std::make_pair(*p, block));
-    } else {
-        status = cudaSuccess;
-        int this_size = free_blocks_.at(n).size();
-        MemoryBlock &block = free_blocks_.at(n).at(this_size - 1);
-        *p = block.p;
-        busy_blocks_.insert(std::make_pair(block.p, block));
-        free_blocks_.at(n).resize(this_size - 1);
+        ++loop;
     }
     profiler.EndEvent();
+
+    if (busy_blocks_.find(*p) == busy_blocks_.end()) {
+        cerr << boost::format("Malloc - cannot find malloced p in busy blocks") << endl;
+    }
+
+    int i = 0;
+    for (auto &v : free_blocks_) {
+        for (auto &block : v) {
+            if (block.size != (1 << i)) {
+                cerr << boost::format("Malloc - incorrect block size") << endl;
+                abort();
+            }
+
+            if (block.p == *p) {
+                cerr << boost::format("Malloc - allocated memory found in free blocks") << endl;
+                abort();
+            }
+        }
+        ++i;
+    }
+
+    //cout << "malloc size:" << size << endl;
+    //cout << toString() << endl;
+
     return status;
 #endif
+}
+
+std::pair<const MemoryBlock *, const MemoryBlock *> lowerAndhigherBlocks(const MemoryBlock &a,
+        const MemoryBlock &b) {
+    if (a.size != b.size) {
+        cerr << "a.size is not equal to b.size" << endl;
+        abort();
+    }
+    int distance = static_cast<char*>(a.p) - static_cast<char*>(b.p);
+    if (distance == 0) {
+        cerr << "block a and b has the same address" << endl;
+        abort();
+    }
+    const MemoryBlock &low = distance > 0 ? b : a;
+    const MemoryBlock &high = distance > 0 ? a : b;
+    return std::make_pair(&low, &high);
+}
+
+bool isBuddies(const MemoryBlock &a, const MemoryBlock &b) {
+    if (a.size != b.size) {
+        return false;
+    }
+    auto pair = lowerAndhigherBlocks(a, b);
+    return pair.second->buddy == pair.first->p &&
+        ((char*)pair.second->p - (char*)pair.first->p) == a.size;
+}
+
+MemoryBlock mergeBlocks(const MemoryBlock &a, const MemoryBlock &b) {
+    if (a.size != b.size) {
+        cerr << "sizes of memory blocks to merge not equal" << endl;
+        abort();
+    }
+
+    auto pair = lowerAndhigherBlocks(a, b);
+    MemoryBlock block(pair.first->p, pair.first->size << 1, pair.first->buddy);
+    return block;
+}
+
+void returnFreeBlock(const MemoryBlock &block, vector<vector<MemoryBlock>> &free_blocks,
+        int power,
+        const unordered_map<void*, MemoryBlock> &busy_blocks) {
+    MemoryBlock current_block = block;
+    for (int i = power; i <= MAX_BLOCK_POWER; ++i) {
+        vector<MemoryBlock> &v = free_blocks.at(i);
+        bool buddy_found = false;
+        int removed_i = -1;
+        for (auto it = v.begin(); it != v.end(); ++it) {
+            ++removed_i;
+            if (isBuddies(*it, current_block)){
+                buddy_found = true;
+                MemoryBlock merged_block = mergeBlocks(*it, current_block);
+                current_block = merged_block;
+                break;
+            }
+        }
+        if (!buddy_found) {
+            appendFreeBlock(current_block, free_blocks, i, busy_blocks);
+            break;
+        } else {
+            v.erase(v.begin() + removed_i);
+        }
+    }
 }
 
 cudaError_t MemoryPool::Free(void *p) {
@@ -1117,6 +1245,7 @@ cudaError_t MemoryPool::Free(void *p) {
 #else
     auto it = busy_blocks_.find(p);
     if (it == busy_blocks_.end()) {
+        cerr << "cannot find busy block " << p << endl;
         abort();
     }
     int size = it->second.size;
@@ -1125,10 +1254,35 @@ cudaError_t MemoryPool::Free(void *p) {
         size >>= 1;
         ++n;
     }
-    free_blocks_.at(n).push_back(it->second);
+    if (it->second.size != (1 << n)) {
+        cerr << boost::format("size:%1% n:%2%") % it->second.size % n << endl;
+        abort();
+    }
+
+    auto block = it->second;
     busy_blocks_.erase(it);
+    returnFreeBlock(block, free_blocks_, n, busy_blocks_);
+    it = busy_blocks_.find(p);
+    if (it != busy_blocks_.end()) {
+        cerr << "can find erased block " << p << endl;
+        abort();
+    }
 
     profiler.EndEvent();
+    if (busy_blocks_.find(p) != busy_blocks_.end()) {
+        cerr << boost::format("Malloc - find freed p in busy blocks") << endl;
+    }
+
+    int i = 0;
+    for (auto &v : free_blocks_) {
+        for (auto &block : v) {
+            if (block.size != (1 << i)) {
+                cerr << boost::format("Malloc - incorrect block size") << endl;
+                abort();
+            }
+        }
+        ++i;
+    }
     return cudaSuccess;
 #endif
 }
