@@ -791,10 +791,9 @@ int main(int argc, char *argv[]) {
 
             last_loss_sum = loss_sum;
             loss_sum = 0;
-
-            profiler.EndCudaEvent();
-            profiler.Print();
         }
+        profiler.EndCudaEvent();
+        profiler.Print();
     } else {
         abort();
     }

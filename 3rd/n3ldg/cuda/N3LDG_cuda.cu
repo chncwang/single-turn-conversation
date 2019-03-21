@@ -1068,7 +1068,8 @@ MemoryPool& MemoryPool::Ins() {
     return *p;
 }
 
-void appendFreeBlock(const MemoryBlock &memory_block, vector<vector<MemoryBlock>> &free_blocks,
+void appendFreeBlock(const MemoryBlock &memory_block,
+        vector<map<void*, MemoryBlock>> &free_blocks,
         int i,
         const unordered_map<void*, MemoryBlock> &busy_blocks) {
     if (memory_block.size != (1 << i)) {
@@ -1076,7 +1077,7 @@ void appendFreeBlock(const MemoryBlock &memory_block, vector<vector<MemoryBlock>
             endl;
         abort();
     }
-    free_blocks.at(i).push_back(memory_block);
+    free_blocks.at(i).insert(make_pair(memory_block.p, memory_block));
 }
 
 cudaError_t MemoryPool::Malloc(void **p, int size) {
@@ -1120,51 +1121,28 @@ cudaError_t MemoryPool::Malloc(void **p, int size) {
                 //cout << "malloc successfully" << endl;
             } else {
                 //cout << "higher_power:" << higher_power << endl;
-                vector<MemoryBlock> &v = free_blocks_.at(higher_power);
-                MemoryBlock &to_split = v.at(v.size() - 1);
+                auto &v = free_blocks_.at(higher_power);
+                MemoryBlock &to_split = v.rbegin()->second;
                 int half_size = to_split.size >> 1;
                 void *half_address = static_cast<void*>(static_cast<char*>(to_split.p) +
                         half_size);
                 MemoryBlock low_block(to_split.p, half_size, to_split.buddy),
                             high_block(half_address, half_size, to_split.p);
-                v.resize(v.size() - 1);
+                v.erase(v.rbegin()->first);
                 appendFreeBlock(low_block, free_blocks_, higher_power - 1, busy_blocks_);
                 appendFreeBlock(high_block, free_blocks_, higher_power - 1, busy_blocks_);
             }
         } else {
             status = cudaSuccess;
             int this_size = free_blocks_.at(n).size();
-            MemoryBlock &block = free_blocks_.at(n).at(this_size - 1);
+            MemoryBlock &block = free_blocks_.at(n).rbegin()->second;
             *p = block.p;
             busy_blocks_.insert(std::make_pair(block.p, block));
-            free_blocks_.at(n).resize(this_size - 1);
+            free_blocks_.at(n).erase(free_blocks_.at(n).rbegin()->first);
         }
         ++loop;
     }
     profiler.EndEvent();
-
-    if (busy_blocks_.find(*p) == busy_blocks_.end()) {
-        cerr << boost::format("Malloc - cannot find malloced p in busy blocks") << endl;
-    }
-
-    int i = 0;
-    for (auto &v : free_blocks_) {
-        for (auto &block : v) {
-            if (block.size != (1 << i)) {
-                cerr << boost::format("Malloc - incorrect block size") << endl;
-                abort();
-            }
-
-            if (block.p == *p) {
-                cerr << boost::format("Malloc - allocated memory found in free blocks") << endl;
-                abort();
-            }
-        }
-        ++i;
-    }
-
-    //cout << "malloc size:" << size << endl;
-    //cout << toString() << endl;
 
     return status;
 #endif
@@ -1202,34 +1180,38 @@ MemoryBlock mergeBlocks(const MemoryBlock &a, const MemoryBlock &b) {
     }
 
     auto pair = lowerAndhigherBlocks(a, b);
+    if ((char*)pair.second->p - (char*)pair.first->p != a.size ||
+            (a.p != b.buddy && a.buddy != b.p)) {
+        cerr << "a and b are not buddies" << endl;
+        cerr << boost::format("a:%1%\nb:%2%") % a.toString() % b.toString() << endl;
+        abort();
+    }
     MemoryBlock block(pair.first->p, pair.first->size << 1, pair.first->buddy);
     return block;
 }
 
-void returnFreeBlock(const MemoryBlock &block, vector<vector<MemoryBlock>> &free_blocks,
+void returnFreeBlock(const MemoryBlock &block, vector<map<void*, MemoryBlock>> &free_blocks,
         int power,
         const unordered_map<void*, MemoryBlock> &busy_blocks) {
+    Profiler &profiler = Profiler::Ins();
+    profiler.BeginEvent("returnFreeBlock");
     MemoryBlock current_block = block;
     for (int i = power; i <= MAX_BLOCK_POWER; ++i) {
-        vector<MemoryBlock> &v = free_blocks.at(i);
-        bool buddy_found = false;
-        int removed_i = -1;
-        for (auto it = v.begin(); it != v.end(); ++it) {
-            ++removed_i;
-            if (isBuddies(*it, current_block)){
-                buddy_found = true;
-                MemoryBlock merged_block = mergeBlocks(*it, current_block);
-                current_block = merged_block;
-                break;
-            }
-        }
-        if (!buddy_found) {
+        map<void*, MemoryBlock> &v = free_blocks.at(i);
+        void *free_p = (char*)current_block.p - (char*)current_block.buddy == current_block.size ?
+            current_block.buddy : (void*)((char*)current_block.p + current_block.size);
+        auto it = v.find(free_p);
+        if (it == v.end() || (it->second.p != current_block.buddy &&
+                    it->second.buddy != current_block.p)) {
             appendFreeBlock(current_block, free_blocks, i, busy_blocks);
             break;
         } else {
-            v.erase(v.begin() + removed_i);
+            MemoryBlock merged_block = mergeBlocks(it->second, current_block);
+            current_block = merged_block;
+            v.erase(it);
         }
     }
+    profiler.EndEvent();
 }
 
 cudaError_t MemoryPool::Free(void *p) {
@@ -1271,17 +1253,6 @@ cudaError_t MemoryPool::Free(void *p) {
     profiler.EndEvent();
     if (busy_blocks_.find(p) != busy_blocks_.end()) {
         cerr << boost::format("Malloc - find freed p in busy blocks") << endl;
-    }
-
-    int i = 0;
-    for (auto &v : free_blocks_) {
-        for (auto &block : v) {
-            if (block.size != (1 << i)) {
-                cerr << boost::format("Malloc - incorrect block size") << endl;
-                abort();
-            }
-        }
-        ++i;
     }
     return cudaSuccess;
 #endif

@@ -65,8 +65,8 @@ public:
         for (auto & v : free_blocks_) {
             Json::Value json;
             int j = 0;
-            for (auto &block : v) {
-                json[j++] = block.toString();
+            for (auto &it : v) {
+                json[j++] = it.second.toString();
             }
             if (!v.empty()) {
                 Json::Value json_and_index;
@@ -81,7 +81,7 @@ public:
 
 private:
     MemoryPool() = default;
-    std::vector<std::vector<MemoryBlock>> free_blocks_;
+    std::vector<map<void*, MemoryBlock>> free_blocks_;
     std::unordered_map<void *, MemoryBlock> busy_blocks_;
 };
 
