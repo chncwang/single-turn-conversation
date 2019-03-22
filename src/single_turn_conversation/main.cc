@@ -400,7 +400,10 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
     }
 }
 
-void interact(const HyperParams &hyper_params, ModelParams &model_params) {
+void interact(const DefaultConfig &default_config, const HyperParams &hyper_params,
+        ModelParams &model_params,
+        unordered_map<string, int> &word_counts,
+        int word_cutoff) {
     hyper_params.print();
     while (true) {
         string post;
@@ -408,6 +411,9 @@ void interact(const HyperParams &hyper_params, ModelParams &model_params) {
         vector<string> words;
         split(words, post, is_any_of(" "));
         words.push_back(STOP_SYMBOL);
+        if (default_config.split_unknown_words) {
+            words = reprocessSentence(words, word_counts, word_cutoff);
+        }
 
         Graph graph;
         GraphBuilder graph_builder;
@@ -537,7 +543,8 @@ int main(int argc, char *argv[]) {
     };
     wordStat();
 
-    if (default_config.split_unknown_words) {
+    if (default_config.split_unknown_words && default_config.program_mode ==
+            ProgramMode::TRAINING) {
         post_sentences = reprocessSentences(post_sentences, word_counts, hyper_params.word_cutoff);
         response_sentences = reprocessSentences(response_sentences, word_counts,
                 hyper_params.word_cutoff);
@@ -589,7 +596,8 @@ int main(int argc, char *argv[]) {
 
     if (default_config.program_mode == ProgramMode::INTERACTING) {
         hyper_params.beam_size = beam_size;
-        interact(hyper_params, model_params);
+        interact(default_config, hyper_params, model_params, word_counts,
+                hyper_params.word_cutoff);
     } else if (default_config.program_mode == ProgramMode::DECODING) {
         hyper_params.beam_size = beam_size;
         decodeTestPosts(hyper_params, model_params, test_post_and_responses, post_sentences,
@@ -636,7 +644,7 @@ int main(int argc, char *argv[]) {
         dtype loss_sum = 0.0f;
 
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.SetEnabled(false);
+        profiler.SetEnabled(true);
         profiler.BeginEvent("total");
 
         int iteration = 0;
@@ -649,6 +657,9 @@ int main(int argc, char *argv[]) {
             unique_ptr<Metric> metric = unique_ptr<Metric>(new Metric);
             for (int batch_i = 0; batch_i < train_conversation_pairs.size() /
                     hyper_params.batch_size; ++batch_i) {
+                if (batch_i > 10) {
+                    break;
+                }
                 cout << format("batch_i:%1% iteration:%2%") % batch_i % iteration << endl;
                 Graph graph;
                 vector<shared_ptr<GraphBuilder>> graph_builders;
@@ -771,6 +782,7 @@ int main(int argc, char *argv[]) {
             }
 
             cout << "loss_sum:" << loss_sum << " last_loss_sum:" << endl;
+            break;
             if (loss_sum > last_loss_sum) {
                 if (epoch == 0) {
                     cerr << "loss is larger than last epoch but epoch is 0" << endl;

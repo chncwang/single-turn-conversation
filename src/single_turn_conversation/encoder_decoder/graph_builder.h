@@ -297,6 +297,7 @@ struct GraphBuilder {
         if (word_ids_result.size() < k) {
             std::cerr << boost::format("word_ids_result size is %1%, but beam_size is %2%") %
                 word_ids_result.size() % k << std::endl;
+            abort();
         }
         if (word_ids_result.empty()) {
             return std::make_pair(std::vector<WordIdAndProbability>(), 0.0f);

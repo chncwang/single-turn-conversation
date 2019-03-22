@@ -115,6 +115,34 @@ bool isPureChinese(const string &word) {
     return std::regex_search(word, expression);
 }
 
+vector<string> reprocessSentence(const vector<string> &sentence,
+        const unordered_map<string, int> &word_counts,
+        int min_occurences) {
+    vector<string> processed_sentence;
+    for (const string &word : sentence) {
+        if (isPureChinese(word)) {
+            auto it = word_counts.find(word);
+            int occurence;
+            if (it == word_counts.end()) {
+                cout << format("word not found:%1%\n") % word;
+                occurence = 0;
+            } else {
+                occurence = it->second;
+            }
+            if (occurence <= min_occurences) {
+                for (int i = 0; i < word.size(); i += 3) {
+                    processed_sentence.push_back(word.substr(i, 3));
+                }
+            } else {
+                processed_sentence.push_back(word);
+            }
+        } else {
+            processed_sentence.push_back(word);
+        }
+    }
+    return processed_sentence;
+}
+
 vector<vector<string>> reprocessSentences(const vector<vector<string>> &sentences,
         const unordered_map<string, int> &word_counts,
         int min_occurences) {
@@ -125,29 +153,7 @@ vector<vector<string>> reprocessSentences(const vector<vector<string>> &sentence
         if (i % 1000 == 0) {
             cout << static_cast<float>(i) / sentences.size() << endl;
         }
-        vector<string> processed_sentence;
-        for (const string &word : sentence) {
-            if (isPureChinese(word)) {
-                auto it = word_counts.find(word);
-                int occurence;
-                if (it == word_counts.end()) {
-                    cout << format("word not found:%1%\n") % word;
-                    occurence = 0;
-                } else {
-                    occurence = it->second;
-                }
-                if (occurence <= min_occurences) {
-                    for (int i = 0; i < word.size(); i += 3) {
-                        processed_sentence.push_back(word.substr(i, 3));
-                    }
-                } else {
-                    processed_sentence.push_back(word);
-                }
-            } else {
-                processed_sentence.push_back(word);
-            }
-        }
-        result.push_back(processed_sentence);
+        result.push_back(reprocessSentence(sentence, word_counts, min_occurences));
         ++i;
     }
     return result;

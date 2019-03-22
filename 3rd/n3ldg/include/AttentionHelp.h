@@ -124,6 +124,8 @@ public:
     std::vector<dtype*> ins;
 
     void forward() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("attention forward");
         int count = batch.size();
         in_counts.reserve(count);
         masks.reserve(count);
@@ -170,9 +172,12 @@ public:
             n3ldg_cuda::Assert(n->val.verify("AttentionSoftMaxExecute forward"));
         }
 #endif
+        profiler.EndCudaEvent();
     }
 
     void backward() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("attention backward");
         int count = batch.size();
         std::vector<dtype*> losses, in_losses, unnormed_losses;
         losses.reserve(count);
@@ -213,6 +218,7 @@ public:
             }
         }
 #endif
+        profiler.EndCudaEvent();
     }
 };
 #else
