@@ -9,6 +9,8 @@
 #include <regex>
 #include <iostream>
 #include <utility>
+#include <atomic>
+#include <mutex>
 #include "single_turn_conversation/conversation_structure.h"
 #include "single_turn_conversation/def.h"
 #include "single_turn_conversation/default_config.h"
@@ -16,8 +18,10 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/regex.hpp>
 #include <boost/algorithm/string/regex.hpp>
+#include <boost/asio.hpp>
 
 using boost::format;
+using namespace boost::asio;
 
 std::vector<PostAndResponses> readPostAndResponsesVector(const std::string &filename) {
     DefaultConfig &default_config = GetDefaultConfig();
@@ -119,37 +123,46 @@ vector<vector<string>> reprocessSentences(const vector<vector<string>> &sentence
         const unordered_map<string, int> &word_counts,
         int min_occurences) {
     cout << boost::format("sentences size:%1%") % sentences.size() << endl;
+
+    thread_pool pool(16);
     vector<vector<string>> result;
-    int i = 0;
+    mutex result_mutex;
+    atomic_int i(0);
     for (const auto &sentence : sentences) {
-        if (i % 1000 == 0) {
-            cout << static_cast<float>(i) / sentences.size() << endl;
-        }
-        vector<string> processed_sentence;
-        for (const string &word : sentence) {
-            if (isPureChinese(word)) {
-                auto it = word_counts.find(word);
-                int occurence;
-                if (it == word_counts.end()) {
-                    cout << format("word not found:%1%\n") % word;
-                    occurence = 0;
-                } else {
-                    occurence = it->second;
-                }
-                if (occurence <= min_occurences) {
-                    for (int i = 0; i < word.size(); i += 3) {
-                        processed_sentence.push_back(word.substr(i, 3));
+        auto f = [&]() {
+            if (i % 1000 == 0) {
+                cout << static_cast<float>(i) / sentences.size() << endl;
+            }
+            vector<string> processed_sentence;
+            for (const string &word : sentence) {
+                if (isPureChinese(word)) {
+                    auto it = word_counts.find(word);
+                    int occurence;
+                    if (it == word_counts.end()) {
+                        cout << format("word not found:%1%\n") % word;
+                        occurence = 0;
+                    } else {
+                        occurence = it->second;
+                    }
+                    if (occurence <= min_occurences) {
+                        for (int i = 0; i < word.size(); i += 3) {
+                            processed_sentence.push_back(word.substr(i, 3));
+                        }
+                    } else {
+                        processed_sentence.push_back(word);
                     }
                 } else {
                     processed_sentence.push_back(word);
                 }
-            } else {
-                processed_sentence.push_back(word);
             }
-        }
-        result.push_back(processed_sentence);
-        ++i;
+            result_mutex.lock();
+            result.push_back(processed_sentence);
+            result_mutex.unlock();
+            ++i;
+        };
+        post(pool, f);
     }
+    pool.join();
     return result;
 }
 

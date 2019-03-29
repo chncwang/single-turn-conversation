@@ -61,7 +61,7 @@ std::vector<BeamSearchResult> mostProbableResults(
         return a.final_log_probability > b.final_log_probability;
     };
     std::priority_queue<BeamSearchResult, std::vector<BeamSearchResult>, decltype(cmp)> queue(cmp);
-    int stop_id = model_params.lookup_table.getElemId(STOP_SYMBOL);
+//    int stop_id = model_params.lookup_table.getElemId(STOP_SYMBOL);
     std::vector<BeamSearchResult> results;
     for (int i = 0; i < nodes.size(); ++i) {
         const Node &node = *nodes.at(i);

@@ -26,6 +26,7 @@ class ModelUpdate {
         _alpha = 0.001;
         _eps = 1e-8;
 
+
         _belta1 = 0.9;
         _belta2 = 0.999;
     }
