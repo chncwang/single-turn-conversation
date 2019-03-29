@@ -11,7 +11,10 @@
 #include <sstream>
 #include <fstream>
 #include <string>
+#include <mutex>
+#include <atomic>
 #include <boost/format.hpp>
+#include <boost/asio.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/regex.hpp>
 #include <boost/algorithm/string/regex.hpp>
@@ -30,6 +33,7 @@
 
 using namespace std;
 using namespace cxxopts;
+using namespace boost::asio;
 using boost::is_any_of;
 using boost::format;
 using boost::filesystem::path;
@@ -304,41 +308,50 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
         const vector<vector<string>> &response_sentences) {
     cout << "metricTestPosts begin" << endl;
     hyper_params.print();
-    float rep_perplex = 0.0f;
+    thread_pool pool(16);
+    float rep_perplex(0.0f);
+    mutex rep_perplex_mutex;
+
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
-        cout << "post:" << endl;
-        print(post_sentences.at(post_and_responses.post_id));
+        auto f = [&post_and_responses, &post_sentences, response_sentences, &hyper_params,
+             &model_params, &rep_perplex, &rep_perplex_mutex]() {
+            cout << "post:" << endl;
+            print(post_sentences.at(post_and_responses.post_id));
 
-        const vector<int> &response_ids = post_and_responses.response_ids;
-        float min_perplex = -1.0f;
-        cout << "response size:" << response_ids.size() << endl;
-        for (int response_id : response_ids) {
-//            cout << "response:" << endl;
-//            print(response_sentences.at(response_id));
-            Graph graph;
-            GraphBuilder graph_builder;
-            graph_builder.init(hyper_params);
-            graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id),
-                    hyper_params, model_params, false);
-            shared_ptr<DecoderComponents> decoder_components(buildDecoderComponents());
-            graph_builder.forwardDecoder(graph, *decoder_components,
-                    response_sentences.at(response_id), hyper_params, model_params, false);
-            graph.compute();
-            vector<Node*> nodes = toNodePointers(decoder_components->wordvector_to_onehots);
-            vector<int> word_ids = transferVector<int, string>(response_sentences.at(response_id),
-                    [&](const string &w) -> int {
-                    return model_params.lookup_table.getElemId(w);
-                    });
-            float perplex = computePerplex(nodes, word_ids);
-//            cout << format("perplex:%1%") % perplex << endl;
-            if (min_perplex < 0.0f || perplex < min_perplex) {
-                min_perplex = perplex;
+            const vector<int> &response_ids = post_and_responses.response_ids;
+            float min_perplex = -1.0f;
+            cout << "response size:" << response_ids.size() << endl;
+            for (int response_id : response_ids) {
+                //            cout << "response:" << endl;
+                //            print(response_sentences.at(response_id));
+                Graph graph;
+                GraphBuilder graph_builder;
+                graph_builder.init(hyper_params);
+                graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id),
+                        hyper_params, model_params, false);
+                shared_ptr<DecoderComponents> decoder_components(buildDecoderComponents());
+                graph_builder.forwardDecoder(graph, *decoder_components,
+                        response_sentences.at(response_id), hyper_params, model_params, false);
+                graph.compute();
+                vector<Node*> nodes = toNodePointers(decoder_components->wordvector_to_onehots);
+                vector<int> word_ids = transferVector<int, string>(response_sentences.at(response_id),
+                        [&](const string &w) -> int {
+                        return model_params.lookup_table.getElemId(w);
+                        });
+                float perplex = computePerplex(nodes, word_ids);
+                //            cout << format("perplex:%1%") % perplex << endl;
+                if (min_perplex < 0.0f || perplex < min_perplex) {
+                    min_perplex = perplex;
+                }
             }
-        }
-        cout << "min_perplex:" << min_perplex << endl;
-        rep_perplex += 1.0f / min_perplex;
+            cout << "min_perplex:" << min_perplex << endl;
+            rep_perplex_mutex.lock();
+            rep_perplex += 1.0f / min_perplex;
+            rep_perplex_mutex.unlock();
+        };
+        post(pool, f);
     }
-
+    pool.join();
     cout << "repciprocal perplex:" << rep_perplex << endl;
     return rep_perplex;
 }
