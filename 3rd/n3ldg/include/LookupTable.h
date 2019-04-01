@@ -16,6 +16,9 @@
 #include "Graph.h"
 #include "ModelUpdate.h"
 #include "profiler.h"
+#include "boost/format.hpp"
+
+using boost::format;
 
 class LookupTable : public N3LDGSerializable
 #if USE_GPU
@@ -57,11 +60,11 @@ public:
     }
 
     //initialization by pre-trained embeddings
-    bool init(PAlphabet alpha, const string& inFile, bool fineTune = true, dtype norm = -1) {
+    void init(PAlphabet alpha, const string& inFile, bool fineTune = true, dtype norm = -1) {
         elems = alpha;
         nVSize = elems->size();
         nUNKId = elems->from_string(unknownkey);
-        return initWeights(inFile, fineTune, norm);
+        initWeights(inFile, fineTune, norm);
     }
 
     void initWeights(int dim, bool tune) {
@@ -70,6 +73,7 @@ public:
             abort();
         }
         nDim = dim;
+        cout << format("initWeights dim:%1% vocabulary_size:%2%\n") % nDim % nVSize;
         E.init(nDim, nVSize);
         E.val.random(sqrt(1.0 / nDim));
         //E.val.norm2one();
@@ -80,7 +84,7 @@ public:
     }
 
     // default should be fineTune, just for initialization
-    bool initWeights(const string& inFile, bool tune, dtype norm = -1) {
+    void initWeights(const string& inFile, bool tune, dtype norm = -1) {
         if (nVSize == 0 || !elems->is_fixed() || (nVSize == 1 && nUNKId >= 0)) {
             cout << "nVSize:" << nVSize << " is_fixed:" << elems->is_fixed() << " nUNKId:" <<
                 nUNKId << endl;
@@ -92,8 +96,8 @@ public:
         inf.open(inFile.c_str());
 
         if (!inf.is_open()) {
-            std::cout << "please check the input file" << std::endl;
-            return false;
+            std::cerr << "please check the input file" << std::endl;
+            abort();
         }
 
         string strLine, curWord;
@@ -110,7 +114,8 @@ public:
         }
         inf.close();
         if (sLines.size() == 0) {
-            return false;
+            cerr << "sLines size is 0" << endl;
+            abort();
         }
 
         //find the first line, decide the wordDim;
@@ -120,6 +125,7 @@ public:
         split_bychar(sLines[0], vecInfo, ' ');
         nDim = vecInfo.size() - 1;
 
+        cout << format("nDim:%1% nVSize:%2%") % nDim % nVSize << endl;
         E.init(nDim, nVSize);
 
         std::cout << "word embedding dim is " << nDim << std::endl;
@@ -155,7 +161,7 @@ public:
         if (count == 0) {
             E.val.random(sqrt(3.0 / nDim));
             std::cout << "find no overlapped lexicons in the embedding file" << std::endl;
-            return false;
+            abort();
         }
 
         if (nUNKId >= 0 && !bHasUnknown) {
@@ -188,7 +194,6 @@ public:
 #if USE_GPU
         E.val.copyFromHostToDevice();
 #endif
-        return true;
     }
 
     void exportAdaParams(ModelUpdate& ada) {
@@ -217,6 +222,7 @@ public:
         bFineTune = json["finetune"].asBool();
         nDim = json["dim"].asInt();
         nVSize = json["vocabulary_size"].asInt();
+        cout << "vocabulary_size:" << nVSize << endl;
         nUNKId = json["unkown_id"].asInt();
     }
 };

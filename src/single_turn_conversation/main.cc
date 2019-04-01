@@ -287,14 +287,16 @@ shared_ptr<Json::Value> loadModel(const string &filename) {
     return root;
 }
 
-void loadModel(HyperParams &hyper_params, ModelParams &model_params, const string &filename,
-        const function<void(const HyperParams &hyper_params, ModelParams &model_params)>
-        &allocate_model_params) {
+void loadModel(const DefaultConfig &default_config, HyperParams &hyper_params,
+        ModelParams &model_params,
+        const string &filename,
+        const function<void(const DefaultConfig &default_config, const HyperParams &hyper_params,
+            ModelParams &model_params)> &allocate_model_params) {
     shared_ptr<Json::Value> root_ptr = loadModel(filename);
     Json::Value &root = *root_ptr;
     hyper_params.fromJson(root["hyper_params"]);
     hyper_params.print();
-    allocate_model_params(hyper_params, model_params);
+    allocate_model_params(default_config, hyper_params, model_params);
     model_params.fromJson(root["model_params"]);
 #if USE_GPU
     model_params.copyFromHostToDevice();
@@ -308,13 +310,9 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
         const vector<vector<string>> &response_sentences) {
     cout << "metricTestPosts begin" << endl;
     hyper_params.print();
-    thread_pool pool(16);
     float rep_perplex(0.0f);
-    mutex rep_perplex_mutex;
 
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
-        auto f = [&post_and_responses, &post_sentences, response_sentences, &hyper_params,
-             &model_params, &rep_perplex, &rep_perplex_mutex]() {
             cout << "post:" << endl;
             print(post_sentences.at(post_and_responses.post_id));
 
@@ -334,8 +332,8 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
                         response_sentences.at(response_id), hyper_params, model_params, false);
                 graph.compute();
                 vector<Node*> nodes = toNodePointers(decoder_components->wordvector_to_onehots);
-                vector<int> word_ids = transferVector<int, string>(response_sentences.at(response_id),
-                        [&](const string &w) -> int {
+                vector<int> word_ids = transferVector<int, string>(
+                        response_sentences.at(response_id), [&](const string &w) -> int {
                         return model_params.lookup_table.getElemId(w);
                         });
                 float perplex = computePerplex(nodes, word_ids);
@@ -345,13 +343,8 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
                 }
             }
             cout << "min_perplex:" << min_perplex << endl;
-            rep_perplex_mutex.lock();
             rep_perplex += 1.0f / min_perplex;
-            rep_perplex_mutex.unlock();
-        };
-        post(pool, f);
     }
-    pool.join();
     cout << "repciprocal perplex:" << rep_perplex << endl;
     return rep_perplex;
 }
@@ -568,13 +561,15 @@ int main(int argc, char *argv[]) {
 
     int beam_size = hyper_params.beam_size;
 
-    auto allocate_model_params = [&alphabet](const HyperParams &hyper_params,
-            ModelParams &model_params) {
-        if(hyper_params.word_file == "") {
-            model_params.lookup_table.init(&alphabet, hyper_params.word_dim, true);
-        } else {
+    auto allocate_model_params = [&alphabet](const DefaultConfig &default_config,
+            const HyperParams &hyper_params, ModelParams &model_params) {
+        cout << format("allocate word_file:%1%\n") % hyper_params.word_file;
+        if(hyper_params.word_file != "" && default_config.program_mode == ProgramMode::TRAINING &&
+                default_config.input_model_file == "") {
             model_params.lookup_table.init(&alphabet, hyper_params.word_file,
                     hyper_params.word_finetune);
+        } else {
+            model_params.lookup_table.init(&alphabet, hyper_params.word_dim, true);
         }
         model_params.left_to_right_encoder_params.init(hyper_params.hidden_dim,
                 hyper_params.word_dim);
@@ -593,9 +588,9 @@ int main(int argc, char *argv[]) {
 
     if (default_config.program_mode != ProgramMode::METRIC) {
         if (default_config.input_model_file == "") {
-            allocate_model_params(hyper_params, model_params);
+            allocate_model_params(default_config, hyper_params, model_params);
         } else {
-            loadModel(hyper_params, model_params, default_config.input_model_file,
+            loadModel(default_config, hyper_params, model_params, default_config.input_model_file,
                     allocate_model_params);
         }
     }
@@ -617,6 +612,7 @@ int main(int argc, char *argv[]) {
         float max_rep_perplex = 0.0f;
         for(auto& entry : boost::make_iterator_range(directory_iterator(dir_path), {})) {
             string basic_name = entry.path().filename().string();
+            cout << format("basic_name:%1%") % basic_name << endl;
             if (basic_name.find("model") != 0) {
                 continue;
             }
@@ -625,15 +621,16 @@ int main(int argc, char *argv[]) {
             cout << format("model_file_path:%1%") % model_file_path << endl;
             ModelParams model_params;
             model_params.lookup_table.elems = &alphabet;
-            loadModel(hyper_params, model_params, model_file_path, allocate_model_params);
-            float rep_perplex = metricTestPosts(hyper_params, model_params,
-                    test_post_and_responses, post_sentences, response_sentences);
-            cout << format("model %1% rep_perplex is %2%") % model_file_path % rep_perplex << endl;
-            if (max_rep_perplex < rep_perplex) {
-                max_rep_perplex = rep_perplex;
-                cout << format("best model now is %1%, and rep_perplex is %2%") % model_file_path %
-                    rep_perplex << endl;
-            }
+            loadModel(default_config, hyper_params, model_params, model_file_path,
+                    allocate_model_params);
+//            float rep_perplex = metricTestPosts(hyper_params, model_params,
+//                    test_post_and_responses, post_sentences, response_sentences);
+//            cout << format("model %1% rep_perplex is %2%") % model_file_path % rep_perplex << endl;
+//            if (max_rep_perplex < rep_perplex) {
+//                max_rep_perplex = rep_perplex;
+//                cout << format("best model now is %1%, and rep_perplex is %2%") % model_file_path %
+//                    rep_perplex << endl;
+//            }
         }
     } else if (default_config.program_mode == ProgramMode::TRAINING) {
         ModelUpdate model_update;

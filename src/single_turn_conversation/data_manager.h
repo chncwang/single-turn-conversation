@@ -127,11 +127,15 @@ vector<vector<string>> reprocessSentences(const vector<vector<string>> &sentence
     thread_pool pool(16);
     vector<vector<string>> result;
     mutex result_mutex;
+    mutex cout_mutex;
     atomic_int i(0);
     for (const auto &sentence : sentences) {
-        auto f = [&]() {
+        auto f = [&sentence, &sentences, &i, &result, &result_mutex, &word_counts, &cout_mutex,
+             min_occurences]() {
             if (i % 1000 == 0) {
+                cout_mutex.lock();
                 cout << static_cast<float>(i) / sentences.size() << endl;
+                cout_mutex.unlock();
             }
             vector<string> processed_sentence;
             for (const string &word : sentence) {
@@ -139,7 +143,9 @@ vector<vector<string>> reprocessSentences(const vector<vector<string>> &sentence
                     auto it = word_counts.find(word);
                     int occurence;
                     if (it == word_counts.end()) {
+                        cout_mutex.lock();
                         cout << format("word not found:%1%\n") % word;
+                        cout_mutex.unlock();
                         occurence = 0;
                     } else {
                         occurence = it->second;
