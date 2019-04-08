@@ -5,6 +5,7 @@
 #include <random>
 #include "INIReader.h"
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 #include <iomanip>
 #include <ctime>
@@ -193,6 +194,12 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
     string word_file = ini_reader.Get("hyper", "word_file", "");
     hyper_params.word_file = word_file;
 
+    float l2_reg = ini_reader.GetReal("hyper", "l2_reg", 0.0f);
+    if (l2_reg < 0.0f || l2_reg > 1.0f) {
+        cerr << "l2_reg:" << l2_reg << endl;
+        abort();
+    }
+
     return hyper_params;
 }
 
@@ -200,9 +207,6 @@ vector<int> toIds(const vector<string> &sentence, LookupTable &lookup_table) {
     vector<int> ids;
     for (const string &word : sentence) {
 	int xid = lookup_table.getElemId(word);
-	if(xid < 0 && lookup_table.getElemId(unknownkey) >=0 ){
-	    xid = lookup_table.getElemId(unknownkey);
-	}
         ids.push_back(xid);
     }
     return ids;
@@ -210,7 +214,7 @@ vector<int> toIds(const vector<string> &sentence, LookupTable &lookup_table) {
 
 void printWordIds(const vector<int> &word_ids, const LookupTable &lookup_table) {
     for (int word_id : word_ids) {
-        cout << lookup_table.elems->from_id(word_id) << " ";
+        cout << lookup_table.elems.from_id(word_id) << " ";
     }
     cout << endl;
 }
@@ -311,8 +315,11 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
     cout << "metricTestPosts begin" << endl;
     hyper_params.print();
     float rep_perplex(0.0f);
+    thread_pool pool(16);
+    mutex rep_perplex_mutex;
 
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
+        auto f = [&]() {
             cout << "post:" << endl;
             print(post_sentences.at(post_and_responses.post_id));
 
@@ -343,8 +350,14 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
                 }
             }
             cout << "min_perplex:" << min_perplex << endl;
+            rep_perplex_mutex.lock();
             rep_perplex += 1.0f / min_perplex;
+            rep_perplex_mutex.unlock();
+        };
+        post(pool, f);
     }
+    pool.join();
+
     cout << "repciprocal perplex:" << rep_perplex << endl;
     return rep_perplex;
 }
@@ -435,6 +448,18 @@ void interact(const HyperParams &hyper_params, ModelParams &model_params) {
     }
 }
 
+pair<unordered_set<int>, unordered_set<int>> PostAndResponseIds(
+        const vector<PostAndResponses> &post_and_responses_vector) {
+    unordered_set<int> post_ids, response_ids;
+    for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
+        post_ids.insert(post_and_responses.post_id);
+        for (int id : post_and_responses.response_ids) {
+            response_ids.insert(id);
+        }
+    }
+    return make_pair(post_ids, response_ids);
+}
+
 int main(int argc, char *argv[]) {
     cout << "dtype size:" << sizeof(dtype) << endl;
 
@@ -477,10 +502,13 @@ int main(int argc, char *argv[]) {
     int i = 0;
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
         auto add_to_train = [&]() {
-            train_post_and_responses.push_back(post_and_responses);
-            vector<ConversationPair> conversation_pairs = toConversationPairs(post_and_responses);
-            for (ConversationPair &conversation_pair : conversation_pairs) {
-                train_conversation_pairs.push_back(move(conversation_pair));
+            if (default_config.program_mode == ProgramMode::TRAINING) {
+                train_post_and_responses.push_back(post_and_responses);
+                vector<ConversationPair> conversation_pairs =
+                    toConversationPairs(post_and_responses);
+                for (ConversationPair &conversation_pair : conversation_pairs) {
+                    train_conversation_pairs.push_back(move(conversation_pair));
+                }
             }
         };
         if (i < default_config.dev_size) {
@@ -544,9 +572,11 @@ int main(int argc, char *argv[]) {
     wordStat();
 
     if (default_config.split_unknown_words) {
-        post_sentences = reprocessSentences(post_sentences, word_counts, hyper_params.word_cutoff);
+        auto post_ids_and_response_ids = PostAndResponseIds(post_and_responses_vector);
+        post_sentences = reprocessSentences(post_sentences, word_counts,
+                post_ids_and_response_ids.first, hyper_params.word_cutoff);
         response_sentences = reprocessSentences(response_sentences, word_counts,
-                hyper_params.word_cutoff);
+                post_ids_and_response_ids.second, hyper_params.word_cutoff);
         word_counts.clear();
         wordStat();
     }
@@ -555,8 +585,7 @@ int main(int argc, char *argv[]) {
     word_counts[STOP_SYMBOL] = 1000000000;
     Alphabet alphabet;
     alphabet.init(word_counts, hyper_params.word_cutoff);
-    cout << boost::format("alphabet size:%1% fixed:%2%") % alphabet.size() % alphabet.is_fixed()
-        << endl;
+    cout << boost::format("alphabet size:%1%") % alphabet.size() << endl;
     ModelParams model_params;
 
     int beam_size = hyper_params.beam_size;
@@ -566,10 +595,10 @@ int main(int argc, char *argv[]) {
         cout << format("allocate word_file:%1%\n") % hyper_params.word_file;
         if(hyper_params.word_file != "" && default_config.program_mode == ProgramMode::TRAINING &&
                 default_config.input_model_file == "") {
-            model_params.lookup_table.init(&alphabet, hyper_params.word_file,
+            model_params.lookup_table.init(alphabet, hyper_params.word_file,
                     hyper_params.word_finetune);
         } else {
-            model_params.lookup_table.init(&alphabet, hyper_params.word_dim, true);
+            model_params.lookup_table.init(alphabet, hyper_params.word_dim, true);
         }
         model_params.left_to_right_encoder_params.init(hyper_params.hidden_dim,
                 hyper_params.word_dim);
@@ -620,21 +649,22 @@ int main(int argc, char *argv[]) {
             string model_file_path = entry.path().string();
             cout << format("model_file_path:%1%") % model_file_path << endl;
             ModelParams model_params;
-            model_params.lookup_table.elems = &alphabet;
+            model_params.lookup_table.elems = alphabet;
             loadModel(default_config, hyper_params, model_params, model_file_path,
                     allocate_model_params);
-//            float rep_perplex = metricTestPosts(hyper_params, model_params,
-//                    test_post_and_responses, post_sentences, response_sentences);
-//            cout << format("model %1% rep_perplex is %2%") % model_file_path % rep_perplex << endl;
-//            if (max_rep_perplex < rep_perplex) {
-//                max_rep_perplex = rep_perplex;
-//                cout << format("best model now is %1%, and rep_perplex is %2%") % model_file_path %
-//                    rep_perplex << endl;
-//            }
+            float rep_perplex = metricTestPosts(hyper_params, model_params,
+                    test_post_and_responses, post_sentences, response_sentences);
+            cout << format("model %1% rep_perplex is %2%") % model_file_path % rep_perplex << endl;
+            if (max_rep_perplex < rep_perplex) {
+                max_rep_perplex = rep_perplex;
+                cout << format("best model now is %1%, and rep_perplex is %2%") % model_file_path %
+                    rep_perplex << endl;
+            }
         }
     } else if (default_config.program_mode == ProgramMode::TRAINING) {
         ModelUpdate model_update;
         model_update._alpha = hyper_params.learning_rate;
+        model_update._reg = hyper_params.l2_reg;
         exportToOptimizer(model_params, model_update);
 
         CheckGrad grad_checker;
@@ -728,7 +758,7 @@ int main(int argc, char *argv[]) {
                         if (++count_for_print % 100 == 0) {
                             count_for_print = 0;
                             int post_id = train_conversation_pairs.at(instance_index).post_id;
-                            cout << "post:" << endl;
+                            cout << "post:" << post_id << endl;
                             print(post_sentences.at(post_id));
                             cout << "golden answer:" << endl;
                             printWordIds(word_ids, model_params.lookup_table);

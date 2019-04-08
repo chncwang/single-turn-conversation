@@ -26,7 +26,7 @@ class LookupTable : public N3LDGSerializable
 #endif
 {
 public:
-    PAlphabet elems;
+    Alphabet elems;
     SparseParam E;
     bool bFineTune;
     int nDim;
@@ -36,7 +36,6 @@ public:
     LookupTable() {
         nVSize = 0;
         nDim = 0;
-        elems = NULL;
         nUNKId = -1;
         bFineTune = false;
     }
@@ -51,19 +50,18 @@ public:
     }
 #endif
 
-    //random initization
-    void init(PAlphabet alpha, int dim, bool fineTune = true) {
+    void init(const Alphabet &alpha, int dim, bool fineTune = true) {
         elems = alpha;
-        nVSize = elems->size();
-        nUNKId = elems->from_string(unknownkey);
+        nVSize = elems.size();
+        nUNKId = elems.from_string(unknownkey);
         initWeights(dim, fineTune);
     }
 
     //initialization by pre-trained embeddings
-    void init(PAlphabet alpha, const string& inFile, bool fineTune = true, dtype norm = -1) {
+    void init(const Alphabet &alpha, const string& inFile, bool fineTune = true, dtype norm = -1) {
         elems = alpha;
-        nVSize = elems->size();
-        nUNKId = elems->from_string(unknownkey);
+        nVSize = elems.size();
+        nUNKId = elems.from_string(unknownkey);
         initWeights(inFile, fineTune, norm);
     }
 
@@ -85,9 +83,8 @@ public:
 
     // default should be fineTune, just for initialization
     void initWeights(const string& inFile, bool tune, dtype norm = -1) {
-        if (nVSize == 0 || !elems->is_fixed() || (nVSize == 1 && nUNKId >= 0)) {
-            cout << "nVSize:" << nVSize << " is_fixed:" << elems->is_fixed() << " nUNKId:" <<
-                nUNKId << endl;
+        if (nVSize == 0 || (nVSize == 1 && nUNKId >= 0)) {
+            cout << "nVSize:" << nVSize << " nUNKId:" << nUNKId << endl;
             std::cerr << "please check the alphabet" << std::endl;
             abort();
         }
@@ -101,8 +98,6 @@ public:
         }
 
         string strLine, curWord;
-        int wordId;
-
         vector<string> sLines;
         while (1) {
             if (!my_getline(inf, strLine)) {
@@ -141,9 +136,8 @@ public:
                 std::cout << "error embedding file" << std::endl;
             }
             curWord = vecInfo[0];
-            //we assume the keys are normalized
-            wordId = elems->from_string(curWord);
-            if (wordId >= 0) {
+            if (elems.find_string(curWord)) {
+                int wordId = elems.insert_string(curWord);
                 count++;
                 if (nUNKId == wordId) {
                     bHasUnknown = true;
@@ -204,7 +198,11 @@ public:
 
 
     int getElemId(const string& strFeat) const {
-        return elems->from_string(strFeat);
+        return elems.find_string(strFeat) ? elems.from_string(strFeat) : nUNKId;
+    }
+
+    bool findElemId(const string &str) const {
+        return elems.find_string(str);
     }
 
     Json::Value toJson() const {
@@ -214,6 +212,7 @@ public:
         json["dim"] = nDim;
         json["vocabulary_size"] = nVSize;
         json["unkown_id"] = nUNKId;
+        json["word_ids"] = elems;
         return json;
     }
 
@@ -222,8 +221,8 @@ public:
         bFineTune = json["finetune"].asBool();
         nDim = json["dim"].asInt();
         nVSize = json["vocabulary_size"].asInt();
-        cout << "vocabulary_size:" << nVSize << endl;
         nUNKId = json["unkown_id"].asInt();
+        elems.fromJson(json["word_ids"]);
     }
 };
 
@@ -251,12 +250,14 @@ public:
     //this should be leaf nodes
     void forward(Graph *cg, const string& strNorm) {
         assert(param != NULL);
-        xid = param->getElemId(strNorm);
-        if (xid < 0 && param->nUNKId >= 0) {
+        if (!param->findElemId(strNorm)) {
+            if (param->nUNKId < 0) {
+                cerr << "nUNKId is negative:" << param->nUNKId << endl;
+                abort();
+            }
             xid = param->nUNKId;
-        }
-        if (param->bFineTune && xid < 0) {
-            std::cout << "Caution: unknown words are not modeled !" << std::endl;
+        } else {
+            xid = param->getElemId(strNorm);
         }
         degree = 0;
         cg->addNode(this);

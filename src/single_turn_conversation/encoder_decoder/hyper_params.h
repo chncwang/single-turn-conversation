@@ -16,6 +16,7 @@ struct HyperParams : public N3LDGSerializable {
     int word_cutoff;
     string word_file;
     bool word_finetune;
+    float l2_reg;
 
     Json::Value toJson() const override {
         Json::Value json;
@@ -28,6 +29,7 @@ struct HyperParams : public N3LDGSerializable {
         json["word_cutoff"] = word_cutoff;
         json["word_file"] = word_file;
         json["word_finetune"] = word_finetune;
+        json["l2_reg"] = l2_reg;
         return json;
     }
 
@@ -41,6 +43,7 @@ struct HyperParams : public N3LDGSerializable {
         word_cutoff = json["word_cutoff"].asInt();
         word_file = json["word_file"].asString();
         word_finetune = json["word_finetune"].asBool();
+        l2_reg = json["l2_reg"].asFloat();
     }
 
     void print() const {
@@ -52,7 +55,8 @@ struct HyperParams : public N3LDGSerializable {
             << "learning_rate:" << learning_rate << std::endl
 	    << "word_cutoff:" << word_cutoff << std::endl
 	    << "word_file:" << word_file << std::endl
-    	    << "word_finetune:" << word_finetune << std::endl; 
+    	    << "word_finetune:" << word_finetune << std::endl
+    	    << "l2_reg:" << l2_reg << std::endl; 
     }
 };
 

@@ -40,7 +40,7 @@ void printWordIds(const vector<WordIdAndProbability> &word_ids_with_probability_
     for (const WordIdAndProbability &ids : word_ids_with_probability_vector) {
 //        cout << boost::format("%1%(%2%) ") % lookup_table.elems->from_id(ids.word_id) %
 //            ids.probability;
-        cout << lookup_table.elems->from_id(ids.word_id);
+        cout << lookup_table.elems.from_id(ids.word_id);
     }
     cout << endl;
 }
@@ -261,7 +261,7 @@ struct GraphBuilder {
                 for (BeamSearchResult &beam_search_result : most_probable_results) {
                     const std::vector<WordIdAndProbability> &word_ids = beam_search_result.path;
                     int last_word_id = word_ids.at(word_ids.size() - 1).word_id;
-                    const std::string &word = model_params.lookup_table.elems->from_id(
+                    const std::string &word = model_params.lookup_table.elems.from_id(
                             last_word_id);
                     if (word == STOP_SYMBOL) {
 //                        std::cout << boost::format(

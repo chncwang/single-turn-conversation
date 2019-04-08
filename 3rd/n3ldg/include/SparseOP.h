@@ -18,7 +18,7 @@
 class SparseParams {
   public:
     SparseParam W;
-    PAlphabet elems;
+    Alphabet elems;
     int nVSize;
     int nDim;
 
@@ -26,7 +26,6 @@ class SparseParams {
     SparseParams() {
         nVSize = 0;
         nDim = 0;
-        elems = NULL;
     }
 
     void exportAdaParams(ModelUpdate& ada) {
@@ -43,19 +42,14 @@ class SparseParams {
     }
 
 
-    //random initization
-    void init(PAlphabet alpha, int nOSize) {
+    void init(const Alphabet &alpha, int nOSize) {
         elems = alpha;
-        nVSize = elems->size();
+        nVSize = elems.size();
         initWeights(nOSize);
     }
 
     int getFeatureId(const string& strFeat) {
-        int idx = elems->from_string(strFeat);
-        if(!elems->m_b_fixed && elems->m_size >= nVSize) {
-            std::cout << "Sparse Alphabet stopped collecting features" << std::endl;
-            elems->set_fixed_flag(true);
-        }
+        int idx = elems.from_string(strFeat);
         return idx;
     }
 
