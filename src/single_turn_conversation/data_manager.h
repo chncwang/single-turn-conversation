@@ -121,9 +121,8 @@ bool isPureChinese(const string &word) {
 }
 
 vector<vector<string>> reprocessSentences(const vector<vector<string>> &sentences,
-        const unordered_map<string, int> &word_counts,
-        const unordered_set<int> &ids,
-        int min_occurences) {
+        const unordered_set<string> &words,
+        const unordered_set<int> &ids) {
     cout << boost::format("sentences size:%1%") % sentences.size() << endl;
 
     thread_pool pool(16);
@@ -133,9 +132,6 @@ vector<vector<string>> reprocessSentences(const vector<vector<string>> &sentence
     atomic_int i(0);
     int id = 0;
     for (const auto &sentence : sentences) {
-        if (ids.find(id++) == ids.end()) {
-
-        }
         auto f = [&, id]() {
             if (i % 1000 == 0) {
                 cout_mutex.lock();
@@ -148,17 +144,8 @@ vector<vector<string>> reprocessSentences(const vector<vector<string>> &sentence
             } else {
                 for (const string &word : sentence) {
                     if (isPureChinese(word)) {
-                        auto it = word_counts.find(word);
-                        int occurence;
-                        if (it == word_counts.end()) {
-                            cout_mutex.lock();
-                            cout << format("word not found:%1%\n") % word;
-                            cout_mutex.unlock();
-                            occurence = 0;
-                        } else {
-                            occurence = it->second;
-                        }
-                        if (occurence <= min_occurences) {
+                        auto it = words.find(word);
+                        if (it == words.end()) {
                             for (int i = 0; i < word.size(); i += 3) {
                                 processed_sentence.push_back(word.substr(i, 3));
                             }
@@ -176,6 +163,7 @@ vector<vector<string>> reprocessSentences(const vector<vector<string>> &sentence
             ++i;
         };
         post(pool, f);
+        ++id;
     }
     pool.join();
     return result;

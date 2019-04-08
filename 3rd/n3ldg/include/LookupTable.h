@@ -212,17 +212,18 @@ public:
         json["dim"] = nDim;
         json["vocabulary_size"] = nVSize;
         json["unkown_id"] = nUNKId;
-        json["word_ids"] = elems;
+        json["word_ids"] = elems.toJson();
         return json;
     }
 
     void fromJson(const Json::Value &json) {
-        E.fromJson(json["e"]);
         bFineTune = json["finetune"].asBool();
         nDim = json["dim"].asInt();
         nVSize = json["vocabulary_size"].asInt();
         nUNKId = json["unkown_id"].asInt();
         elems.fromJson(json["word_ids"]);
+        E.init(nDim, nVSize);
+        E.fromJson(json["e"]);
     }
 };
 

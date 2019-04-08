@@ -295,12 +295,12 @@ void loadModel(const DefaultConfig &default_config, HyperParams &hyper_params,
         ModelParams &model_params,
         const string &filename,
         const function<void(const DefaultConfig &default_config, const HyperParams &hyper_params,
-            ModelParams &model_params)> &allocate_model_params) {
+            ModelParams &model_params, const Alphabet*)> &allocate_model_params) {
     shared_ptr<Json::Value> root_ptr = loadModel(filename);
     Json::Value &root = *root_ptr;
     hyper_params.fromJson(root["hyper_params"]);
     hyper_params.print();
-    allocate_model_params(default_config, hyper_params, model_params);
+    allocate_model_params(default_config, hyper_params, model_params, nullptr);
     model_params.fromJson(root["model_params"]);
 #if USE_GPU
     model_params.copyFromHostToDevice();
@@ -522,7 +522,9 @@ int main(int argc, char *argv[]) {
                 add_to_train();
             }
         } else {
-            add_to_train();
+            if (default_config.program_mode == ProgramMode::TRAINING) {
+                add_to_train();
+            }
         }
         ++i;
     }
@@ -533,72 +535,97 @@ int main(int argc, char *argv[]) {
     vector<vector<string>> post_sentences = readSentences(default_config.post_file);
     vector<vector<string>> response_sentences = readSentences(default_config.response_file);
 
-    unordered_map<string, int> word_counts;
-
-    auto wordStat = [&]() {
-        for (const ConversationPair &conversation_pair : train_conversation_pairs) {
-            const vector<string> &post_sentence = post_sentences.at(conversation_pair.post_id);
-            addWord(word_counts, post_sentence);
-
-            const vector<string> &response_sentence = response_sentences.at(
-                    conversation_pair.response_id);
-            addWord(word_counts, response_sentence);
-        }
-
-        if (hyper_params.word_file != "" && !hyper_params.word_finetune) {
-            for (const PostAndResponses &dev : dev_post_and_responses){
-                const vector<string>&post_sentence = post_sentences.at(dev.post_id);
+    Alphabet alphabet;
+    if (default_config.program_mode == ProgramMode::TRAINING &&
+            default_config.input_model_file == "") {
+        unordered_map<string, int> word_counts;
+        auto wordStat = [&]() {
+            for (const ConversationPair &conversation_pair : train_conversation_pairs) {
+                const vector<string> &post_sentence = post_sentences.at(conversation_pair.post_id);
                 addWord(word_counts, post_sentence);
 
-                for(int i=0; i<dev.response_ids.size(); i++){
-                    const vector<string>&resp_sentence = response_sentences.at(
-                            dev.response_ids.at(i));
-                    addWord(word_counts, resp_sentence);
-                }
+                const vector<string> &response_sentence = response_sentences.at(
+                        conversation_pair.response_id);
+                addWord(word_counts, response_sentence);
             }
 
-            for (const PostAndResponses &test : test_post_and_responses){
-                const vector<string>&post_sentence = post_sentences.at(test.post_id);
-                addWord(word_counts, post_sentence);
+            if (hyper_params.word_file != "" && !hyper_params.word_finetune) {
+                for (const PostAndResponses &dev : dev_post_and_responses){
+                    const vector<string>&post_sentence = post_sentences.at(dev.post_id);
+                    addWord(word_counts, post_sentence);
 
-                for(int i =0; i<test.response_ids.size(); i++){
-                    const vector<string>&resp_sentence =
-                        response_sentences.at(test.response_ids.at(i));
-                    addWord(word_counts, resp_sentence);
+                    for(int i=0; i<dev.response_ids.size(); i++){
+                        const vector<string>&resp_sentence = response_sentences.at(
+                                dev.response_ids.at(i));
+                        addWord(word_counts, resp_sentence);
+                    }
                 }
-            } 
-        }
-    };
-    wordStat();
 
-    if (default_config.split_unknown_words) {
-        auto post_ids_and_response_ids = PostAndResponseIds(post_and_responses_vector);
-        post_sentences = reprocessSentences(post_sentences, word_counts,
-                post_ids_and_response_ids.first, hyper_params.word_cutoff);
-        response_sentences = reprocessSentences(response_sentences, word_counts,
-                post_ids_and_response_ids.second, hyper_params.word_cutoff);
-        word_counts.clear();
+                for (const PostAndResponses &test : test_post_and_responses){
+                    const vector<string>&post_sentence = post_sentences.at(test.post_id);
+                    addWord(word_counts, post_sentence);
+
+                    for(int i =0; i<test.response_ids.size(); i++){
+                        const vector<string>&resp_sentence =
+                            response_sentences.at(test.response_ids.at(i));
+                        addWord(word_counts, resp_sentence);
+                    }
+                }
+            }
+        };
         wordStat();
+        if (default_config.split_unknown_words) {
+            unordered_set<string> word_set;
+            for (auto it : word_counts) {
+                word_set.insert(it.first);
+            }
+
+            auto post_ids_and_response_ids = PostAndResponseIds(post_and_responses_vector);
+            post_sentences = reprocessSentences(post_sentences, word_set,
+                    post_ids_and_response_ids.first);
+            response_sentences = reprocessSentences(response_sentences, word_set,
+                    post_ids_and_response_ids.second);
+            word_counts.clear();
+            wordStat();
+        }
+
+        word_counts[unknownkey] = 1000000000;
+        word_counts[STOP_SYMBOL] = 1000000000;
+        alphabet.init(word_counts, hyper_params.word_cutoff);
+        cout << boost::format("alphabet size:%1%") % alphabet.size() << endl;
+    } else if (default_config.split_unknown_words) {
+        shared_ptr<Json::Value> root_ptr = loadModel(default_config.input_model_file);
+        Json::Value &root = *root_ptr;
+        vector<string> words = stringVectorFromJson(
+                root["model_params"]["lookup_table"]["word_ids"]["m_id_to_string"]);
+        unordered_set<string> word_set;
+        for (const string& it : words) {
+            word_set.insert(it);
+        }
+        auto post_ids_and_response_ids = PostAndResponseIds(post_and_responses_vector);
+        post_sentences = reprocessSentences(post_sentences, word_set,
+                post_ids_and_response_ids.first);
+        response_sentences = reprocessSentences(response_sentences, word_set,
+                post_ids_and_response_ids.second);
     }
 
-    word_counts[unknownkey] = 1000000000;
-    word_counts[STOP_SYMBOL] = 1000000000;
-    Alphabet alphabet;
-    alphabet.init(word_counts, hyper_params.word_cutoff);
-    cout << boost::format("alphabet size:%1%") % alphabet.size() << endl;
     ModelParams model_params;
-
     int beam_size = hyper_params.beam_size;
 
-    auto allocate_model_params = [&alphabet](const DefaultConfig &default_config,
-            const HyperParams &hyper_params, ModelParams &model_params) {
+    auto allocate_model_params = [](const DefaultConfig &default_config,
+            const HyperParams &hyper_params,
+            ModelParams &model_params,
+            const Alphabet *alphabet) {
         cout << format("allocate word_file:%1%\n") % hyper_params.word_file;
-        if(hyper_params.word_file != "" && default_config.program_mode == ProgramMode::TRAINING &&
-                default_config.input_model_file == "") {
-            model_params.lookup_table.init(alphabet, hyper_params.word_file,
-                    hyper_params.word_finetune);
-        } else {
-            model_params.lookup_table.init(alphabet, hyper_params.word_dim, true);
+        if (alphabet != nullptr) {
+            if(hyper_params.word_file != "" &&
+                    default_config.program_mode == ProgramMode::TRAINING &&
+                    default_config.input_model_file == "") {
+                model_params.lookup_table.init(*alphabet, hyper_params.word_file,
+                        hyper_params.word_finetune);
+            } else {
+                model_params.lookup_table.init(*alphabet, hyper_params.word_dim, true);
+            }
         }
         model_params.left_to_right_encoder_params.init(hyper_params.hidden_dim,
                 hyper_params.word_dim);
@@ -617,7 +644,7 @@ int main(int argc, char *argv[]) {
 
     if (default_config.program_mode != ProgramMode::METRIC) {
         if (default_config.input_model_file == "") {
-            allocate_model_params(default_config, hyper_params, model_params);
+            allocate_model_params(default_config, hyper_params, model_params, &alphabet);
         } else {
             loadModel(default_config, hyper_params, model_params, default_config.input_model_file,
                     allocate_model_params);
@@ -649,7 +676,6 @@ int main(int argc, char *argv[]) {
             string model_file_path = entry.path().string();
             cout << format("model_file_path:%1%") % model_file_path << endl;
             ModelParams model_params;
-            model_params.lookup_table.elems = alphabet;
             loadModel(default_config, hyper_params, model_params, model_file_path,
                     allocate_model_params);
             float rep_perplex = metricTestPosts(hyper_params, model_params,
