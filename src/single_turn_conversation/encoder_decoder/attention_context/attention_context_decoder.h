@@ -21,17 +21,19 @@ struct AttentionContextDecoderComponents : DecoderComponents {
             bool is_training) override {
         shared_ptr<AttentionBuilder> attention_builder(new AttentionBuilder);
         attention_builder->init(model_params.attention_parrams);
-        Node *guide = decoder.size() == 0 ? static_cast<Node*>(bucket(hyper_params.hidden_dim,
-                    graph)) : static_cast<Node*>(decoder._hiddens.at(decoder.size() - 1));
+        Node *guide = decoder.size() == 0 ?
+            static_cast<Node*>(bucket(hyper_params.decoding_hidden_dim,
+                        graph)) : static_cast<Node*>(decoder._hiddens.at(decoder.size() - 1));
         attention_builder->forward(graph, encoder_hiddens, *guide);
 
         ConcatNode* concat = new ConcatNode;
-        concat->init(hyper_params.word_dim + hyper_params.hidden_dim * 2);
+        concat->init(hyper_params.word_dim + hyper_params.encoding_hidden_dim * 2);
         vector<Node *> ins = {&input, attention_builder->_hidden};
         concat->forward(graph, ins);
 
         decoder.forward(graph, model_params.decoder_params, *concat,
-                *bucket(hyper_params.hidden_dim, graph), *bucket(hyper_params.hidden_dim, graph),
+                *bucket(hyper_params.decoding_hidden_dim, graph),
+                *bucket(hyper_params.decoding_hidden_dim, graph),
                 hyper_params.dropout, is_training);
     }
 };

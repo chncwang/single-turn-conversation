@@ -121,7 +121,7 @@ struct GraphBuilder {
     BucketNode *word_bucket = new BucketNode;
 
     void init(const HyperParams &hyper_params) {
-        hidden_bucket->init(hyper_params.hidden_dim);
+        hidden_bucket->init(hyper_params.encoding_hidden_dim);
         word_bucket->init(hyper_params.word_dim);
     }
 
@@ -166,7 +166,7 @@ struct GraphBuilder {
 
         for (int i = 0; i < size; ++i) {
             ConcatNode* concat_node(new ConcatNode);
-            concat_node->init(2 * hyper_params.hidden_dim);
+            concat_node->init(2 * hyper_params.encoding_hidden_dim);
             std::vector<Node*> nodes = {left_to_right_encoder._hiddens.at(i),
                     right_to_left_encoder._hiddens.at(i)};
             concat_node->forward(graph, nodes);

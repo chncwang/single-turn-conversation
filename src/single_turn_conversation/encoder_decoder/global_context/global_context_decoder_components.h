@@ -25,13 +25,14 @@ struct GlobalContextDecoderComponents : DecoderComponents {
             vector<Node *> &encoder_hiddens,
             bool is_training) override {
         ConcatNode *concat(new ConcatNode);
-        concat->init(hyper_params.word_dim + hyper_params.hidden_dim * 2);
+        concat->init(hyper_params.word_dim + hyper_params.encoding_hidden_dim * 2);
         vector<Node *> ins = {&input, encoder_hiddens.at(encoder_hiddens.size() - 1)};
         concat->forward(graph, ins);
 
         decoder.forward(graph, model_params.decoder_params, *concat,
-                *bucket(hyper_params.hidden_dim, graph), *bucket(hyper_params.hidden_dim, graph),
-                hyper_params.dropout, is_training);
+                *bucket(hyper_params.decoding_hidden_dim, graph),
+                *bucket(hyper_params.decoding_hidden_dim, graph), hyper_params.dropout,
+                is_training);
     }
 };
 

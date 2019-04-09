@@ -147,12 +147,19 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
     }
     hyper_params.word_dim = word_dim;
 
-    int hidden_dim = ini_reader.GetInteger("hyper", "hidden_dim", 0);
-    if (hidden_dim <= 0) {
-        cerr << "hidden_dim wrong" << endl;
+    int encoding_hidden_dim = ini_reader.GetInteger("hyper", "encoding_hidden_dim", 0);
+    if (encoding_hidden_dim <= 0) {
+        cerr << "encoding hidden_dim wrong" << endl;
         abort();
     }
-    hyper_params.hidden_dim = hidden_dim;
+    hyper_params.encoding_hidden_dim = encoding_hidden_dim;
+
+    int decoding_hidden_dim = ini_reader.GetInteger("hyper", "decoding_hidden_dim", 0);
+    if (decoding_hidden_dim <= 0) {
+        cerr << "decoding hidden_dim wrong" << endl;
+        abort();
+    }
+    hyper_params.decoding_hidden_dim = decoding_hidden_dim;
 
     float dropout = ini_reader.GetReal("hyper", "dropout", 0.0);
     if (dropout < -1.0f || dropout >=1.0f) {
@@ -627,19 +634,16 @@ int main(int argc, char *argv[]) {
                 model_params.lookup_table.init(*alphabet, hyper_params.word_dim, true);
             }
         }
-        model_params.left_to_right_encoder_params.init(hyper_params.hidden_dim,
+        model_params.left_to_right_encoder_params.init(hyper_params.encoding_hidden_dim,
                 hyper_params.word_dim);
-        model_params.right_to_left_encoder_params.init(hyper_params.hidden_dim,
+        model_params.right_to_left_encoder_params.init(hyper_params.encoding_hidden_dim,
                 hyper_params.word_dim);
-        model_params.decoder_params.init(hyper_params.hidden_dim,
-                hyper_params.word_dim + 2 * hyper_params.hidden_dim);
+        model_params.decoder_params.init(hyper_params.decoding_hidden_dim,
+                hyper_params.word_dim + 2 * hyper_params.encoding_hidden_dim);
         model_params.hidden_to_wordvector_params.init(hyper_params.word_dim,
-                hyper_params.hidden_dim);
-        model_params.transformed_c0_params.init(hyper_params.hidden_dim,
-                2 * hyper_params.hidden_dim);
-        model_params.transformed_h0_params.init(hyper_params.hidden_dim,
-                2 * hyper_params.hidden_dim);
-        model_params.attention_parrams.init(hyper_params.hidden_dim * 2, hyper_params.hidden_dim);
+                hyper_params.decoding_hidden_dim);
+        model_params.attention_parrams.init(hyper_params.encoding_hidden_dim * 2,
+                hyper_params.decoding_hidden_dim);
     };
 
     if (default_config.program_mode != ProgramMode::METRIC) {
