@@ -476,6 +476,24 @@ pair<unordered_set<int>, unordered_set<int>> PostAndResponseIds(
     return make_pair(post_ids, response_ids);
 }
 
+unordered_set<string> knownWords(const unordered_map<string, int> &word_counts, int word_cutoff) {
+    unordered_set<string> word_set;
+    for (auto it : word_counts) {
+        if (it.second > word_cutoff) {
+            word_set.insert(it.first);
+        }
+    }
+    return word_set;
+}
+
+unordered_set<string> knownWords(const vector<string> &words) {
+    unordered_set<string> word_set;
+    for (const string& w : words) {
+        word_set.insert(w);
+    }
+    return word_set;
+}
+
 int main(int argc, char *argv[]) {
     cout << "dtype size:" << sizeof(dtype) << endl;
 
@@ -552,8 +570,7 @@ int main(int argc, char *argv[]) {
     vector<vector<string>> response_sentences = readSentences(default_config.response_file);
 
     Alphabet alphabet;
-    if (default_config.program_mode == ProgramMode::TRAINING &&
-            default_config.input_model_file == "") {
+    if (default_config.program_mode == ProgramMode::TRAINING) {
         unordered_map<string, int> word_counts;
         auto wordStat = [&]() {
             for (const ConversationPair &conversation_pair : train_conversation_pairs) {
@@ -591,10 +608,7 @@ int main(int argc, char *argv[]) {
         };
         wordStat();
         if (default_config.split_unknown_words) {
-            unordered_set<string> word_set;
-            for (auto it : word_counts) {
-                word_set.insert(it.first);
-            }
+            unordered_set<string> word_set = knownWords(word_counts, hyper_params.word_cutoff);
 
             auto post_ids_and_response_ids = PostAndResponseIds(post_and_responses_vector);
             post_sentences = reprocessSentences(post_sentences, word_set,
@@ -614,10 +628,7 @@ int main(int argc, char *argv[]) {
         Json::Value &root = *root_ptr;
         vector<string> words = stringVectorFromJson(
                 root["model_params"]["lookup_table"]["word_ids"]["m_id_to_string"]);
-        unordered_set<string> word_set;
-        for (const string& it : words) {
-            word_set.insert(it);
-        }
+        unordered_set<string> word_set = knownWords(words);
         auto post_ids_and_response_ids = PostAndResponseIds(post_and_responses_vector);
         post_sentences = reprocessSentences(post_sentences, word_set,
                 post_ids_and_response_ids.first);
