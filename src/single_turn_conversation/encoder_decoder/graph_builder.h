@@ -241,6 +241,7 @@ struct GraphBuilder {
         std::vector<std::pair<std::vector<WordIdAndProbability>, dtype>> word_ids_result;
         std::vector<BeamSearchResult> most_probable_results;
         std::vector<std::string> last_answers;
+        bool succeeded = false;
 
         for (int i = 0;; ++i) {
             last_answers.clear();
@@ -263,12 +264,14 @@ struct GraphBuilder {
                     int last_word_id = word_ids.at(word_ids.size() - 1).word_id;
                     const std::string &word = model_params.lookup_table.elems.from_id(
                             last_word_id);
-                    if (word == STOP_SYMBOL) {
+                    if (word == STOP_SYMBOL || i >= 100) {
 //                        std::cout << boost::format(
 //                                "i:%1% word:%2% most_probable_results size:%3% j:%4%") % i % word %
 //                            most_probable_results.size() % j << std::endl;
                         word_ids_result.push_back(std::make_pair(word_ids,
                                     beam_search_result.final_log_probability));
+                        succeeded = word == STOP_SYMBOL;
+                        break;
                     } else {
                         stop_removed_results.push_back(beam_search_result);
                         last_answers.push_back(word);
@@ -276,11 +279,10 @@ struct GraphBuilder {
                     }
                     ++j;
                 }
-
                 most_probable_results = stop_removed_results;
             }
 
-            if (beam.empty()) {
+            if (beam.empty() || succeeded) {
                 break;
             }
 
@@ -295,7 +297,7 @@ struct GraphBuilder {
         }
 
         if (word_ids_result.size() < k) {
-            std::cerr << boost::format("word_ids_result size is %1%, but beam_size is %2%") %
+            std::cout << boost::format("word_ids_result size is %1%, but beam_size is %2%") %
                 word_ids_result.size() % k << std::endl;
         }
         if (word_ids_result.empty()) {

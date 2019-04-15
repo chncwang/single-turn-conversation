@@ -629,7 +629,9 @@ int main(int argc, char *argv[]) {
         vector<string> words = stringVectorFromJson(
                 root["model_params"]["lookup_table"]["word_ids"]["m_id_to_string"]);
         unordered_set<string> word_set = knownWords(words);
-        auto post_ids_and_response_ids = PostAndResponseIds(post_and_responses_vector);
+        auto &v = default_config.program_mode == ProgramMode::METRIC ? dev_post_and_responses :
+            test_post_and_responses;
+        auto post_ids_and_response_ids = PostAndResponseIds(v);
         post_sentences = reprocessSentences(post_sentences, word_set,
                 post_ids_and_response_ids.first);
         response_sentences = reprocessSentences(response_sentences, word_set,

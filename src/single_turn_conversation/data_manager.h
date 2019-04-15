@@ -127,6 +127,7 @@ vector<vector<string>> reprocessSentences(const vector<vector<string>> &sentence
 
     thread_pool pool(16);
     vector<vector<string>> result;
+    map<int, vector<string>> result_map;
     mutex result_mutex;
     mutex cout_mutex;
     atomic_int i(0);
@@ -158,7 +159,7 @@ vector<vector<string>> reprocessSentences(const vector<vector<string>> &sentence
                 }
             }
             result_mutex.lock();
-            result.push_back(processed_sentence);
+            result_map.insert(make_pair(id, processed_sentence));
             result_mutex.unlock();
             ++i;
         };
@@ -166,6 +167,16 @@ vector<vector<string>> reprocessSentences(const vector<vector<string>> &sentence
         ++id;
     }
     pool.join();
+
+    for (int i = 0; i < sentences.size(); ++i) {
+        auto it = result_map.find(i);
+        if (it == result_map.end()) {
+            cerr << boost::format("id %1% not found\n") % i;
+            abort();
+        }
+        result.push_back(it->second);
+    }
+
     return result;
 }
 
