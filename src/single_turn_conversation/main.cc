@@ -206,6 +206,7 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
         cerr << "l2_reg:" << l2_reg << endl;
         abort();
     }
+    hyper_params.l2_reg = l2_reg;
     string optimzer = ini_reader.Get("hyper", "optimzer", "");
     if (optimzer == "adam") {
         hyper_params.optimizer = Optimizer::ADAM;
