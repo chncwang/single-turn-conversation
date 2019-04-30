@@ -1102,15 +1102,11 @@ cudaError_t MemoryPool::Malloc(void **p, int size) {
     cudaError_t status = cudaErrorMemoryAllocation;
     int loop = 0;
     while (status != cudaSuccess) {
-        //cout << "n:" << n << endl;
         if (free_blocks_.at(n).empty()) {
-            //cout << "free_blocks_.at(n).empty()" << endl;
             int higher_power = n + 1;
-            //cout << "higher_power:" << higher_power << endl;
             while (higher_power <= MAX_BLOCK_POWER && free_blocks_.at(higher_power).empty()) {
                 ++higher_power;
             }
-            //cout << "higher_power:" << higher_power << endl;
             if (higher_power > MAX_BLOCK_POWER) {
                 while (status != cudaSuccess) {
                     status = cudaMalloc(p, fit_size);
@@ -1118,9 +1114,7 @@ cudaError_t MemoryPool::Malloc(void **p, int size) {
                 CallCuda(status);
                 MemoryBlock block(*p, fit_size);
                 busy_blocks_.insert(std::make_pair(*p, block));
-                //cout << "malloc successfully" << endl;
             } else {
-                //cout << "higher_power:" << higher_power << endl;
                 auto &v = free_blocks_.at(higher_power);
                 MemoryBlock &to_split = v.rbegin()->second;
                 int half_size = to_split.size >> 1;

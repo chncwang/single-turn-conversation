@@ -233,10 +233,9 @@ public:
     LookupTable* param;
     int xid;
 
-    LookupNode() {
+    LookupNode() : Node("lookup") {
         xid = -1;
         param = NULL;
-        node_type = "lookup";
     }
 
     void setParam(LookupTable* paramInit) {
@@ -260,7 +259,6 @@ public:
         } else {
             xid = param->getElemId(strNorm);
         }
-        degree = 0;
         cg->addNode(this);
     }
 
@@ -268,7 +266,7 @@ public:
         this->forward(&graph, word);
     }
 
-    PExecute generate();
+    PExecute generate() override;
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) override {
@@ -288,18 +286,18 @@ public:
     }
 
     // for which do no require merge
-    void compute() {
+    void compute() override {
         if (xid >= 0) {
-            param->E.value(xid, val);
+            param->E.value(xid, val());
         } else {
-            val.zero();
+            val().zero();
         }
     }
 
-    void backward() {
+    void backward() override {
         assert(param != NULL);
         if (xid == param->nUNKId || (xid >= 0 && param->bFineTune)) {
-            param->E.loss(xid, loss);
+            param->E.loss(xid, loss());
         }
     }
 };
@@ -320,7 +318,7 @@ public:
         for (int idx = 0; idx < count; idx++) {
             LookupNode *n = static_cast<LookupNode*>(batch[idx]);
             xids.push_back(n->xid);
-            vals.push_back(n->val.value);
+            vals.push_back(n->val().value);
         }
 
         n3ldg_cuda::LookupForward(xids, table->E.val.value, count, dim, vals);
@@ -337,7 +335,7 @@ public:
         std::vector<dtype*> losses;
         losses.reserve(count);
         for (Node *n : batch) {
-            losses.push_back(n->loss.value);
+            losses.push_back(n->loss().value);
         }
         n3ldg_cuda::LookupBackward(xids, table->nUNKId, table->bFineTune,
                 losses,
@@ -367,7 +365,7 @@ PExecute LookupNode::generate() {
     exec->batch.push_back(this);
 #if USE_GPU
     exec->table = param;
-    exec->dim = dim;
+    exec->dim = getDim();
 #endif
     return exec;
 }

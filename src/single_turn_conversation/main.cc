@@ -778,11 +778,11 @@ int main(int argc, char *argv[]) {
                     vector<const dtype *> vals;
                     vector<dtype*> losses;
                     for (const Node *node : result_nodes) {
-                        vals.push_back(node->val.value);
-                        losses.push_back(node->loss.value);
+                        vals.push_back(node->getVal().value);
+                        losses.push_back(node->getLoss().value);
                     }
                     auto result = n3ldg_cuda::SoftMaxLoss(vals, vals.size(),
-                            result_nodes.at(0)->dim, word_ids, hyper_params.batch_size, losses);
+                            result_nodes.at(0)->getDim(), word_ids, hyper_params.batch_size, losses);
 #if TEST_CUDA
                     auto cpu_result = MaxLogProbabilityLoss(result_nodes, word_ids,
                             hyper_params.batch_size);

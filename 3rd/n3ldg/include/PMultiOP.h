@@ -18,10 +18,9 @@ class PMultiNode : public Node {
   public:
     PNode in1, in2;
 
-    PMultiNode() : Node() {
+    PMultiNode() : Node("point-multiply") {
         in1 = NULL;
         in2 = NULL;
-        node_type = "point-multiply";
     }
 
     void forward(Graph &graph, Node &input1, Node &input2) {
@@ -31,19 +30,18 @@ class PMultiNode : public Node {
     void forward(Graph *cg, PNode x1, PNode x2) {
         in1 = x1;
         in2 = x2;
-        degree = 0;
         x1->addParent(this);
         x2->addParent(this);
         cg->addNode(this);
     }
 
     void compute() {
-        val.vec() = in1->val.vec() * in2->val.vec();
+        val().vec() = in1->val().vec() * in2->val().vec();
     }
 
     void backward() {
-        in1->loss.vec() += loss.vec() * in2->val.vec();
-        in2->loss.vec() += loss.vec() * in1->val.vec();
+        in1->loss().vec() += loss().vec() * in2->val().vec();
+        in2->loss().vec() += loss().vec() * in1->val().vec();
     }
 
     // better to rewrite for deep understanding
@@ -70,9 +68,9 @@ public:
         int count = batch.size();
         for (Node *n : batch) {
             PMultiNode *pmulti = static_cast<PMultiNode*>(n);
-            in_vals1.push_back(pmulti->in1->val.value);
-            in_vals2.push_back(pmulti->in2->val.value);
-            vals.push_back(pmulti->val.value);
+            in_vals1.push_back(pmulti->in1->val().value);
+            in_vals2.push_back(pmulti->in2->val().value);
+            vals.push_back(pmulti->val().value);
         }
         n3ldg_cuda::PMultiForward(in_vals1, in_vals2, count, dim, vals);
 #if TEST_CUDA
@@ -94,11 +92,11 @@ public:
         losses2.reserve(count);
         for (Node *n : batch) {
             PMultiNode *pmulti = static_cast<PMultiNode*>(n);
-            losses.push_back(pmulti->loss.value);
-            vals1.push_back(pmulti->in1->val.value);
-            vals2.push_back(pmulti->in2->val.value);
-            losses1.push_back(pmulti->in1->loss.value);
-            losses2.push_back(pmulti->in2->loss.value);
+            losses.push_back(pmulti->loss().value);
+            vals1.push_back(pmulti->in1->val().value);
+            vals2.push_back(pmulti->in2->val().value);
+            losses1.push_back(pmulti->in1->loss().value);
+            losses2.push_back(pmulti->in2->loss().value);
         }
         n3ldg_cuda::PMultiBackward(losses, vals1, vals2, count, dim, losses1, losses2);
 #if TEST_CUDA
@@ -120,7 +118,7 @@ public:
 PExecute PMultiNode::generate() {
     PMultiExecute* exec = new PMultiExecute();
     exec->batch.push_back(this);
-    exec->dim = dim;
+    exec->dim = getDim();
     return exec;
 };
 

@@ -55,17 +55,14 @@ class SparseParams {
 
 };
 
-//only implemented sparse linear node.
-//non-linear transformations are not support,
 class SparseNode : public Node {
   public:
     SparseParams* param;
     vector<int> ins;
 
-    SparseNode() : Node() {
+    SparseNode() : Node("sparsenode") {
         ins.clear();
         param = NULL;
-        node_type = "sparsenode";
     }
 
     void setParam(SparseParams* paramInit) {
@@ -82,18 +79,15 @@ class SparseNode : public Node {
                 ins.push_back(featId);
             }
         }
-        degree = 0;
         cg->addNode(this);
     }
 
     void compute() {
-        param->W.value(ins, val);
+        param->W.value(ins, val());
     }
 
-    //no output losses
     void backward() {
-        //assert(param != NULL);
-        param->W.loss(ins, loss);
+        param->W.loss(ins, loss());
     }
 
     PExecute generate();
