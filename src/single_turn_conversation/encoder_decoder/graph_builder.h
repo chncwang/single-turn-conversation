@@ -67,8 +67,8 @@ std::vector<BeamSearchResult> mostProbableResults(
         const Node &node = *nodes.at(i);
         auto tuple = toExp(node);
 
-        for (int j = 0; j < nodes.at(i)->dim; ++j) {
-            dtype value = node.val.v[j] - std::get<1>(tuple).second;
+        for (int j = 0; j < nodes.at(i)->getDim(); ++j) {
+            dtype value = node.getVal().v[j] - std::get<1>(tuple).second;
             dtype log_probability = value - log(std::get<2>(tuple));
             dtype word_probability = exp(log_probability);
             std::vector<WordIdAndProbability> word_ids;
@@ -138,8 +138,8 @@ struct GraphBuilder {
             input_lookup->setParam(model_params.lookup_table);
             input_lookup->forward(graph, word);
 
-            DropoutNode* dropout_node(new DropoutNode);
-            dropout_node->init(hyper_params.word_dim, hyper_params.dropout);
+            DropoutNode* dropout_node(new DropoutNode(hyper_params.dropout));
+            dropout_node->init(hyper_params.word_dim);
             dropout_node->is_training = is_training;
             dropout_node->forward(graph, *input_lookup);
             encoder_lookups.push_back(dropout_node);
@@ -197,8 +197,8 @@ struct GraphBuilder {
             before_dropout->setParam(model_params.lookup_table);
             before_dropout->forward(graph, *answer);
 
-            DropoutNode* decoder_lookup(new DropoutNode);
-            decoder_lookup->init(hyper_params.word_dim, hyper_params.dropout);
+            DropoutNode* decoder_lookup(new DropoutNode(hyper_params.dropout));
+            decoder_lookup->init(hyper_params.word_dim);
             decoder_lookup->is_training = is_training;
             decoder_lookup->forward(graph, *before_dropout);
             decoder_components.decoder_lookups.push_back(decoder_lookup);

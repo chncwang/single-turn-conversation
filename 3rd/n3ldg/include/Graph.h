@@ -16,8 +16,8 @@ using namespace Eigen;
 int GetDegree(std::map<void*, int> &degree_map, PNode p) {
     auto it = degree_map.find(p);
     if (it == degree_map.end()) {
-        degree_map.insert(std::pair<void*, int>(p, p->degree));
-        return p->degree;
+        degree_map.insert(std::pair<void*, int>(p, p->getDegree()));
+        return p->getDegree();
     } else {
         return it->second;
     }
@@ -26,7 +26,7 @@ int GetDegree(std::map<void*, int> &degree_map, PNode p) {
 void DecreaseDegree(std::map<void*, int> &degree_map, PNode p) {
     auto it = degree_map.find(p);
     if (it == degree_map.end()) {
-        degree_map.insert(std::pair<void*, int>(p, p->degree - 1));
+        degree_map.insert(std::pair<void*, int>(p, p->getDegree() - 1));
     } else {
         --(it->second);
     }
@@ -91,9 +91,9 @@ public:
 
     void addNode(Node *x) {
         static int index;
-        x->node_index = index++;
+        x->setNodeIndex(index++);
         nodes.push_back(x);
-        if (x->degree == 0) {
+        if (x->getDegree() == 0) {
             Insert(x, free_nodes);
         }
         all_nodes.push_back(x);
@@ -102,9 +102,9 @@ public:
         auto it = node_type_depth.find(x_type_hash);
         if (it == node_type_depth.end()) {
             node_type_depth.insert(std::pair<size_t, std::pair<int, int>>(
-                        x_type_hash, std::pair<int, int>(x->depth, 1)));
+                        x_type_hash, std::pair<int, int>(x->getDepth(), 1)));
         } else {
-            it->second.first += x->depth;
+            it->second.first += x->getDepth();
             it->second.second++;
         }
     }
@@ -132,7 +132,7 @@ public:
             }
             Node *first_node = shallow_nodes.at(0);
             if (log) {
-                std::cout << "Graph compute first_node node type:" << first_node->node_type <<
+                std::cout << "Graph compute first_node node type:" << first_node->getNodeType() <<
                     std::endl;
                 std::cout << "node size:" << shallow_nodes.size() << std::endl;
             }
@@ -148,12 +148,12 @@ public:
             //finished nodes
             for (Node* free_node : cur_exec->batch) {
                 finish_nodes.push_back(free_node);
-                for (auto parent_it : free_node->parents) {
-                    if (parent_it->degree <= 0) {
+                for (auto parent_it : free_node->getParents()) {
+                    if (parent_it->getDegree() <= 0) {
                         abort();
                     }
-                    parent_it->degree--;
-                    if (parent_it->degree == 0) {
+                    parent_it->setDegree(parent_it->getDegree());
+                    if (parent_it->getDegree() == 0) {
                         Insert(parent_it, free_nodes);
                     }
                 }
@@ -166,10 +166,10 @@ public:
             int unprocessed = 0;
             for (int idx = 0; idx < total_node_num; idx++) {
                 PNode curNode = all_nodes.at(idx);
-                if (curNode->degree > 0) {
-                    std::cout << "unprocessed node:" << curNode->node_type <<
-                        " degree:" << curNode->degree <<
-                        " name:" << curNode->node_name <<
+                if (curNode->getDegree() > 0) {
+                    std::cout << "unprocessed node:" << curNode->getNodeType() <<
+                        " degree:" << curNode->getDegree() <<
+                        " name:" << curNode->getNodeName() <<
                         std::endl;
                     unprocessed++;
                 }

@@ -31,11 +31,10 @@ public:
     dtype(*activate)(const dtype&);
     dtype(*derivate)(const dtype&, const dtype&);
 
-    ActivateNode() : Node() {
-        in = NULL;
+    ActivateNode() : Node("activate") {
+        in = nullptr;
         activate = ftanh;
         derivate = dtanh;
-        node_type = "activate";
     }
 
     ~ActivateNode() = default;
@@ -47,17 +46,17 @@ public:
 
     void forward(Graph *cg, Node* x) {
         in = x;
-        degree = 0;
         in->addParent(this);
         cg->addNode(this);
     }
 
     void compute() {
-        val.vec() = in->val.vec().unaryExpr(ptr_fun(activate));
+        val().vec() = in->val().vec().unaryExpr(ptr_fun(activate));
     }
 
     void backward() {
-        in->loss.vec() += loss.vec() * in->val.vec().binaryExpr(val.vec(), ptr_fun(derivate));
+        in->loss().vec() += loss().vec() * in->val().vec().binaryExpr(val().vec(),
+                ptr_fun(derivate));
     }
 
     PExecute generate();
@@ -83,13 +82,12 @@ class TanhNode :public Node {
     Node* in;
 
   public:
-    TanhNode() : Node() {
-        in = NULL;
-        node_type = "tanh";
+    TanhNode() : Node("tanh") {
+        in = nullptr;
     }
 
     ~TanhNode() {
-        in = NULL;
+        in = nullptr;
     }
 
   public:
@@ -99,18 +97,17 @@ class TanhNode :public Node {
 
     void forward(Graph *cg, Node* x) {
         in = x;
-        degree = 0;
         in->addParent(this);
         cg->addNode(this);
     }
 
   public:
     void compute() {
-        val.vec() = in->val.vec().unaryExpr(ptr_fun(ftanh));
+        val().vec() = in->val().vec().unaryExpr(ptr_fun(ftanh));
     }
 
     void backward() {
-        in->loss.vec() += loss.vec() * in->val.vec().binaryExpr(val.vec(), ptr_fun(dtanh));
+        in->loss().vec() += loss().vec() * in->val().vec().binaryExpr(val().vec(), ptr_fun(dtanh));
     }
 
   public:
@@ -158,7 +155,7 @@ public:
         //#pragma omp parallel for  
         sumDim = 0;
         for (int idx = 0; idx < count; idx++) {
-            sumDim += batch[idx]->dim;
+            sumDim += batch[idx]->getDim();
         }
 
         x.init(sumDim);
@@ -167,10 +164,10 @@ public:
         int offset = 0;
         for (int idx = 0; idx < count; idx++) {
             TanhNode* ptr = (TanhNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                x[offset + idy] = ptr->in->val[idy];
+            for (int idy = 0; idy < ptr->getDim(); idy++) {
+                x[offset + idy] = ptr->in->val()[idy];
             }
-            offset += ptr->dim;
+            offset += ptr->getDim();
         }
 
         y.vec() = x.vec().unaryExpr(ptr_fun(ftanh));
@@ -178,10 +175,10 @@ public:
         offset = 0;
         for (int idx = 0; idx < count; idx++) {
             TanhNode* ptr = (TanhNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ptr->val[idy] = y[offset + idy];
+            for (int idy = 0; idy < ptr->getDim(); idy++) {
+                ptr->val()[idy] = y[offset + idy];
             }
-            offset += ptr->dim;
+            offset += ptr->getDim();
         }
     }
 #endif
@@ -226,10 +223,10 @@ public:
         int offset = 0;
         for (int idx = 0; idx < count; idx++) {
             TanhNode* ptr = (TanhNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ly[offset + idy] = ptr->loss[idy];
+            for (int idy = 0; idy < ptr->getDim(); idy++) {
+                ly[offset + idy] = ptr->loss()[idy];
             }
-            offset += ptr->dim;
+            offset += ptr->getDim();
         }
 
         lx.vec() = ly.vec() * x.vec().binaryExpr(y.vec(), ptr_fun(dtanh));
@@ -237,10 +234,10 @@ public:
         offset = 0;
         for (int idx = 0; idx < count; idx++) {
             TanhNode* ptr = (TanhNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ptr->in->loss[idy] += lx[offset + idy];
+            for (int idy = 0; idy < ptr->getDim(); idy++) {
+                ptr->in->loss()[idy] += lx[offset + idy];
             }
-            offset += ptr->dim;
+            offset += ptr->getDim();
         }
     }
 #endif
@@ -249,23 +246,21 @@ public:
 PExecute TanhNode::generate() {
     TanhExecute* exec = new TanhExecute();
     exec->batch.push_back(this);
-    exec->dim = dim;
+    exec->dim = getDim();
     return exec;
 };
 
 
 class SigmoidNode :public Node {
-  public:
+public:
     Node* in;
 
-  public:
-    SigmoidNode() : Node() {
-        in = NULL;
-        node_type = "sigmoid";
+    SigmoidNode() : Node("sigmoid") {
+        in = nullptr;
     }
 
     ~SigmoidNode() {
-        in = NULL;
+        in = nullptr;
     }
 
     void forward(Graph &graph, Node &input) {
@@ -274,18 +269,18 @@ class SigmoidNode :public Node {
 
     void forward(Graph *cg, Node* x) {
         in = x;
-        degree = 0;
         in->addParent(this);
         cg->addNode(this);
     }
 
   public:
     void compute() {
-        val.vec() = in->val.vec().unaryExpr(ptr_fun(fsigmoid));
+        val().vec() = in->val().vec().unaryExpr(ptr_fun(fsigmoid));
     }
 
     void backward() {
-        in->loss.vec() += loss.vec() * in->val.vec().binaryExpr(val.vec(), ptr_fun(dsigmoid));
+        in->loss().vec() += loss().vec() * in->val().vec().binaryExpr(val().vec(),
+                ptr_fun(dsigmoid));
     }
 
   public:
@@ -368,7 +363,7 @@ public:
 PExecute SigmoidNode::generate() {
     SigmoidExecute* exec = new SigmoidExecute();
     exec->batch.push_back(this);
-    exec->dim = dim;
+    exec->dim = getDim();
     return exec;
 };
 
@@ -378,29 +373,27 @@ class ReluNode :public Node {
     Node* in;
 
   public:
-    ReluNode() : Node() {
-        in = NULL;
-        node_type = "relu";
+    ReluNode() : Node("relu") {
+        in = nullptr;
     }
 
     ~ReluNode() {
-        in = NULL;
+        in = nullptr;
     }
 
     void forward(Graph *cg, Node* x) {
         in = x;
-        degree = 0;
         in->addParent(this);
         cg->addNode(this);
     }
 
   public:
     void compute() {
-        val.vec() = in->val.vec().unaryExpr(ptr_fun(frelu));
+        val().vec() = in->val().vec().unaryExpr(ptr_fun(frelu));
     }
 
     void backward() {
-        in->loss.vec() += loss.vec() * in->val.vec().binaryExpr(val.vec(), ptr_fun(drelu));
+        in->loss().vec() += loss().vec() * in->val().vec().binaryExpr(val().vec(), ptr_fun(drelu));
     }
 
   public:
@@ -426,38 +419,37 @@ class PDotNode : public Node {
 public:
     Node* in1, *in2;
 
-    PDotNode() : Node() {
-        in1 = NULL;
-        in2 = NULL;
-        dim = 1;
-        node_type = "point-dot";
+    PDotNode() : Node("point-dot", 1) {
+        in1 = nullptr;
+        in2 = nullptr;
     }
 
-    void init() {
-        dim = 1;
+    void init(int dim = 1){
+        if (dim != 1) {
+            abort();
+        }
         Node::init(dim);
     }
 
     void forward(Graph *cg, Node* x1, Node* x2) {
         in1 = x1;
         in2 = x2;
-        degree = 0;
         in1->addParent(this);
         in2->addParent(this);
         cg->addNode(this);
     }
 
     void compute() {
-        val[0] = 0.0;
-        for (int idx = 0; idx < in1->dim; idx++) {
-            val[0] += in1->val[idx] * in2->val[idx];
+        val()[0] = 0.0;
+        for (int idx = 0; idx < in1->getDim(); idx++) {
+            val()[0] += in1->val()[idx] * in2->val()[idx];
         }
     }
 
     void backward() {
-        for (int idx = 0; idx < in1->dim; idx++) {
-            in1->loss[idx] += loss[0] * in2->val[idx];
-            in2->loss[idx] += loss[0] * in1->val[idx];
+        for (int idx = 0; idx < in1->getDim(); idx++) {
+            in1->loss()[idx] += loss()[0] * in2->val()[idx];
+            in2->loss()[idx] += loss()[0] * in1->val()[idx];
         }
     }
 
@@ -544,18 +536,15 @@ PExecute PDotNode::generate() {
 
 class DropoutNode : public Node {
 public:
-    Node* in = NULL;
+    Node* in = nullptr;
     Tensor1D drop_mask;
     dtype drop_value = 0.0f;
     bool is_training = true;
 
-    DropoutNode() {
-        node_type = "dropout";
-    }
+    DropoutNode(dtype dropout) : Node("dropout"), drop_value(dropout) {}
 
-    void init(int dimm, dtype dropout) {
+    void init(int dimm) override {
         Node::init(dimm);
-        drop_value = dropout;
         drop_mask.init(dimm);
     }
 
@@ -567,20 +556,19 @@ public:
 #endif
 
     virtual void generate_dropmask() {
-        int dropNum = (int)(dim * drop_value);
-        std::vector<int> tmp_masks(dim);
-        for (int idx = 0; idx < dim; idx++) {
+        int dropNum = (int)(getDim() * drop_value);
+        std::vector<int> tmp_masks(getDim());
+        for (int idx = 0; idx < getDim(); idx++) {
             tmp_masks[idx] = idx < dropNum ? 0 : 1;
         }
         random_shuffle(tmp_masks.begin(), tmp_masks.end());
-        for (int idx = 0; idx < dim; idx++) {
+        for (int idx = 0; idx < getDim(); idx++) {
             drop_mask[idx] = tmp_masks[idx];
         }
     }
 
     void forward(Graph &graph, Node &x) {
         in = &x;
-        degree = 0;
         in->addParent(this);
         graph.addNode(this);
     }
@@ -594,13 +582,13 @@ public:
             drop_mask = 1 - drop_value;
         }
 //        std::cout << "before compute:" << in->val.toString() << std::endl;
-        val.vec() = in->val.vec() * drop_mask.vec();
+        val().vec() = in->val().vec() * drop_mask.vec();
 //        std::cout << "after compute:" << val.toString() << std::endl;
     }
 
     void backward() override {
 //        std::cout << "before backward:" << loss.toString() << std::endl;
-        in->loss.vec() += loss.vec() * drop_mask.vec();
+        in->loss().vec() += loss().vec() * drop_mask.vec();
 //        std::cout << "after backward:" << in->loss.toString() << std::endl;
     }
 
@@ -701,7 +689,7 @@ PExecute DropoutNode::generate() {
     DropoutExecute* exec = new DropoutExecute();
     exec->batch.push_back(this);
     exec->is_training = is_training;
-    exec->dim = dim;
+    exec->dim = getDim();
     return exec;
 }
 

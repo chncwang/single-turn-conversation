@@ -23,10 +23,9 @@ public:
     vector<int> inDims;
     vector<PNode> ins;
 
-    ConcatNode() : Node() {
+    ConcatNode() : Node("concat") {
         inDims.clear();
         ins.clear();
-        node_type = "concat";
     }
 
     void forward(Graph &cg, const vector<PNode>& x) {
@@ -40,7 +39,6 @@ public:
             ins.push_back(x[i]);
         }
 
-        degree = 0;
         int nSize = ins.size();
         for (int i = 0; i < nSize; ++i) {
             ins[i]->addParent(this);
@@ -48,11 +46,11 @@ public:
         inDims.clear();
         int curDim = 0;
         for (int i = 0; i < nSize; ++i) {
-            inDims.push_back(ins[i]->val.dim);
+            inDims.push_back(ins[i]->val().dim);
             curDim += inDims[i];
         }
-        if (curDim != dim) {
-            std::cout << "input dim size not match" << curDim << "\t" << dim << std::endl;
+        if (curDim != getDim()) {
+            std::cerr << "input dim size not match" << curDim << "\t" << getDim() << std::endl;
             abort();
         }
         cg.addNode(this);
@@ -91,7 +89,7 @@ public:
         int nSize = ins.size();
         int offset = 0;
         for (int i = 0; i < nSize; ++i) {
-            memcpy(val.v + offset, ins.at(i)->val.v,
+            memcpy(val().v + offset, ins.at(i)->val().v,
                     inDims.at(i) * sizeof(dtype));
             offset += inDims[i];
         }
@@ -103,7 +101,7 @@ public:
         int offset = 0;
         for (int i = 0; i < nSize; ++i) {
             for (int idx = 0; idx < inDims[i]; idx++) {
-                ins[i]->loss[idx] += loss[offset + idx];
+                ins[i]->loss()[idx] += loss()[offset + idx];
             }
             offset += inDims[i];
         }

@@ -92,12 +92,11 @@ public:
     dtype(*derivate)(const dtype&, const dtype&);
     Tensor1D ty, lty;
 
-    BiNode() : Node() {
+    BiNode() : Node("bi") {
         in1 = in2 = NULL;
         activate = ftanh;
         derivate = dtanh;
         param = NULL;
-        node_type = "bi";
     }
 
     ~BiNode() {
@@ -126,7 +125,6 @@ public:
     void forward(Graph *cg, PNode x1, PNode x2) {
         in1 = x1;
         in2 = x2;
-        degree = 0;
         in1->addParent(this);
         in2->addParent(this);
         cg->addNode(this);
@@ -137,25 +135,25 @@ public:
     }
 
     void compute() {
-        ty.mat() = param->W1.val.mat() * in1->val.mat() + param->W2.val.mat() * in2->val.mat();
+        ty.mat() = param->W1.val.mat() * in1->val().mat() + param->W2.val.mat() * in2->val().mat();
         if (param->bUseB) {
             ty.vec() += param->b.val.vec();
         }
-        val.vec() = ty.vec().unaryExpr(ptr_fun(activate));
+        val().vec() = ty.vec().unaryExpr(ptr_fun(activate));
     }
 
     void backward() {
-        lty.vec() = loss.vec() * ty.vec().binaryExpr(val.vec(), ptr_fun(derivate));
+        lty.vec() = loss().vec() * ty.vec().binaryExpr(val().vec(), ptr_fun(derivate));
 
-        param->W1.grad.mat() += lty.mat() * in1->val.tmat();
-        param->W2.grad.mat() += lty.mat() * in2->val.tmat();
+        param->W1.grad.mat() += lty.mat() * in1->val().tmat();
+        param->W2.grad.mat() += lty.mat() * in2->val().tmat();
 
         if (param->bUseB) {
             param->b.grad.vec() += lty.vec();
         }
 
-        in1->loss.mat() += param->W1.val.mat().transpose() * lty.mat();
-        in2->loss.mat() += param->W2.val.mat().transpose() * lty.mat();
+        in1->loss().mat() += param->W1.val.mat().transpose() * lty.mat();
+        in2->loss().mat() += param->W2.val.mat().transpose() * lty.mat();
     }
 
   public:
@@ -191,10 +189,9 @@ class LinearBiNode : public Node {
     BiParams* param;
 
   public:
-    LinearBiNode() : Node() {
+    LinearBiNode() : Node("linear_bi") {
         in1 = in2 = NULL;
         param = NULL;
-        node_type = "linear_bi";
     }
 
     void setParam(BiParams* paramInit) {
@@ -204,7 +201,6 @@ class LinearBiNode : public Node {
     void forward(Graph *cg, PNode x1, PNode x2) {
         in1 = x1;
         in2 = x2;
-        degree = 0;
         in1->addParent(this);
         in2->addParent(this);
         cg->addNode(this);
@@ -212,23 +208,23 @@ class LinearBiNode : public Node {
 
   public:
     void compute() {
-        val.mat() = param->W1.val.mat() * in1->val.mat() + param->W2.val.mat() * in2->val.mat();
+        val().mat() = param->W1.val.mat() * in1->val().mat() + param->W2.val.mat() * in2->val().mat();
 
         if (param->bUseB) {
-            val.vec() += param->b.val.vec();
+            val().vec() += param->b.val.vec();
         }
     }
 
     void backward() {
-        param->W1.grad.mat() += loss.mat() * in1->val.tmat();
-        param->W2.grad.mat() += loss.mat() * in2->val.tmat();
+        param->W1.grad.mat() += loss().mat() * in1->val().tmat();
+        param->W2.grad.mat() += loss().mat() * in2->val().tmat();
 
         if (param->bUseB) {
-            param->b.grad.vec() += loss.vec();
+            param->b.grad.vec() += loss().vec();
         }
 
-        in1->loss.mat() += param->W1.val.mat().transpose() * loss.mat();
-        in2->loss.mat() += param->W2.val.mat().transpose() * loss.mat();
+        in1->loss().mat() += param->W1.val.mat().transpose() * loss().mat();
+        in2->loss().mat() += param->W2.val.mat().transpose() * loss().mat();
     }
 
   public:
@@ -274,9 +270,9 @@ class BiExecute :public Execute {
 
         for (int i = 0; i < batch.size(); ++i) {
             BiNode *n = static_cast<BiNode*>(batch.at(i));
-            x1s.push_back(n->in1->val.value);
-            x2s.push_back(n->in2->val.value);
-            ys.push_back(n->val.value);
+            x1s.push_back(n->in1->val().value);
+            x2s.push_back(n->in2->val().value);
+            ys.push_back(n->val().value);
         }
 
         n3ldg_cuda::CopyForBiNodeForward(x1s, x2s, param->b.val.value,
@@ -285,14 +281,14 @@ class BiExecute :public Execute {
         for (int idx = 0; idx < count; idx++) {
             BiNode* ptr = (BiNode*)batch[idx];
             for (int idy = 0; idy < inDim1; idy++) {
-                x1[idx][idy] = ptr->in1->val[idy];
+                x1[idx][idy] = ptr->in1->val()[idy];
             }
             for (int idy = 0; idy < inDim2; idy++) {
-                x2[idx][idy] = ptr->in2->val[idy];
+                x2[idx][idy] = ptr->in2->val()[idy];
             }
             if (param->bUseB) {
                 for (int idy = 0; idy < outDim; idy++) {
-                    b[idx][idy] = param->b.val.v[idy];
+                    b[idx][idy] = param->b.val().v[idy];
                 }
             }
         }
@@ -319,12 +315,12 @@ class BiExecute :public Execute {
         for (int idx = 0; idx < count; idx++) {
             BiNode* ptr = (BiNode*)batch[idx];
             for (int idy = 0; idy < outDim; idy++) {
-                ptr->val[idy] = y[idx][idy];
+                ptr->val()[idy] = y[idx][idy];
             }
         }
 
         for (int i = 0; i < count; ++i) {
-            n3ldg_cuda::Assert(batch[i]->val.verify(
+            n3ldg_cuda::Assert(batch[i]->val().verify(
                         "BiExecute forward batch i val"));
         }
 #endif
@@ -342,10 +338,10 @@ class BiExecute :public Execute {
         for (int idx = 0; idx < count; idx++) {
             BiNode* ptr = (BiNode*)batch[idx];
             for (int idy = 0; idy < inDim1; idy++) {
-                x1[idx][idy] = ptr->in1->val[idy];
+                x1[idx][idy] = ptr->in1->val()[idy];
             }
             for (int idy = 0; idy < inDim2; idy++) {
-                x2[idx][idy] = ptr->in2->val[idy];
+                x2[idx][idy] = ptr->in2->val()[idy];
             }
             if (param->bUseB) {
                 for (int idy = 0; idy < outDim; idy++) {
@@ -365,7 +361,7 @@ class BiExecute :public Execute {
         for (int idx = 0; idx < count; idx++) {
             BiNode* ptr = (BiNode*)batch[idx];
             for (int idy = 0; idy < outDim; idy++) {
-                ptr->val[idy] = y[idx][idy];
+                ptr->val()[idy] = y[idx][idy];
             }
         }
     }
@@ -384,7 +380,7 @@ class BiExecute :public Execute {
         ly_vec.reserve(count);
         for (int i = 0; i < count; ++i) {
             BiNode* ptr = (BiNode*)batch[i];
-            ly_vec.push_back(ptr->loss.value);
+            ly_vec.push_back(ptr->loss().value);
         }
         n3ldg_cuda::ActivatedEnum activated = ToActivatedEnum(activate);
         n3ldg_cuda::CalculateLtyForUniBackward(activated, ly_vec, ty.value,
@@ -393,7 +389,7 @@ class BiExecute :public Execute {
         for (int idx = 0; idx < count; idx++) {
             BiNode* ptr = (BiNode*)batch[idx];
             for (int idy = 0; idy < outDim; idy++) {
-                ly[idx][idy] = ptr->loss[idy];
+                ly[idx][idy] = ptr->loss()[idy];
             }
         }
 
@@ -424,11 +420,11 @@ class BiExecute :public Execute {
         for (int idx = 0; idx < count; idx++) {
             BiNode* ptr = (BiNode*)batch[idx];
 #if TEST_CUDA
-            n3ldg_cuda::Assert(ptr->in1->loss.verify("bi backward in loss"));
-            n3ldg_cuda::Assert(ptr->in2->loss.verify("bi backward in loss"));
+            n3ldg_cuda::Assert(ptr->in1->loss().verify("bi backward in loss"));
+            n3ldg_cuda::Assert(ptr->in2->loss().verify("bi backward in loss"));
 #endif
-            losses1.push_back(ptr->in1->loss.value);
-            losses2.push_back(ptr->in2->loss.value);
+            losses1.push_back(ptr->in1->getLoss().value);
+            losses2.push_back(ptr->in2->getLoss().value);
         }
 #if TEST_CUDA
         n3ldg_cuda::Assert(param->b.grad.verify(
@@ -455,16 +451,16 @@ class BiExecute :public Execute {
         for (int idx = 0; idx < count; idx++) {
             BiNode* ptr = (BiNode*)batch[idx];
             for (int idy = 0; idy < inDim1; idy++) {
-                ptr->in1->loss[idy] += lx1[idx][idy];
+                ptr->in1->loss()[idy] += lx1[idx][idy];
             }
             for (int idy = 0; idy < inDim2; idy++) {
-                ptr->in2->loss[idy] += lx2[idx][idy];
+                ptr->in2->loss()[idy] += lx2[idx][idy];
             }
         }
         for (int idx = 0; idx < count; idx++) {
             BiNode* ptr = (BiNode*)batch[idx];
-            n3ldg_cuda::Assert(ptr->in1->loss.verify("bi in1 loss"));
-            n3ldg_cuda::Assert(ptr->in2->loss.verify("bi in2 loss"));
+            n3ldg_cuda::Assert(ptr->in1->loss().verify("bi in1 loss"));
+            n3ldg_cuda::Assert(ptr->in2->loss().verify("bi in2 loss"));
         }
 #endif
     }
@@ -480,7 +476,7 @@ class BiExecute :public Execute {
         for (int idx = 0; idx < count; idx++) {
             BiNode* ptr = (BiNode*)batch[idx];
             for (int idy = 0; idy < outDim; idy++) {
-                ly[idx][idy] = ptr->loss[idy];
+                ly[idx][idy] = ptr->loss()[idy];
             }
         }
 
@@ -503,10 +499,10 @@ class BiExecute :public Execute {
         for (int idx = 0; idx < count; idx++) {
             BiNode* ptr = (BiNode*)batch[idx];
             for (int idy = 0; idy < inDim1; idy++) {
-                ptr->in1->loss[idy] += lx1[idx][idy];
+                ptr->in1->loss()[idy] += lx1[idx][idy];
             }
             for (int idy = 0; idy < inDim2; idy++) {
-                ptr->in2->loss[idy] += lx2[idx][idy];
+                ptr->in2->loss()[idy] += lx2[idx][idy];
             }
         }
     }

@@ -89,12 +89,11 @@ public:
     dtype(*derivate)(const dtype&, const dtype&);  // derivation function of activation function
     Tensor1D ty, lty;
 
-    UniNode() : Node() {
+    UniNode() : Node("uni") {
         in = NULL;
         activate = ftanh;
         derivate = dtanh;
         param = NULL;
-        node_type = "uni";
     }
 
     ~UniNode() {
@@ -123,26 +122,25 @@ public:
 
     void forward(Graph *cg, PNode x) {
         in = x;
-        degree = 0;
         in->addParent(this);
         cg->addNode(this);
     }
 
     void compute() {
-        ty.mat() = param->W.val.mat() * in->val.mat();
+        ty.mat() = param->W.val.mat() * in->val().mat();
         if (param->bUseB) {
             ty.vec() += param->b.val.vec();
         }
-        val.vec() = ty.vec().unaryExpr(ptr_fun(activate));
+        val().vec() = ty.vec().unaryExpr(ptr_fun(activate));
     }
 
     void backward() {
-        lty.vec() = loss.vec() * ty.vec().binaryExpr(val.vec(), ptr_fun(derivate));
-        param->W.grad.mat() += lty.mat() * in->val.tmat();
+        lty.vec() = loss().vec() * ty.vec().binaryExpr(val().vec(), ptr_fun(derivate));
+        param->W.grad.mat() += lty.mat() * in->val().tmat();
         if (param->bUseB) {
             param->b.grad.vec() += lty.vec();
         }
-        in->loss.mat() += param->W.val.mat().transpose() * lty.mat();
+        in->loss().mat() += param->W.val.mat().transpose() * lty.mat();
     }
 
     PExecute generate();
@@ -181,10 +179,9 @@ public:
     PNode in;
     UniParams* param;
 
-    LinearNode() : Node() {
+    LinearNode() : Node("linear") {
         in = NULL;
         param = NULL;
-        node_type = "linear";
     }
 
     void setParam(UniParams &uni_params) {
@@ -200,7 +197,6 @@ public:
 
     void forward(Graph *cg, PNode x) {
         in = x;
-        degree = 0;
         in->addParent(this);
         cg->addNode(this);
     }
@@ -210,12 +206,12 @@ public:
     }
 
     void compute() {
-        val.mat() = param->W.val.mat() * in->val.mat();
+        val().mat() = param->W.val.mat() * in->val().mat();
     }
 
     void backward() {
-        param->W.grad.mat() += loss.mat() * in->val.tmat();
-        in->loss.mat() += param->W.val.mat().transpose() * loss.mat();
+        param->W.grad.mat() += loss().mat() * in->val().tmat();
+        in->loss().mat() += param->W.val.mat().transpose() * loss().mat();
     }
 
     PExecute generate();
@@ -320,7 +316,7 @@ class UniExecute :public Execute {
         profiler.BeginEvent("uni merge");
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
-            memcpy(x.v + idx * inDim, ptr->in->val.v, inDim * sizeof(dtype));
+            memcpy(x.v + idx * inDim, ptr->in->val().v, inDim * sizeof(dtype));
             if (param->bUseB) {
                 memcpy(b.v + idx * outDim, param->b.val.v,
                         outDim * sizeof(dtype));
@@ -339,7 +335,7 @@ class UniExecute :public Execute {
         profiler.BeginEvent("uni split");
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
-            memcpy(ptr->val.v, y.v + idx * outDim, outDim * sizeof(dtype));
+            memcpy(ptr->val().v, y.v + idx * outDim, outDim * sizeof(dtype));
         }
         profiler.EndEvent();
 
@@ -435,7 +431,7 @@ class UniExecute :public Execute {
         ly.init(outDim, count);
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
-            memcpy(ly.v + idx * outDim, ptr->loss.v, outDim * sizeof(dtype));
+            memcpy(ly.v + idx * outDim, ptr->loss().v, outDim * sizeof(dtype));
         }
 
         lty.vec() = ly.vec() * ty.vec().binaryExpr(y.vec(), ptr_fun(derivate));
@@ -454,7 +450,7 @@ class UniExecute :public Execute {
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
             for (int idy = 0; idy < inDim; idy++) {
-                ptr->in->loss[idy] += lx[idx][idy];
+                ptr->in->loss()[idy] += lx[idx][idy];
             }
         }
 #endif
@@ -624,7 +620,7 @@ class LinearExecute :public Execute {
 
         for (int idx = 0; idx < count; idx++) {
             LinearNode* ptr = (LinearNode*)batch[idx];
-            memcpy(x.v + idx * inDim, ptr->in->val.v, inDim * sizeof(dtype));
+            memcpy(x.v + idx * inDim, ptr->in->val().v, inDim * sizeof(dtype));
             if (param->bUseB) {
                 memcpy(b.v + idx * outDim, param->b.val.v,
                         outDim * sizeof(dtype));
@@ -638,7 +634,7 @@ class LinearExecute :public Execute {
 
         for (int idx = 0; idx < count; idx++) {
             LinearNode* ptr = (LinearNode*)batch[idx];
-            memcpy(ptr->val.v, y.v + idx * outDim, outDim * sizeof(dtype));
+            memcpy(ptr->val().v, y.v + idx * outDim, outDim * sizeof(dtype));
         }
     }
 
@@ -649,7 +645,7 @@ class LinearExecute :public Execute {
 
         for (int idx = 0; idx < count; idx++) {
             LinearNode* ptr = (LinearNode*)batch[idx];
-            memcpy(ly.v + idx * outDim, ptr->loss.v, outDim * sizeof(dtype));
+            memcpy(ly.v + idx * outDim, ptr->loss().v, outDim * sizeof(dtype));
         }
 
         param->W.grad.mat() += ly.mat() * x.mat().transpose();
@@ -667,7 +663,7 @@ class LinearExecute :public Execute {
         for (int idx = 0; idx < count; idx++) {
             LinearNode* ptr = (LinearNode*)batch[idx];
             for (int idy = 0; idy < inDim; idy++) {
-                ptr->in->loss[idy] += lx[idx][idy];
+                ptr->in->loss()[idy] += lx[idx][idy];
             }
         }
     }
@@ -687,9 +683,7 @@ struct LinearWordVectorNode : public Node {
     Node *input;
     SparseParam *param;
 
-    LinearWordVectorNode() : input(nullptr), param(nullptr) {
-        node_type = "linear_word_vector_node";
-    }
+    LinearWordVectorNode() : Node("linear_word_vector_node"), input(nullptr), param(nullptr) {}
 
     void setParam(SparseParam &word_vectors) {
         param = &word_vectors;
@@ -697,7 +691,6 @@ struct LinearWordVectorNode : public Node {
 
     void forward(Graph &graph, Node &in) {
         input = &in;
-        degree = 0;
         in.addParent(this);
         graph.addNode(this);
     }
@@ -857,13 +850,13 @@ struct LinearWordVectorExecute : public Execute {
 
         for (int i = 0; i < count; i++) {
             LinearWordVectorNode* ptr = (LinearWordVectorNode*)batch.at(i);
-            memcpy(x.v + i * inDim, ptr->input->val.v, inDim * sizeof(dtype));
+            memcpy(x.v + i * inDim, ptr->input->val().v, inDim * sizeof(dtype));
         }
         y.mat() = param->val.mat().transpose() * x.mat();
 
         for (int i = 0; i < count; i++) {
             LinearWordVectorNode* ptr = (LinearWordVectorNode*)batch[i];
-            memcpy(ptr->val.v, y.v + i * outDim, outDim * sizeof(dtype));
+            memcpy(ptr->val().v, y.v + i * outDim, outDim * sizeof(dtype));
         }
     }
 
@@ -875,7 +868,7 @@ struct LinearWordVectorExecute : public Execute {
 
         for (int idx = 0; idx < count; idx++) {
             LinearWordVectorNode* ptr = (LinearWordVectorNode*)batch[idx];
-            memcpy(ly.v + idx * outDim, ptr->loss.v, outDim * sizeof(dtype));
+            memcpy(ly.v + idx * outDim, ptr->loss().v, outDim * sizeof(dtype));
         }
 
         param->grad.mat() += x.mat() * ly.mat().transpose();
@@ -885,7 +878,7 @@ struct LinearWordVectorExecute : public Execute {
         for (int idx = 0; idx < count; idx++) {
             LinearWordVectorNode* ptr = (LinearWordVectorNode*)batch[idx];
             for (int idy = 0; idy < inDim; idy++) {
-                ptr->input->loss[idy] += lx[idx][idy];
+                ptr->input->loss()[idy] += lx[idx][idy];
             }
         }
     }

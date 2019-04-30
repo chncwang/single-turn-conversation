@@ -21,9 +21,7 @@ using namespace Eigen;
 
 class BucketNode : public Node {
 public:
-    BucketNode() : Node() {
-        node_type = "bucket";
-    }
+    BucketNode() : Node("bucket") {}
 
     virtual void init(int ndim) {
 #if USE_GPU
@@ -50,10 +48,9 @@ public:
         n3ldg_cuda::Assert(loss.verify("loss verify"));
 #endif
 #else
-        val = value;
-        loss = 0;
+        val() = value;
+        loss() = 0;
 #endif
-        degree = 0;
         cg->addNode(this);
     }
 
@@ -65,15 +62,13 @@ public:
 #if USE_GPU
         n3ldg_cuda::Memset(loss.value, dim, 0.0f);
 #else
-        loss = 0;
+        loss() = 0;
 #endif
-        degree = 0;
         cg->addNode(this);
     }
 
     void forwardArr(Graph *cg, dtype *value) {
-      degree = 0;
-      Vec(val.v, dim) = Vec(value, dim);
+      Vec(val().v, getDim()) = Vec(value, getDim());
       cg->addNode(this);
     }
 

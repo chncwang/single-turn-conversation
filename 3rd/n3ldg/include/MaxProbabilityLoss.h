@@ -23,14 +23,14 @@ std::pair<dtype, std::vector<int>> MaxLogProbabilityLoss(std::vector<Node *> &no
         //std::cout << "sum:" << sum << std::endl;
 
         Tensor1D loss_tensor;
-        loss_tensor.init(node.dim);
+        loss_tensor.init(node.getDim());
         loss_tensor.vec() = exp.vec() / sum;
         int answer = answers.at(i);
         loss_tensor.v[answer] -= 1.0f;
-        node.loss.vec() = loss_tensor.vec().unaryExpr(
+        node.loss().vec() = loss_tensor.vec().unaryExpr(
                 [=](dtype x)->dtype {return x * reverse_batchsize;});
         //std::cout << "max:" << max << " answer v:" << node.val.v[answer] << std::endl;
-        loss += (log(sum) - node.val.v[answer] + max_pair.second) * reverse_batchsize;
+        loss += (log(sum) - node.getVal().v[answer] + max_pair.second) * reverse_batchsize;
     }
 
     return std::make_pair(loss, std::move(results));

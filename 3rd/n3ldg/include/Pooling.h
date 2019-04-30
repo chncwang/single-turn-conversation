@@ -22,16 +22,7 @@ class PoolNode : public Node {
     vector<int> masks;
     vector<PNode> ins;
 
-  public:
-    PoolNode() : Node() {
-        ins.clear();
-        masks.clear();
-    }
-
-    ~PoolNode() {
-        masks.clear();
-        ins.clear();
-    }
+    PoolNode(const string &node_type) : Node(node_type) {}
 
     void init(int ndim) {
         Node::init(ndim);
@@ -44,20 +35,19 @@ class PoolNode : public Node {
   public:
     void forward(Graph *cg, const vector<PNode>& x) {
         if (x.size() == 0) {
-            std::cout << "empty inputs for max|min|sum|avg pooling" << std::endl;
-            return;
+            std::cerr << "empty inputs for max|min|sum|avg pooling" << std::endl;
+            abort();
         }
         int nSize = x.size();
         ins.clear();
         for (int i = 0; i < nSize; i++) {
-            if (x[i]->val.dim != dim) {
+            if (x[i]->val().dim != getDim()) {
                 std::cout << "input matrixes are not matched" << std::endl;
                 abort();
             }
             ins.push_back(x[i]);
         }
 
-        degree = 0;
         for (int i = 0; i < nSize; i++) {
             ins[i]->addParent(this);
         }
@@ -79,35 +69,28 @@ class PoolNode : public Node {
 
     void compute() {
         setMask();
-        for(int i = 0; i < dim; i++) {
+        for(int i = 0; i < getDim(); i++) {
             int mask_i = masks.at(i);
-            val[i] = ins.at(mask_i)->val[i];
+            val()[i] = ins.at(mask_i)->val()[i];
         }
     }
 
     void backward() {
-        for(int i = 0; i < dim; i++) {
-            ins[masks[i]]->loss[i] += loss[i];
+        for(int i = 0; i < getDim(); i++) {
+            ins[masks[i]]->loss()[i] += loss()[i];
         }
     }
 
 };
 
 #if USE_GPU
-class MaxPoolNode : public
-#if TEST_CUDA
-                    PoolNode
-#else
-                    Node
-#endif
+class MaxPoolNode : public PoolNode
 {
 public:
 #if !TEST_CUDA
     vector<PNode> ins;
 #endif
-    MaxPoolNode() {
-        node_type = "max-pooling";
-    }
+    MaxPoolNode(const string &node_type) : PoolNode(node_type) {}
 
 #if TEST_CUDA
     void setMask() {
@@ -169,17 +152,15 @@ public:
 #else
 class MaxPoolNode : public PoolNode {
   public:
-    MaxPoolNode() : PoolNode() {
-        node_type = "max-pooling";
-    }
+    MaxPoolNode() : PoolNode("max-pooling") {}
 
     void setMask() {
         int nSize = ins.size();
 
-        for (int idx = 0; idx < dim; idx++) {
+        for (int idx = 0; idx < getDim(); idx++) {
             int maxIndex = -1;
             for (int i = 0; i < nSize; ++i) {
-                if (maxIndex == -1 || ins[i]->val[idx] > ins[maxIndex]->val[idx]) {
+                if (maxIndex == -1 || ins[i]->val()[idx] > ins[maxIndex]->val()[idx]) {
                     maxIndex = i;
                 }
             }
@@ -265,20 +246,15 @@ public:
 };
 #else
 class MinPoolNode : public PoolNode {
-  public:
-    MinPoolNode() : PoolNode() {
-        node_type = "min-pooling";
-    }
+public:
+    MinPoolNode() : PoolNode("min-pooling") {}
 
-  public:
-    //Be careful that the row is the dim of input vector, and the col is the number of input vectors
-    //Another point is that we change the input vectors directly.
     void setMask() {
         int nSize = ins.size();
-        for (int idx = 0; idx < dim; idx++) {
+        for (int idx = 0; idx < getDim(); idx++) {
             int minIndex = -1;
             for (int i = 0; i < nSize; ++i) {
-                if (minIndex == -1 || ins[i]->val[idx] < ins[minIndex]->val[idx]) {
+                if (minIndex == -1 || ins[i]->val()[idx] < ins[minIndex]->val()[idx]) {
                     minIndex = i;
                 }
             }
@@ -478,34 +454,25 @@ PExecute PoolNode::generate() {
 
 
 class SumPoolNode : public Node {
-  public:
+public:
     vector<PNode> ins;
 
-    ~SumPoolNode() {
-        ins.clear();
-    }
-
-    SumPoolNode() : Node() {
-        ins.clear();
-        node_type = "sum-pool";
-    }
+    SumPoolNode() : Node("sum-pool") {}
 
     void forward(Graph *cg, const vector<PNode>& x) {
         if (x.size() == 0) {
-            std::cout << "empty inputs for add" << std::endl;
-            return;
+            std::cerr << "empty inputs for add" << std::endl;
+            abort();
         }
 
-        ins.clear();
         for (int i = 0; i < x.size(); i++) {
-            if (x[i]->val.dim == dim) {
+            if (x[i]->val().dim == getDim()) {
                 ins.push_back(x[i]);
             } else {
-                std::cout << "dim does not match" << std::endl;
+                std::cerr << "dim does not match" << std::endl;
             }
         }
 
-        degree = 0;
         int nSize = ins.size();
         for (int i = 0; i < nSize; ++i) {
             ins[i]->addParent(this);
@@ -514,190 +481,12 @@ class SumPoolNode : public Node {
         cg->addNode(this);
     }
 
-    void forward(Graph *cg, PNode x1) {
-        ins.clear();
-        if (x1->dim == dim) {
-            ins.push_back(x1);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-
-        degree = 0;
-        int nSize = ins.size();
-        for (int i = 0; i < nSize; ++i) {
-            ins[i]->addParent(this);
-        }
-
-        cg->addNode(this);
-    }
-
-    void forward(Graph *cg, PNode x1, PNode x2) {
-        ins.clear();
-        if (x1->dim == dim) {
-            ins.push_back(x1);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x2->dim == dim) {
-            ins.push_back(x2);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-
-        degree = 0;
-        int nSize = ins.size();
-        for (int i = 0; i < nSize; ++i) {
-            ins[i]->addParent(this);
-        }
-
-        cg->addNode(this);
-    }
-
-    void forward(Graph *cg, PNode x1, PNode x2, PNode x3) {
-        ins.clear();
-        if (x1->dim == dim) {
-            ins.push_back(x1);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x2->dim == dim) {
-            ins.push_back(x2);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x3->dim == dim) {
-            ins.push_back(x3);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-
-        degree = 0;
-        int nSize = ins.size();
-        for (int i = 0; i < nSize; ++i) {
-            ins[i]->addParent(this);
-        }
-
-        cg->addNode(this);
-    }
-
-    void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4) {
-        ins.clear();
-        if (x1->dim == dim) {
-            ins.push_back(x1);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x2->dim == dim) {
-            ins.push_back(x2);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x3->dim == dim) {
-            ins.push_back(x3);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x4->dim == dim) {
-            ins.push_back(x4);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-
-        degree = 0;
-        int nSize = ins.size();
-        for (int i = 0; i < nSize; ++i) {
-            ins[i]->addParent(this);
-        }
-
-        cg->addNode(this);
-    }
-
-    void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4, PNode x5) {
-        ins.clear();
-        if (x1->dim == dim) {
-            ins.push_back(x1);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x2->dim == dim) {
-            ins.push_back(x2);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x3->dim == dim) {
-            ins.push_back(x3);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x4->dim == dim) {
-            ins.push_back(x4);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x5->dim == dim) {
-            ins.push_back(x5);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-
-        degree = 0;
-        int nSize = ins.size();
-        for (int i = 0; i < nSize; ++i) {
-            ins[i]->addParent(this);
-        }
-
-        cg->addNode(this);
-    }
-
-    void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4, PNode x5, PNode x6) {
-        ins.clear();
-        if (x1->dim == dim) {
-            ins.push_back(x1);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x2->dim == dim) {
-            ins.push_back(x2);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x3->dim == dim) {
-            ins.push_back(x3);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x4->dim == dim) {
-            ins.push_back(x4);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x5->dim == dim) {
-            ins.push_back(x5);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x6->dim == dim) {
-            ins.push_back(x6);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-
-        degree = 0;
-        int nSize = ins.size();
-        for (int i = 0; i < nSize; ++i) {
-            ins[i]->addParent(this);
-        }
-
-        cg->addNode(this);
-    }
-
-  public:
     void compute() {
         int nSize = ins.size();
-        val.zero();
+        val().zero();
         for (int i = 0; i < nSize; ++i) {
-            for (int idx = 0; idx < dim; idx++) {
-                val[idx] += ins[i]->val[idx];
+            for (int idx = 0; idx < getDim(); idx++) {
+                val()[idx] += ins[i]->val()[idx];
             }
         }
     }
@@ -706,8 +495,8 @@ class SumPoolNode : public Node {
     void backward() {
         int nSize = ins.size();
         for (int i = 0; i < nSize; ++i) {
-            for (int idx = 0; idx < dim; idx++) {
-                ins[i]->loss[idx] += loss[idx];
+            for (int idx = 0; idx < getDim(); idx++) {
+                ins[i]->loss()[idx] += loss()[idx];
             }
         }
     }
@@ -821,19 +610,11 @@ PExecute SumPoolNode::generate() {
 
 
 class AvgPoolNode : public Node {
-  public:
+public:
     vector<PNode> ins;
 
-    ~AvgPoolNode() {
-        ins.clear();
-    }
+    AvgPoolNode() : Node("avg-pool") {}
 
-    AvgPoolNode() : Node() {
-        ins.clear();
-        node_type = "avg-pool";
-    }
-
-  public:
     void forward(Graph *cg, const vector<PNode>& x) {
         if (x.size() == 0) {
             std::cout << "empty inputs for add" << std::endl;
@@ -842,14 +623,13 @@ class AvgPoolNode : public Node {
 
         ins.clear();
         for (int i = 0; i < x.size(); i++) {
-            if (x[i]->val.dim == dim) {
+            if (x[i]->val().dim == getDim()) {
                 ins.push_back(x[i]);
             } else {
                 std::cout << "dim does not match" << std::endl;
             }
         }
 
-        degree = 0;
         int nSize = ins.size();
         for (int i = 0; i < nSize; ++i) {
             ins[i]->addParent(this);
@@ -858,210 +638,28 @@ class AvgPoolNode : public Node {
         cg->addNode(this);
     }
 
-    void forward(Graph *cg, PNode x1) {
-        ins.clear();
-        if (x1->dim == dim) {
-            ins.push_back(x1);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-
-        degree = 0;
-        int nSize = ins.size();
-        for (int i = 0; i < nSize; ++i) {
-            ins[i]->addParent(this);
-        }
-
-        cg->addNode(this);
-    }
-
-    void forward(Graph *cg, PNode x1, PNode x2) {
-        ins.clear();
-        if (x1->dim == dim) {
-            ins.push_back(x1);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x2->dim == dim) {
-            ins.push_back(x2);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-
-        degree = 0;
-        int nSize = ins.size();
-        for (int i = 0; i < nSize; ++i) {
-            ins[i]->addParent(this);
-        }
-
-        cg->addNode(this);
-    }
-
-    void forward(Graph *cg, PNode x1, PNode x2, PNode x3) {
-        ins.clear();
-        if (x1->dim == dim) {
-            ins.push_back(x1);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x2->dim == dim) {
-            ins.push_back(x2);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x3->dim == dim) {
-            ins.push_back(x3);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-
-        degree = 0;
-        int nSize = ins.size();
-        for (int i = 0; i < nSize; ++i) {
-            ins[i]->addParent(this);
-        }
-
-        cg->addNode(this);
-    }
-
-    void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4) {
-        ins.clear();
-        if (x1->dim == dim) {
-            ins.push_back(x1);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x2->dim == dim) {
-            ins.push_back(x2);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x3->dim == dim) {
-            ins.push_back(x3);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x4->dim == dim) {
-            ins.push_back(x4);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-
-        degree = 0;
-        int nSize = ins.size();
-        for (int i = 0; i < nSize; ++i) {
-            ins[i]->addParent(this);
-        }
-
-        cg->addNode(this);
-    }
-
-    void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4, PNode x5) {
-        ins.clear();
-        if (x1->dim == dim) {
-            ins.push_back(x1);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x2->dim == dim) {
-            ins.push_back(x2);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x3->dim == dim) {
-            ins.push_back(x3);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x4->dim == dim) {
-            ins.push_back(x4);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x5->dim == dim) {
-            ins.push_back(x5);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-
-        degree = 0;
-        int nSize = ins.size();
-        for (int i = 0; i < nSize; ++i) {
-            ins[i]->addParent(this);
-        }
-
-        cg->addNode(this);
-    }
-
-    void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4, PNode x5, PNode x6) {
-        ins.clear();
-        if (x1->dim == dim) {
-            ins.push_back(x1);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x2->dim == dim) {
-            ins.push_back(x2);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x3->dim == dim) {
-            ins.push_back(x3);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x4->dim == dim) {
-            ins.push_back(x4);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x5->dim == dim) {
-            ins.push_back(x5);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-        if (x6->dim == dim) {
-            ins.push_back(x6);
-        } else {
-            std::cout << "dim does not match" << std::endl;
-        }
-
-        degree = 0;
-        int nSize = ins.size();
-        for (int i = 0; i < nSize; ++i) {
-            ins[i]->addParent(this);
-        }
-
-        cg->addNode(this);
-    }
-
-  public:
     void compute() {
         int nSize = ins.size();
-        val.zero();
+        val().zero();
         for (int i = 0; i < nSize; ++i) {
-            for (int idx = 0; idx < dim; idx++) {
-                val[idx] += ins[i]->val[idx] * 1.0 / nSize;
+            for (int idx = 0; idx < getDim(); idx++) {
+                val()[idx] += ins[i]->val()[idx] * 1.0 / nSize;
             }
         }
 
     }
-
 
     void backward() {
         int nSize = ins.size();
         for (int i = 0; i < nSize; ++i) {
-            for (int idx = 0; idx < dim; idx++) {
-                ins[i]->loss[idx] += loss[idx] * 1.0 / nSize;
+            for (int idx = 0; idx < getDim(); idx++) {
+                ins[i]->loss()[idx] += loss()[idx] * 1.0 / nSize;
             }
         }
     }
 
-
-  public:
     PExecute generate();
 
-    // better to rewrite for deep understanding
     bool typeEqual(PNode other) {
         return Node::typeEqual(other);
     }

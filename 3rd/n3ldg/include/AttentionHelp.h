@@ -22,9 +22,7 @@ public:
     vector<Node *> unnormeds;
     vector<Node *> ins;
 
-    AttentionSoftMaxNode() : Node() {
-        node_type = "AttentionSoftmax";
-    }
+    AttentionSoftMaxNode() : Node("AttentionSoftmax") {}
 
     void init(int ndim) {
         Node::init(ndim);
@@ -43,7 +41,7 @@ public:
         }
         int nSize = x.size();
         for (int i = 0; i < nSize; i++) {
-            if (x.at(i)->val.dim != dim || a.at(i)->val.dim != 1) {
+            if (x.at(i)->val().dim != getDim() || a.at(i)->val().dim != 1) {
                 std::cerr << "input matrixes are not matched" << std::endl;
                 abort();
             }
@@ -51,7 +49,6 @@ public:
             unnormeds.push_back(a.at(i));
         }
 
-        degree = 0;
         for (int i = 0; i < nSize; i++) {
             ins.at(i)->addParent(this);
             unnormeds.at(i)->addParent(this);
@@ -73,7 +70,7 @@ public:
 
         sum = 0;
         for (int i = 0; i < nSize; ++i) {
-            unnormed_masks.at(i) = fexp(unnormeds.at(i)->val[0]);
+            unnormed_masks.at(i) = fexp(unnormeds.at(i)->val()[0]);
             sum += unnormed_masks.at(i);
         }
 
@@ -81,9 +78,9 @@ public:
             masks.at(i) = unnormed_masks.at(i) / sum;
         }
 
-        val.zero();
+        val().zero();
         for (int i = 0; i < nSize; ++i) {
-            val.vec() += masks.at(i) * ins.at(i)->val.vec();
+            val().vec() += masks.at(i) * ins.at(i)->val().vec();
         }
     }
 
@@ -91,18 +88,18 @@ public:
         int nSize = ins.size();
         mask_losses.resize(nSize);
         for (int i = 0; i < nSize; i++) {
-            ins.at(i)->loss.vec() += loss.vec() * masks.at(i);
+            ins.at(i)->loss().vec() += loss().vec() * masks.at(i);
             mask_losses.at(i) = 0;
-            for (int idx = 0; idx < dim; idx++) {
-                mask_losses.at(i) += loss[idx] * ins.at(i)->val[idx];
+            for (int idx = 0; idx < getDim(); idx++) {
+                mask_losses.at(i) += loss()[idx] * ins.at(i)->val()[idx];
             }
         }
 
         for (int i = 0; i < nSize; i++) {
             for (int j = 0; j < nSize; j++) {
-                unnormeds.at(i)->loss[0] -= masks.at(i) * masks.at(j) * mask_losses.at(j);
+                unnormeds.at(i)->loss()[0] -= masks.at(i) * masks.at(j) * mask_losses.at(j);
                 if (i == j) {
-                    unnormeds.at(i)->loss[0] += masks.at(i) * mask_losses.at(i);
+                    unnormeds.at(i)->loss()[0] += masks.at(i) * mask_losses.at(i);
                 }
             }
         }
@@ -238,10 +235,9 @@ class AttentionSoftMaxVNode : public Node {
     vector<Node *> ins;
 
   public:
-    AttentionSoftMaxVNode() : Node() {
+    AttentionSoftMaxVNode() : Node("AttentionSoftmaxV") {
         ins.clear();
         unnormeds.clear();
-        node_type = "AttentionSoftmaxV";
     }
 
     ~AttentionSoftMaxVNode() {
@@ -276,26 +272,25 @@ class AttentionSoftMaxVNode : public Node {
   public:
     void forward(Graph *cg, const vector<Node *>& x, const vector<Node *>& a) {
         if (x.size() == 0) {
-            std::cout << "empty inputs for attention help node" << std::endl;
-            return;
+            std::cerr << "empty inputs for attention help node" << std::endl;
+            abort();
         }
         if (x.size() != a.size()) {
-            std::cout << "the number of input nodes does not equal the number of attention factors." << std::endl;
-            return;
+            std::cerr << "the number of input nodes does not equal the number of attention factors." << std::endl;
+            abort();
         }
         int nSize = x.size();
         ins.clear();
         unnormeds.clear();
         for (int i = 0; i < nSize; i++) {
-            if (x.at(i)->val.dim != dim || a.at(i)->val.dim != dim) {
-                std::cout << "input matrixes are not matched" << std::endl;
+            if (x.at(i)->val().dim != getDim() || a.at(i)->val().dim != getDim()) {
+                std::cerr << "input matrixes are not matched" << std::endl;
                 abort();
             }
             ins.push_back(x.at(i));
             unnormeds.push_back(a.at(i));
         }
 
-        degree = 0;
         for (int i = 0; i < nSize; i++) {
             ins.at(i)->addParent(this);
             unnormeds.at(i)->addParent(this);
@@ -320,7 +315,7 @@ class AttentionSoftMaxVNode : public Node {
 
         sum.zero();
         for (int i = 0; i < nSize; ++i) {
-            unnormed_masks.at(i).vec() = unnormeds.at(i)->val.vec().unaryExpr(ptr_fun(fexp));
+            unnormed_masks.at(i).vec() = unnormeds.at(i)->val().vec().unaryExpr(ptr_fun(fexp));
             sum.vec() += unnormed_masks.at(i).vec();
         }
 
@@ -328,25 +323,25 @@ class AttentionSoftMaxVNode : public Node {
             masks.at(i).vec() = unnormed_masks.at(i).vec() / sum.vec();
         }
 
-        val.zero();
+        val().zero();
         for (int i = 0; i < nSize; ++i) {
-            val.vec() += masks.at(i).vec() * ins.at(i)->val.vec();
+            val().vec() += masks.at(i).vec() * ins.at(i)->val().vec();
         }
     }
 
     void backward() {
         int nSize = ins.size();
         for (int i = 0; i < nSize; i++) {
-            ins.at(i)->loss.vec() += loss.vec() * masks.at(i).vec();
-            mask_losses.at(i).vec() = loss.vec() * ins.at(i)->val.vec();
+            ins.at(i)->loss().vec() += loss().vec() * masks.at(i).vec();
+            mask_losses.at(i).vec() = loss().vec() * ins.at(i)->val().vec();
         }
 
-        for (int idx = 0; idx < dim; idx++) {
+        for (int idx = 0; idx < getDim(); idx++) {
             for (int i = 0; i < nSize; i++) {
                 for (int j = 0; j < nSize; j++) {
-                    unnormeds.at(i)->loss[idx] -= masks.at(i)[idx] * masks.at(j)[idx] * mask_losses[j][idx];
+                    unnormeds.at(i)->loss()[idx] -= masks.at(i)[idx] * masks.at(j)[idx] * mask_losses[j][idx];
                     if (i == j) {
-                        unnormeds.at(i)->loss[idx] += masks[i][idx] * mask_losses[i][idx];
+                        unnormeds.at(i)->loss()[idx] += masks[i][idx] * mask_losses[i][idx];
                     }
                 }
             }
@@ -471,7 +466,6 @@ class AttentionSoftMaxVExecute : public Execute {
   public:
     void  forward() {
         int count = batch.size();
-        //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
         }
@@ -479,7 +473,6 @@ class AttentionSoftMaxVExecute : public Execute {
 
     void backward() {
         int count = batch.size();
-        //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->backward();
         }
