@@ -6,7 +6,7 @@
 *  basic processing unit in a neural network
 *  (1) we have a node structure to build user graph
 *  (2) we have a execute structure to merge similar nodes that can be execute together
-*  The real forward and backward are defined in Execute.
+*  The real forward and backward are defined in Executor.
 *  Every operation should define a node class and a execute class together.
 *
 *  Created on: Apr 21, 2017
@@ -108,7 +108,7 @@ dtype fselu(const dtype& x) {
     return lambda * x;
 }
 
-class Execute;
+class Executor;
 
 class Node {
 public:
@@ -142,7 +142,7 @@ public:
     virtual void compute() = 0;
     virtual void backward() = 0;
 
-    virtual Execute* generate() = 0;
+    virtual Executor* generate() = 0;
 
     virtual bool typeEqual(Node* other) {
         if (node_type_.compare(other->node_type_) != 0) {
@@ -275,14 +275,18 @@ void clearNodes(std::vector<Node*> &nodes, int dim) {
 }
 #endif
 
-class Execute {
+class Executor {
 public:
     std::vector<PNode> batch;
 #if USE_GPU
     void *graph_info;
 #endif
 
-    virtual ~Execute() = default;
+    virtual ~Executor() = default;
+
+    int getDim() const {
+        return batch.at(batch.size() - 1)->getDim();
+    }
 
     void forwardFully() {
         forward();
@@ -323,7 +327,7 @@ protected:
     }
 };
 
-typedef  Execute* PExecute;
+typedef  Executor* PExecutor;
 
 #if USE_GPU
 

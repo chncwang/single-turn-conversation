@@ -57,7 +57,7 @@ public:
         cg.addNode(this);
     }
 
-    PExecute generate();
+    PExecutor generate();
 
     bool typeEqual(Node * other) {
         return Node::typeEqual(other);
@@ -111,7 +111,7 @@ public:
 
 
 #if USE_GPU
-class AttentionSoftMaxExecute : public Execute {
+class AttentionSoftMaxExecutor : public Executor {
 public:
     int dim;
     std::vector<int> in_counts;
@@ -164,7 +164,7 @@ public:
 #if TEST_CUDA
         for (Node *n : batch) {
             n->compute();
-            n3ldg_cuda::Assert(n->val.verify("AttentionSoftMaxExecute forward"));
+            n3ldg_cuda::Assert(n->val.verify("AttentionSoftMaxExecutor forward"));
         }
 #endif
     }
@@ -201,23 +201,23 @@ public:
             AttentionSoftMaxNode *att = static_cast<AttentionSoftMaxNode*>(n);
             for (Node *in : att->ins) {
                 n3ldg_cuda::Assert(in->loss.verify(
-                            "AttentionSoftMaxExecute backward ins"));
+                            "AttentionSoftMaxExecutor backward ins"));
             }
 
             for (Node *un : att->unnormeds) {
                 n3ldg_cuda::Assert(un->loss.verify(
-                            "AttentionSoftMaxExecute backward unnormeds"));
+                            "AttentionSoftMaxExecutor backward unnormeds"));
             }
         }
 #endif
     }
 };
 #else
-class AttentionSoftMaxExecute : public Execute {};
+class AttentionSoftMaxExecutor : public Executor {};
 #endif
 
-PExecute AttentionSoftMaxNode::generate() {
-    AttentionSoftMaxExecute* exec = new AttentionSoftMaxExecute();
+PExecutor AttentionSoftMaxNode::generate() {
+    AttentionSoftMaxExecutor* exec = new AttentionSoftMaxExecutor();
     exec->batch.push_back(this);
 #if USE_GPU
     exec->dim = getDim();
@@ -301,7 +301,7 @@ class AttentionSoftMaxVNode : public Node {
 
 
   public:
-    PExecute generate();
+    PExecutor generate();
 
     // better to rewrite for deep understanding
     bool typeEqual(Node * other) {
@@ -353,7 +353,7 @@ class AttentionSoftMaxVNode : public Node {
 };
 
 #if USE_GPU
-class AttentionSoftMaxVExecute : public Execute {
+class AttentionSoftMaxVExecutor : public Executor {
 public:
     int dim;
     std::vector<int> in_counts;
@@ -390,11 +390,11 @@ public:
             vals.push_back(att->val().value);
             for (int i = 0; i < att->ins.size(); ++i) {
 #if TEST_CUDA
-                n3ldg_cuda::Assert(att->ins.at(i)->val.verify("AttentionSoftMaxVExecute forward initial val"));
+                n3ldg_cuda::Assert(att->ins.at(i)->val.verify("AttentionSoftMaxVExecutor forward initial val"));
 #endif
                 ins.push_back(att->ins.at(i)->val().value);
 #if TEST_CUDA
-                n3ldg_cuda::Assert(att->unnormeds.at(i)->val.verify("AttentionSoftMaxVExecute forward  initial unnormeds"));
+                n3ldg_cuda::Assert(att->unnormeds.at(i)->val.verify("AttentionSoftMaxVExecutor forward  initial unnormeds"));
 #endif
                 unnormeds.push_back(att->unnormeds.at(i)->val().value);
             }
@@ -413,7 +413,7 @@ public:
 #if TEST_CUDA
         for (Node *n : batch) {
             n->compute();
-            n3ldg_cuda::Assert(n->val.verify("AttentionSoftMaxVExecute forward"));
+            n3ldg_cuda::Assert(n->val.verify("AttentionSoftMaxVExecutor forward"));
         }
 #endif
     }
@@ -450,19 +450,19 @@ public:
             AttentionSoftMaxVNode *att = static_cast<AttentionSoftMaxVNode*>(n);
             for (Node *in : att->ins) {
                 n3ldg_cuda::Assert(in->loss.verify(
-                            "AttentionSoftMaxExecute backward ins"));
+                            "AttentionSoftMaxExecutor backward ins"));
             }
 
             for (Node *un : att->unnormeds) {
                 n3ldg_cuda::Assert(un->loss.verify(
-                            "AttentionSoftMaxExecute backward unnormeds"));
+                            "AttentionSoftMaxExecutor backward unnormeds"));
             }
         }
 #endif
     }
 };
 #else
-class AttentionSoftMaxVExecute : public Execute {
+class AttentionSoftMaxVExecutor : public Executor {
   public:
     void  forward() {
         int count = batch.size();
@@ -480,8 +480,8 @@ class AttentionSoftMaxVExecute : public Execute {
 };
 #endif
 
-PExecute AttentionSoftMaxVNode::generate() {
-    AttentionSoftMaxVExecute* exec = new AttentionSoftMaxVExecute();
+PExecutor AttentionSoftMaxVNode::generate() {
+    AttentionSoftMaxVExecutor* exec = new AttentionSoftMaxVExecutor();
     exec->batch.push_back(this);
 #if USE_GPU
     exec->dim = getDim();

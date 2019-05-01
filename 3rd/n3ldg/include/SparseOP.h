@@ -90,7 +90,7 @@ class SparseNode : public Node {
         param->W.loss(ins, loss());
     }
 
-    PExecute generate();
+    PExecutor generate();
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) {
@@ -107,10 +107,10 @@ class SparseNode : public Node {
 
 };
 
-class SparseExecute :public Execute {};
+class SparseExecutor :public Executor {};
 
-PExecute SparseNode::generate() {
-    SparseExecute* exec = new SparseExecute();
+PExecutor SparseNode::generate() {
+    SparseExecutor* exec = new SparseExecutor();
     exec->batch.push_back(this);
     return exec;
 }

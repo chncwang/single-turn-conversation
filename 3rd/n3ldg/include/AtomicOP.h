@@ -59,7 +59,7 @@ public:
                 ptr_fun(derivate));
     }
 
-    PExecute generate();
+    PExecutor generate();
 
     bool typeEqual(Node* other) {
         bool result = Node::typeEqual(other);
@@ -68,11 +68,11 @@ public:
 };
 
 
-class ActivateExecute :public Execute {
+class ActivateExecutor :public Executor {
 };
 
-PExecute ActivateNode::generate() {
-    ActivateExecute* exec = new ActivateExecute();
+PExecutor ActivateNode::generate() {
+    ActivateExecutor* exec = new ActivateExecutor();
     exec->batch.push_back(this);
     return exec;
 };
@@ -111,7 +111,7 @@ class TanhNode :public Node {
     }
 
   public:
-    PExecute generate();
+    PExecutor generate();
 
     // better to rewrite for deep understanding
     bool typeEqual(Node* other) {
@@ -120,7 +120,7 @@ class TanhNode :public Node {
     }
 };
 
-class TanhExecute :public Execute {
+class TanhExecutor :public Executor {
 public:
     int dim;
     Tensor1D y, x;
@@ -208,7 +208,7 @@ public:
         }
         for (Node *n : batch) {
             TanhNode *tanh = static_cast<TanhNode*>(n);
-            n3ldg_cuda::Assert(tanh->in->loss.verify("TanhExecute backward"));
+            n3ldg_cuda::Assert(tanh->in->loss.verify("TanhExecutor backward"));
         }
 #endif
     }
@@ -243,8 +243,8 @@ public:
 #endif
 };
 
-PExecute TanhNode::generate() {
-    TanhExecute* exec = new TanhExecute();
+PExecutor TanhNode::generate() {
+    TanhExecutor* exec = new TanhExecutor();
     exec->batch.push_back(this);
     exec->dim = getDim();
     return exec;
@@ -284,7 +284,7 @@ public:
     }
 
   public:
-    PExecute generate();
+    PExecutor generate();
 
     // better to rewrite for deep understanding
     bool typeEqual(Node* other) {
@@ -294,7 +294,7 @@ public:
 };
 
 
-class SigmoidExecute :public Execute {
+class SigmoidExecutor :public Executor {
   public:
     int dim;
 public:
@@ -352,7 +352,7 @@ public:
         }
         for (Node *n : batch) {
             SigmoidNode *tanh = static_cast<SigmoidNode*>(n);
-            n3ldg_cuda::Assert(tanh->in->loss.verify("SigmoidExecute backward"));
+            n3ldg_cuda::Assert(tanh->in->loss.verify("SigmoidExecutor backward"));
         }
 #endif
     }
@@ -360,8 +360,8 @@ public:
 #endif
 };
 
-PExecute SigmoidNode::generate() {
-    SigmoidExecute* exec = new SigmoidExecute();
+PExecutor SigmoidNode::generate() {
+    SigmoidExecutor* exec = new SigmoidExecutor();
     exec->batch.push_back(this);
     exec->dim = getDim();
     return exec;
@@ -397,7 +397,7 @@ class ReluNode :public Node {
     }
 
   public:
-    PExecute generate();
+    PExecutor generate();
 
     // better to rewrite for deep understanding
     bool typeEqual(Node* other) {
@@ -406,10 +406,10 @@ class ReluNode :public Node {
     }
 };
 
-class ReluExecute :public Execute {};
+class ReluExecutor :public Executor {};
 
-PExecute ReluNode::generate() {
-    ReluExecute* exec = new ReluExecute();
+PExecutor ReluNode::generate() {
+    ReluExecutor* exec = new ReluExecutor();
     exec->batch.push_back(this);
     return exec;
 };
@@ -453,11 +453,11 @@ public:
         }
     }
 
-    PExecute generate();
+    PExecutor generate();
 };
 
 #if USE_GPU
-class PDotExecute :public Execute {
+class PDotExecutor :public Executor {
 public:
     void  forward() {
         int count = batch.size();
@@ -505,15 +505,15 @@ public:
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->backward();
             n3ldg_cuda::Assert(batch[idx]->loss.verify(
-                        "PDotExecute backward"));
+                        "PDotExecutor backward"));
         }
 
         for (Node *node : batch) {
             PDotNode *dot = static_cast<PDotNode*>(node);
             n3ldg_cuda::Assert(dot->in1->loss.verify(
-                        "PDotExecute backward in1"));
+                        "PDotExecutor backward in1"));
             n3ldg_cuda::Assert(dot->in2->loss.verify(
-                        "PDotExecute backward in2"));
+                        "PDotExecutor backward in2"));
         }
 #endif
     }
@@ -523,13 +523,13 @@ private:
     std::vector<dtype*> ins2;
 };
 #else
-class PDotExecute :public Execute {
+class PDotExecutor :public Executor {
 };
 #endif
 
 
-PExecute PDotNode::generate() {
-    PDotExecute* exec = new PDotExecute();
+PExecutor PDotNode::generate() {
+    PDotExecutor* exec = new PDotExecutor();
     exec->batch.push_back(this);
     return exec;
 }
@@ -605,10 +605,10 @@ public:
         return Node::typeHashCode() ^ (std::hash<int>{}((int)(10000 * drop_value)) << 1);
     }
 
-    PExecute generate() override;
+    PExecutor generate() override;
 };
 
-class DropoutExecute :public Execute {
+class DropoutExecutor :public Executor {
   public:
     Tensor2D drop_mask;
     dtype drop_value;
@@ -678,15 +678,15 @@ class DropoutExecute :public Execute {
         }
         for (Node *n : batch) {
             DropoutNode *tanh = static_cast<DropoutNode*>(n);
-            n3ldg_cuda::Assert(tanh->in->loss.verify("DropoutExecute backward"));
+            n3ldg_cuda::Assert(tanh->in->loss.verify("DropoutExecutor backward"));
         }
 #endif
     }
 #endif
 };
 
-PExecute DropoutNode::generate() {
-    DropoutExecute* exec = new DropoutExecute();
+PExecutor DropoutNode::generate() {
+    DropoutExecutor* exec = new DropoutExecutor();
     exec->batch.push_back(this);
     exec->is_training = is_training;
     exec->dim = getDim();

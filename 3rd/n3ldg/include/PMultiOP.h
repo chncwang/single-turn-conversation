@@ -49,10 +49,10 @@ class PMultiNode : public Node {
         return Node::typeEqual(other);
     }
 
-    PExecute generate();
+    PExecutor generate();
 };
 
-class PMultiExecute :public Execute {
+class PMultiExecutor :public Executor {
 public:
     std::vector<dtype*> in_vals1;
     std::vector<dtype*> in_vals2;
@@ -77,7 +77,7 @@ public:
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
             n3ldg_cuda::Assert(batch[idx]->val.verify(
-                        "PMultiExecute forward"));
+                        "PMultiExecutor forward"));
         }
 #endif
     }
@@ -106,17 +106,17 @@ public:
         for (Node *n : batch) {
             PMultiNode *pmulti = static_cast<PMultiNode*>(n);
             n3ldg_cuda::Assert(pmulti->in1->loss.verify(
-                        "PMultiExecute backward in1 loss"));
+                        "PMultiExecutor backward in1 loss"));
             n3ldg_cuda::Assert(pmulti->in2->loss.verify(
-                        "PMultiExecute backward in2 loss"));
+                        "PMultiExecutor backward in2 loss"));
         }
 #endif
     }
 #endif
 };
 
-PExecute PMultiNode::generate() {
-    PMultiExecute* exec = new PMultiExecute();
+PExecutor PMultiNode::generate() {
+    PMultiExecutor* exec = new PMultiExecutor();
     exec->batch.push_back(this);
     exec->dim = getDim();
     return exec;

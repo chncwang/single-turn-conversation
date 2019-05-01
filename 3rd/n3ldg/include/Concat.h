@@ -56,7 +56,7 @@ public:
         cg.addNode(this);
     }
 
-    PExecute generate() override;
+    PExecutor generate() override;
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) override {
@@ -110,7 +110,7 @@ public:
 };
 
 #if USE_GPU
-class ConcatExecute : public Execute {
+class ConcatExecutor : public Executor {
   public:
     int outDim;
     int inCount;
@@ -168,12 +168,12 @@ class ConcatExecute : public Execute {
     }
 };
 #else
-class ConcatExecute : public Execute {
+class ConcatExecutor : public Executor {
 };
 #endif
 
-PExecute ConcatNode::generate() {
-    ConcatExecute* exec = new ConcatExecute();
+PExecutor ConcatNode::generate() {
+    ConcatExecutor* exec = new ConcatExecutor();
     exec->batch.push_back(this);
 #if USE_GPU
     exec->inCount = this->ins.size();

@@ -157,7 +157,7 @@ public:
     }
 
   public:
-    PExecute generate();
+    PExecutor generate();
 
     bool typeEqual(PNode other) override {
         bool result = Node::typeEqual(other);
@@ -228,7 +228,7 @@ class LinearBiNode : public Node {
     }
 
   public:
-    PExecute generate();
+    PExecutor generate();
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) {
@@ -246,7 +246,7 @@ class LinearBiNode : public Node {
 };
 
 
-class BiExecute :public Execute {
+class BiExecutor :public Executor {
   public:
     Tensor2D x1, x2, ty, y, b;
     int inDim1, inDim2, outDim;
@@ -292,8 +292,8 @@ class BiExecute :public Execute {
                 }
             }
         }
-        n3ldg_cuda::Assert(x1.verify("BiExecute forward x1"));
-        n3ldg_cuda::Assert(x2.verify("BiExecute forward x2"));
+        n3ldg_cuda::Assert(x1.verify("BiExecutor forward x1"));
+        n3ldg_cuda::Assert(x2.verify("BiExecutor forward x2"));
 #endif
         n3ldg_cuda::MatrixMultiplyMatrix(param->W1.val.value, x1.value,
                 ty.value, outDim, inDim1, count, param->bUseB);
@@ -307,10 +307,10 @@ class BiExecute :public Execute {
         if (param->bUseB) {
             ty.vec() = ty.vec() + b.vec();
         }
-        n3ldg_cuda::Assert(ty.verify("BiExecute forward ty"));
+        n3ldg_cuda::Assert(ty.verify("BiExecutor forward ty"));
 
         y.vec() = ty.vec().unaryExpr(ptr_fun(activate));
-        n3ldg_cuda::Assert(y.verify("BiExecute forward y"));
+        n3ldg_cuda::Assert(y.verify("BiExecutor forward y"));
 
         for (int idx = 0; idx < count; idx++) {
             BiNode* ptr = (BiNode*)batch[idx];
@@ -321,7 +321,7 @@ class BiExecute :public Execute {
 
         for (int i = 0; i < count; ++i) {
             n3ldg_cuda::Assert(batch[i]->val().verify(
-                        "BiExecute forward batch i val"));
+                        "BiExecutor forward batch i val"));
         }
 #endif
     }
@@ -393,10 +393,10 @@ class BiExecute :public Execute {
             }
         }
 
-        n3ldg_cuda::Assert(ty.verify("BiExecute backward ty"));
-        n3ldg_cuda::Assert(y.verify("BiExecute backward y"));
+        n3ldg_cuda::Assert(ty.verify("BiExecutor backward ty"));
+        n3ldg_cuda::Assert(y.verify("BiExecutor backward y"));
         lty.vec() = ly.vec() * ty.vec().binaryExpr(y.vec(), ptr_fun(derivate));
-        n3ldg_cuda::Assert(lty.verify("BiExecute backward lty"));
+        n3ldg_cuda::Assert(lty.verify("BiExecutor backward lty"));
 #endif
 #if TEST_CUDA
         n3ldg_cuda::Assert(param->W1.grad.verify("bi backward W grad init"));
@@ -509,8 +509,8 @@ class BiExecute :public Execute {
 #endif
 };
 
-PExecute BiNode::generate() {
-    BiExecute* exec = new BiExecute();
+PExecutor BiNode::generate() {
+    BiExecutor* exec = new BiExecutor();
     exec->batch.push_back(this);
     exec->inDim1 = param->W1.inDim();
     exec->inDim2 = param->W2.inDim();
@@ -521,10 +521,10 @@ PExecute BiNode::generate() {
     return exec;
 };
 
-class LinearBiExecute :public Execute {};
+class LinearBiExecutor :public Executor {};
 
-PExecute LinearBiNode::generate() {
-    LinearBiExecute* exec = new LinearBiExecute();
+PExecutor LinearBiNode::generate() {
+    LinearBiExecutor* exec = new LinearBiExecutor();
     exec->batch.push_back(this);
     return exec;
 };

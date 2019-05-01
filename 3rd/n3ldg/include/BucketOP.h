@@ -76,7 +76,7 @@ public:
 
     void backward() {}
 
-    PExecute generate();
+    PExecutor generate();
 
     bool typeEqual(PNode other) {
         return Node::typeEqual(other);
@@ -84,11 +84,11 @@ public:
 
 };
 
-class BucketExecute : public Execute {
+class BucketExecutor : public Executor {
 };
 
-PExecute BucketNode::generate() {
-    BucketExecute* exec = new BucketExecute();
+PExecutor BucketNode::generate() {
+    BucketExecutor* exec = new BucketExecutor();
     exec->batch.push_back(this);
     return exec;
 }

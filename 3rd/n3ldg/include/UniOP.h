@@ -143,7 +143,7 @@ public:
         in->loss().mat() += param->W.val.mat().transpose() * lty.mat();
     }
 
-    PExecute generate() override;
+    PExecutor generate() override;
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) override {
@@ -214,7 +214,7 @@ public:
         in->loss().mat() += param->W.val.mat().transpose() * loss().mat();
     }
 
-    PExecute generate() override;
+    PExecutor generate() override;
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) override {
@@ -234,7 +234,7 @@ public:
 };
 
 
-class UniExecute :public Execute {
+class UniExecutor :public Executor {
   public:
     Tensor2D x, ty, y, b;
     int inDim, outDim;
@@ -457,8 +457,8 @@ class UniExecute :public Execute {
     }
 };
 
-PExecute UniNode::generate() {
-    UniExecute* exec = new UniExecute();
+PExecutor UniNode::generate() {
+    UniExecutor* exec = new UniExecutor();
     exec->batch.push_back(this);
     exec->inDim = param->W.inDim();
     exec->outDim = param->W.outDim();
@@ -469,7 +469,7 @@ PExecute UniNode::generate() {
 };
 
 #if USE_GPU
-class LinearExecute :public Execute {
+class LinearExecutor :public Executor {
 public:
     Tensor2D x, y, b;
     int inDim, outDim, count;
@@ -577,7 +577,7 @@ public:
         n3ldg_cuda::Assert(x.verify("backward x"));
 
         param->W.grad.mat() += ly.mat() * x.mat().transpose();
-        n3ldg_cuda::Assert(param->W.grad.verify("LinearExecute backward W grad"));
+        n3ldg_cuda::Assert(param->W.grad.verify("LinearExecutor backward W grad"));
 
         if (param->bUseB) {
             for (int idx = 0; idx < count; idx++) {
@@ -606,7 +606,7 @@ public:
     }
 };
 #else
-class LinearExecute :public Execute {
+class LinearExecutor :public Executor {
   public:
     Tensor2D x, y, b;
     int inDim, outDim, count;
@@ -670,8 +670,8 @@ class LinearExecute :public Execute {
 };
 #endif
 
-PExecute LinearNode::generate() {
-    LinearExecute* exec = new LinearExecute();
+PExecutor LinearNode::generate() {
+    LinearExecutor* exec = new LinearExecutor();
     exec->batch.push_back(this);
     exec->inDim = param->W.inDim();
     exec->outDim = param->W.outDim();
@@ -703,7 +703,7 @@ struct LinearWordVectorNode : public Node {
         abort();
     }
 
-    Execute* generate();
+    Executor* generate();
 
     bool typeEqual(PNode other) override {
         bool result = Node::typeEqual(other);
@@ -723,7 +723,7 @@ struct LinearWordVectorNode : public Node {
 
 #if USE_GPU
 
-struct LinearWordVectorExecute : public Execute {
+struct LinearWordVectorExecutor : public Executor {
     Tensor2D x, y;
     int inDim, outDim;
     SparseParam *param;
@@ -816,7 +816,7 @@ struct LinearWordVectorExecute : public Execute {
         n3ldg_cuda::Assert(ly.verify("backward x"));
 
         param->grad.mat() += x.mat() * ly.mat().transpose();
-        n3ldg_cuda::Assert(param->grad.verify("LinearExecute backward W grad"));
+        n3ldg_cuda::Assert(param->grad.verify("LinearExecutor backward W grad"));
 
         lx.mat() += param->val().mat() * ly.mat();
         n3ldg_cuda::Assert(lx.verify("linear execute backward lx"));
@@ -838,7 +838,7 @@ struct LinearWordVectorExecute : public Execute {
 
 #else
 
-struct LinearWordVectorExecute : public Execute {
+struct LinearWordVectorExecutor : public Executor {
     Tensor2D x, y;
     int inDim, outDim;
     SparseParam *param;
@@ -886,8 +886,8 @@ struct LinearWordVectorExecute : public Execute {
 
 #endif
 
-Execute* LinearWordVectorNode::generate() {
-    LinearWordVectorExecute* exec = new LinearWordVectorExecute();
+Executor* LinearWordVectorNode::generate() {
+    LinearWordVectorExecutor* exec = new LinearWordVectorExecutor();
     exec->batch.push_back(this);
     exec->inDim = param->outDim();
     exec->outDim = param->inDim();

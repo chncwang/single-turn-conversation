@@ -71,7 +71,7 @@ public:
 
 
 public:
-    PExecute generate() override;
+    PExecutor generate() override;
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) override {
@@ -88,7 +88,7 @@ public:
 };
 
 
-class PAddExecute : public Execute {
+class PAddExecutor : public Executor {
 public:
     int in_count;
     int dim;
@@ -166,7 +166,7 @@ public:
         for (Node *n : batch) {
             PAddNode *add = static_cast<PAddNode*>(n);
             for (Node *in : add->ins) {
-                n3ldg_cuda::Assert(in->loss.verify("PAddExecute backward"));
+                n3ldg_cuda::Assert(in->loss.verify("PAddExecutor backward"));
             }
         }
 #endif
@@ -181,8 +181,8 @@ public:
 #endif
 };
 
-PExecute PAddNode::generate() {
-    PAddExecute* exec = new PAddExecute();
+PExecutor PAddNode::generate() {
+    PAddExecutor* exec = new PAddExecutor();
     exec->batch.push_back(this);
     exec->in_count = ins.size();
     exec->dim = getDim();

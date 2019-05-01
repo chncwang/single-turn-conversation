@@ -266,7 +266,7 @@ public:
         this->forward(&graph, word);
     }
 
-    PExecute generate() override;
+    PExecutor generate() override;
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) override {
@@ -304,7 +304,7 @@ public:
 
 
 #if USE_GPU
-class LookupExecute :public Execute {
+class LookupExecutor :public Executor {
 public:
     int dim;
     LookupTable *table;
@@ -357,11 +357,11 @@ public:
     }
 };
 #else
-class LookupExecute :public Execute {};
+class LookupExecutor :public Executor {};
 #endif
 
-PExecute LookupNode::generate() {
-    LookupExecute* exec = new LookupExecute();
+PExecutor LookupNode::generate() {
+    LookupExecutor* exec = new LookupExecutor();
     exec->batch.push_back(this);
 #if USE_GPU
     exec->table = param;

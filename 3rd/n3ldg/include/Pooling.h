@@ -57,7 +57,7 @@ class PoolNode : public Node {
 
 
   public:
-    PExecute generate();
+    PExecutor generate();
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) {
@@ -146,7 +146,7 @@ public:
         cg->addNode(this);
     }
 
-    PExecute generate() override;
+    PExecutor generate() override;
 };
 #else
 class MaxPoolNode : public PoolNode {
@@ -233,7 +233,7 @@ public:
         cg->addNode(this);
     }
 
-    PExecute generate() override;
+    PExecutor generate() override;
 };
 #else
 class MinPoolNode : public PoolNode {
@@ -256,7 +256,7 @@ public:
 #endif
 
 #if USE_GPU
-class MaxPoolExecute : public Execute
+class MaxPoolExecutor : public Executor
 {
 public:
     int dim;
@@ -337,8 +337,8 @@ public:
     }
 };
 
-PExecute MaxPoolNode::generate() {
-    MaxPoolExecute *exec = new MaxPoolExecute;
+PExecutor MaxPoolNode::generate() {
+    MaxPoolExecutor *exec = new MaxPoolExecutor;
     exec->batch.push_back(this);
     exec->dim = getDim();
     return exec;
@@ -346,7 +346,7 @@ PExecute MaxPoolNode::generate() {
 #endif
 
 #if USE_GPU
-class MinPoolExecute : public Execute
+class MinPoolExecutor : public Executor
 {
 public:
     int dim;
@@ -426,18 +426,18 @@ public:
     }
 };
 
-PExecute MinPoolNode::generate() {
-    MinPoolExecute *exec = new MinPoolExecute;
+PExecutor MinPoolNode::generate() {
+    MinPoolExecutor *exec = new MinPoolExecutor;
     exec->batch.push_back(this);
     exec->dim = getDim();
     return exec;
 }
 #endif
 
-class PoolExecute : public Execute {};
+class PoolExecutor : public Executor {};
 
-PExecute PoolNode::generate() {
-    PoolExecute* exec = new PoolExecute();
+PExecutor PoolNode::generate() {
+    PoolExecutor* exec = new PoolExecutor();
     exec->batch.push_back(this);
     return exec;
 }
@@ -494,7 +494,7 @@ public:
 
 
   public:
-    PExecute generate();
+    PExecutor generate();
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) {
@@ -504,7 +504,7 @@ public:
 };
 
 #if USE_GPU
-class SumPoolExecute : public Execute {
+class SumPoolExecutor : public Executor {
 public:
     int dim;
     std::vector<int> in_counts;
@@ -579,18 +579,18 @@ public:
         for (Node *n : batch) {
             SumPoolNode *sum = static_cast<SumPoolNode*>(n);
             for (Node *in : sum->ins) {
-                n3ldg_cuda::Assert(in->loss.verify("SumPoolExecute backward"));
+                n3ldg_cuda::Assert(in->loss.verify("SumPoolExecutor backward"));
             }
         }
 #endif
     }
 };
 #else
-class SumPoolExecute : public Execute {};
+class SumPoolExecutor : public Executor {};
 #endif
 
-PExecute SumPoolNode::generate() {
-    SumPoolExecute* exec = new SumPoolExecute();
+PExecutor SumPoolNode::generate() {
+    SumPoolExecutor* exec = new SumPoolExecutor();
     exec->batch.push_back(this);
 #if USE_GPU
     exec->dim = getDim();
@@ -649,7 +649,7 @@ public:
         }
     }
 
-    PExecute generate();
+    PExecutor generate();
 
     bool typeEqual(PNode other) {
         return Node::typeEqual(other);
@@ -658,7 +658,7 @@ public:
 };
 
 #if USE_GPU
-class AvgPoolExecute : public Execute {
+class AvgPoolExecutor : public Executor {
 public:
     int dim;
     std::vector<int> in_counts;
@@ -733,18 +733,18 @@ public:
         for (Node *n : batch) {
             AvgPoolNode *sum = static_cast<AvgPoolNode*>(n);
             for (Node *in : sum->ins) {
-                n3ldg_cuda::Assert(in->loss.verify("AvgPoolExecute backward"));
+                n3ldg_cuda::Assert(in->loss.verify("AvgPoolExecutor backward"));
             }
         }
 #endif
     }
 };
 #else
-class AvgPoolExecute : public Execute {};
+class AvgPoolExecutor : public Executor {};
 #endif
 
-PExecute AvgPoolNode::generate() {
-    AvgPoolExecute* exec = new AvgPoolExecute();
+PExecutor AvgPoolNode::generate() {
+    AvgPoolExecutor* exec = new AvgPoolExecutor();
     exec->batch.push_back(this);
 #if USE_GPU
     exec->dim = getDim();
