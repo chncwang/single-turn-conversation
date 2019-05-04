@@ -318,13 +318,12 @@ class UniExecutor :public Executor {
             UniNode* ptr = (UniNode*)batch[idx];
             memcpy(x.v + idx * inDim, ptr->in->val().v, inDim * sizeof(dtype));
             if (param->bUseB) {
-                memcpy(b.v + idx * outDim, param->b.val().v,
-                        outDim * sizeof(dtype));
+                memcpy(b.v + idx * outDim, param->b.val.v, outDim * sizeof(dtype));
             }
         }
         profiler.EndEvent();
 
-        ty.mat() = param->W.val().mat() * x.mat();
+        ty.mat() = param->W.val.mat() * x.mat();
 
         if (param->bUseB) {
             ty.vec() = ty.vec() + b.vec();
@@ -445,7 +444,7 @@ class UniExecutor :public Executor {
             }
         }
 
-        lx.mat() += param->W.val().mat().transpose() * lty.mat();
+        lx.mat() += param->W.val.mat().transpose() * lty.mat();
 
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
@@ -622,12 +621,11 @@ class LinearExecutor :public Executor {
             LinearNode* ptr = (LinearNode*)batch[idx];
             memcpy(x.v + idx * inDim, ptr->in->val().v, inDim * sizeof(dtype));
             if (param->bUseB) {
-                memcpy(b.v + idx * outDim, param->b.val().v,
-                        outDim * sizeof(dtype));
+                memcpy(b.v + idx * outDim, param->b.val.v, outDim * sizeof(dtype));
             }
         }
 
-        y.mat() = param->W.val().mat() * x.mat();
+        y.mat() = param->W.val.mat() * x.mat();
         if (param->bUseB) {
             y.vec() = y.vec() + b.vec();
         }
@@ -658,7 +656,7 @@ class LinearExecutor :public Executor {
             }
         }
 
-        lx.mat() = param->W.val().mat().transpose() * ly.mat();
+        lx.mat() = param->W.val.mat().transpose() * ly.mat();
 
         for (int idx = 0; idx < count; idx++) {
             LinearNode* ptr = (LinearNode*)batch[idx];
@@ -852,7 +850,7 @@ struct LinearWordVectorExecutor : public Executor {
             LinearWordVectorNode* ptr = (LinearWordVectorNode*)batch.at(i);
             memcpy(x.v + i * inDim, ptr->input->val().v, inDim * sizeof(dtype));
         }
-        y.mat() = param->val().mat().transpose() * x.mat();
+        y.mat() = param->val.mat().transpose() * x.mat();
 
         for (int i = 0; i < count; i++) {
             LinearWordVectorNode* ptr = (LinearWordVectorNode*)batch[i];
@@ -873,7 +871,7 @@ struct LinearWordVectorExecutor : public Executor {
 
         param->grad.mat() += x.mat() * ly.mat().transpose();
 
-        lx.mat() = param->val().mat() * ly.mat();
+        lx.mat() = param->val.mat() * ly.mat();
 
         for (int idx = 0; idx < count; idx++) {
             LinearWordVectorNode* ptr = (LinearWordVectorNode*)batch[idx];

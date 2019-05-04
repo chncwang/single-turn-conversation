@@ -185,7 +185,7 @@ void BatchMemset(const std::vector<dtype*> &vec, int count, int dim,
 void PrintNums(const dtype* p, int len);
 void PrintInts(const int* p, int len);
 
-void InitCuda(int device_id = 0);
+void InitCuda(int device_id = 0, float memory_in_gb = 0.0f);
 void EndCuda();
 
 cudaError_t MyCudaMemcpy(void *dest, const void *src, size_t count, cudaMemcpyKind kind);

@@ -504,7 +504,7 @@ void PrintInts(const int* p, int len) {
     CheckCudaError();
 }
 
-void InitCuda(int device_id) {
+void InitCuda(int device_id, float memory_in_gb) {
     std::cout << "device_id:" << device_id << std::endl;
     CallCuda(cudaSetDeviceFlags(cudaDeviceMapHost));
 
@@ -518,6 +518,7 @@ void InitCuda(int device_id) {
 #endif
     CallCuda(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
     CallCuda(cudaPrintfInit());
+    MemoryPool::Ins().Init(memory_in_gb);
 }
 
 void EndCuda() {

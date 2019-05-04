@@ -28,8 +28,9 @@ struct MemoryBlock {
 
     MemoryBlock(void *p, int size, void *buddy = nullptr) {
         static int global_id;
-        if (size <= 0 || size & (size - 1) != 0) {
+        if (size <= 0 || (size & (size - 1)) != 0) {
             std::cerr << "illegal size:" << size << std::endl;
+            abort();
         }
         this->p = p;
         this->size = size;
@@ -58,6 +59,18 @@ public:
 
     cudaError_t Malloc(void **p, int size);
     cudaError_t Free(void *p);
+
+    void Init(float size_in_gb) {
+        cout << boost::format("MemoryPool Init size:%1%") % size_in_gb << endl;
+        if (size_in_gb > 0.0f) {
+            void *m = NULL;
+            if (Malloc(&m, size_in_gb * (1 << 9)) != cudaSuccess) {
+                cerr << "MemoryPool Init: OMM error!" << endl;
+                abort();
+            }
+            Free(m);
+        }
+    }
 
     string toString() const {
         Json::Value free_blocks_json;

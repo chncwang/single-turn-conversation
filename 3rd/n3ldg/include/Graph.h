@@ -129,7 +129,9 @@ public:
             PExecutor cur_exec = first_node->generate();
             cur_exec->batch = std::move(shallow_nodes);
             free_nodes.erase(min_hash);
+#if USE_GPU
             clearNodes(cur_exec->batch, cur_exec->getDim());
+#endif
             cur_exec->forwardFully();
             execs.push_back(cur_exec);
 

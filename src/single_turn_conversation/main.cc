@@ -133,6 +133,7 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
             "");
     default_config.input_model_file = ini_reader.Get(SECTION, "input_model_file", "");
     default_config.input_model_dir = ini_reader.Get(SECTION, "input_model_dir", "");
+    default_config.memory_in_gb = ini_reader.GetReal(SECTION, "memory_in_gb", 0.0f);
 
     return default_config;
 }
@@ -516,7 +517,7 @@ int main(int argc, char *argv[]) {
     default_config.print();
 
 #if USE_GPU
-    n3ldg_cuda::InitCuda(default_config.device_id);
+    n3ldg_cuda::InitCuda(default_config.device_id, default_config.memory_in_gb);
 #endif
 
     HyperParams hyper_params = parseHyperParams(ini_reader);
