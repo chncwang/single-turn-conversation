@@ -45,8 +45,9 @@ struct AttentionContextDecoderComponents : DecoderComponents {
             int i) override {
         ConcatNode *concat_node = new ConcatNode();
         int context_dim = contexts.at(0)->getDim();
-        concat_node->init(context_dim + hyper_params.decoding_hidden_dim);
-        vector<Node *> concat_inputs = {contexts.at(i), decoder._hiddens.at(i)};
+        concat_node->init(context_dim + hyper_params.decoding_hidden_dim + hyper_params.word_dim);
+        vector<Node *> concat_inputs = {contexts.at(i), decoder._hiddens.at(i),
+            i == 0 ? bucket(hyper_params.word_dim, graph) : decoder_to_wordvectors.at(i - 1)};
         concat_node->forward(graph, concat_inputs);
 
         LinearNode *decoder_to_wordvector(new LinearNode);
