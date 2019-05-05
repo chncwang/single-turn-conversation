@@ -665,7 +665,7 @@ int main(int argc, char *argv[]) {
         model_params.decoder_params.init(hyper_params.decoding_hidden_dim,
                 hyper_params.word_dim + 2 * hyper_params.encoding_hidden_dim);
         model_params.hidden_to_wordvector_params.init(hyper_params.word_dim,
-                hyper_params.decoding_hidden_dim);
+                hyper_params.decoding_hidden_dim + 2 * hyper_params.encoding_hidden_dim);
         model_params.attention_parrams.init(hyper_params.encoding_hidden_dim * 2,
                 hyper_params.decoding_hidden_dim);
     };

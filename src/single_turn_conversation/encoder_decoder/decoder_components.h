@@ -9,7 +9,7 @@
 struct DecoderComponents {
     std::vector<LookupNode *> decoder_lookups_before_dropout;
     std::vector<DropoutNode *> decoder_lookups;
-    std::vector<LinearNode *> decoder_to_wordvectors;
+    std::vector<Node *> decoder_to_wordvectors;
     std::vector<LinearWordVectorNode *> wordvector_to_onehots;
     DynamicLSTMBuilder decoder;
 
@@ -17,6 +17,10 @@ struct DecoderComponents {
             Node &input,
             std::vector<Node *> &encoder_hiddens,
             bool is_training) = 0;
+
+    virtual Node* decoderToWordVectors(Graph &graph, const HyperParams &hyper_params,
+            ModelParams &model_params,
+            int i) = 0;
 };
 
 #endif

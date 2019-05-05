@@ -8,6 +8,8 @@
 #include "single_turn_conversation/encoder_decoder/decoder_components.h"
 
 struct AttentionContextDecoderComponents : DecoderComponents {
+    vector<Node*> contexts;
+
     BucketNode *bucket(int dim, Graph &graph) {
         BucketNode *node(new BucketNode);
         node->init(dim);
@@ -25,6 +27,7 @@ struct AttentionContextDecoderComponents : DecoderComponents {
             static_cast<Node*>(bucket(hyper_params.decoding_hidden_dim,
                         graph)) : static_cast<Node*>(decoder._hiddens.at(decoder.size() - 1));
         attention_builder->forward(graph, encoder_hiddens, *guide);
+        contexts.push_back(attention_builder->_hidden);
 
         ConcatNode* concat = new ConcatNode;
         concat->init(hyper_params.word_dim + hyper_params.encoding_hidden_dim * 2);
@@ -35,6 +38,22 @@ struct AttentionContextDecoderComponents : DecoderComponents {
                 *bucket(hyper_params.decoding_hidden_dim, graph),
                 *bucket(hyper_params.decoding_hidden_dim, graph),
                 hyper_params.dropout, is_training);
+    }
+
+    Node* decoderToWordVectors(Graph &graph, const HyperParams &hyper_params,
+            ModelParams &model_params,
+            int i) override {
+        ConcatNode *concat_node = new ConcatNode();
+        int context_dim = contexts.at(0)->getDim();
+        concat_node->init(context_dim + hyper_params.decoding_hidden_dim);
+        vector<Node *> concat_inputs = {contexts.at(i), decoder._hiddens.at(i)};
+        concat_node->forward(graph, concat_inputs);
+
+        LinearNode *decoder_to_wordvector(new LinearNode);
+        decoder_to_wordvector->init(hyper_params.word_dim);
+        decoder_to_wordvector->setParam(model_params.hidden_to_wordvector_params);
+        decoder_to_wordvector->forward(graph, *concat_node);
+        return decoder_to_wordvector;
     }
 };
 

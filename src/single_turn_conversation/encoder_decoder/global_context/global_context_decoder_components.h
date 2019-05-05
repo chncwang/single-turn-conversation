@@ -6,6 +6,7 @@
 #include <vector>
 #include "single_turn_conversation/encoder_decoder/decoder_components.h"
 
+// decrecated
 struct GlobalContextDecoderComponents : DecoderComponents {
 //    vector<shared_ptr<ConcatNode>> concat_nodes;
 
@@ -33,6 +34,16 @@ struct GlobalContextDecoderComponents : DecoderComponents {
                 *bucket(hyper_params.decoding_hidden_dim, graph),
                 *bucket(hyper_params.decoding_hidden_dim, graph), hyper_params.dropout,
                 is_training);
+    }
+
+    Node* decoderToWordVectors(Graph &graph, const HyperParams &hyper_params,
+            ModelParams &model_params,
+            int i) override {
+        LinearNode *decoder_to_wordvector(new LinearNode);
+        decoder_to_wordvector->init(hyper_params.word_dim);
+        decoder_to_wordvector->setParam(model_params.hidden_to_wordvector_params);
+        decoder_to_wordvector->forward(graph, *decoder._hiddens.at(i));
+        return decoder_to_wordvector;
     }
 };
 

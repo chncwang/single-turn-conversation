@@ -64,11 +64,11 @@ public:
         cout << boost::format("MemoryPool Init size:%1%") % size_in_gb << endl;
         if (size_in_gb > 0.0f) {
             void *m = NULL;
-            if (Malloc(&m, size_in_gb * (1 << 9)) != cudaSuccess) {
+            if (this->Malloc(&m, size_in_gb * (1 << 9)) != cudaSuccess) {
                 cerr << "MemoryPool Init: OMM error!" << endl;
                 abort();
             }
-            Free(m);
+            this->Free(m);
         }
     }
 

@@ -215,10 +215,8 @@ struct GraphBuilder {
         decoder_components.forward(graph, hyper_params, model_params, *last_input,
                 encoder_hiddens, is_training);
 
-        LinearNode *decoder_to_wordvector(new LinearNode);
-        decoder_to_wordvector->init(hyper_params.word_dim);
-        decoder_to_wordvector->setParam(model_params.hidden_to_wordvector_params);
-        decoder_to_wordvector->forward(graph, *decoder_components.decoder._hiddens.at(i));
+        Node *decoder_to_wordvector = decoder_components.decoderToWordVectors(graph, hyper_params,
+                model_params, i);
         decoder_components.decoder_to_wordvectors.push_back(decoder_to_wordvector);
 
         LinearWordVectorNode *wordvector_to_onehot(new LinearWordVectorNode);
