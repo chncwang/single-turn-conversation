@@ -30,7 +30,6 @@
 #include "single_turn_conversation/encoder_decoder/graph_builder.h"
 #include "single_turn_conversation/encoder_decoder/hyper_params.h"
 #include "single_turn_conversation/encoder_decoder/model_params.h"
-#include "single_turn_conversation/encoder_decoder/decoder_components_builder.h"
 
 using namespace std;
 using namespace cxxopts;
@@ -134,6 +133,9 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
     default_config.input_model_file = ini_reader.Get(SECTION, "input_model_file", "");
     default_config.input_model_dir = ini_reader.Get(SECTION, "input_model_dir", "");
     default_config.memory_in_gb = ini_reader.GetReal(SECTION, "memory_in_gb", 0.0f);
+    default_config.ngram_penalty_1 = ini_reader.GetReal(SECTION, "ngram_penalty_1", 0.0f);
+    default_config.ngram_penalty_2 = ini_reader.GetReal(SECTION, "ngram_penalty_2", 0.0f);
+    default_config.ngram_penalty_3 = ini_reader.GetReal(SECTION, "ngram_penalty_3", 0.0f);
 
     return default_config;
 }
@@ -311,19 +313,16 @@ shared_ptr<Json::Value> loadModel(const string &filename) {
 
 void loadModel(const DefaultConfig &default_config, HyperParams &hyper_params,
         ModelParams &model_params,
-        const string &filename,
+        const Json::Value *root,
         const function<void(const DefaultConfig &default_config, const HyperParams &hyper_params,
             ModelParams &model_params, const Alphabet*)> &allocate_model_params) {
-    shared_ptr<Json::Value> root_ptr = loadModel(filename);
-    Json::Value &root = *root_ptr;
-    hyper_params.fromJson(root["hyper_params"]);
+    hyper_params.fromJson((*root)["hyper_params"]);
     hyper_params.print();
     allocate_model_params(default_config, hyper_params, model_params, nullptr);
-    model_params.fromJson(root["model_params"]);
+    model_params.fromJson((*root)["model_params"]);
 #if USE_GPU
     model_params.copyFromHostToDevice();
 #endif
-    cout << format("model file %1% loaded") % filename << endl;
 }
 
 float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
@@ -352,11 +351,11 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
                 graph_builder.init(hyper_params);
                 graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id),
                         hyper_params, model_params, false);
-                shared_ptr<DecoderComponents> decoder_components(buildDecoderComponents());
-                graph_builder.forwardDecoder(graph, *decoder_components,
+                DecoderComponents decoder_components;
+                graph_builder.forwardDecoder(graph, decoder_components,
                         response_sentences.at(response_id), hyper_params, model_params, false);
                 graph.compute();
-                vector<Node*> nodes = toNodePointers(decoder_components->wordvector_to_onehots);
+                vector<Node*> nodes = toNodePointers(decoder_components.wordvector_to_onehots);
                 vector<int> word_ids = transferVector<int, string>(
                         response_sentences.at(response_id), [&](const string &w) -> int {
                         return model_params.lookup_table.getElemId(w);
@@ -381,6 +380,7 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
 }
 
 void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
+        DefaultConfig &default_config,
         const vector<PostAndResponses> &post_and_responses_vector,
         const vector<vector<string>> &post_sentences,
         const vector<vector<string>> &response_sentences) {
@@ -393,12 +393,10 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         graph_builder.init(hyper_params);
         graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id), hyper_params,
                 model_params, false);
-        vector<shared_ptr<DecoderComponents>> decoder_components_vector;
-        for (int i = 0; i < hyper_params.beam_size; ++i) {
-            decoder_components_vector.push_back(buildDecoderComponents());
-        }
+        vector<DecoderComponents> decoder_components_vector;
+        decoder_components_vector.resize(hyper_params.beam_size);
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
-                hyper_params.beam_size, hyper_params, model_params, false);
+                hyper_params.beam_size, hyper_params, model_params, default_config, false);
         const vector<WordIdAndProbability> &word_ids_and_probability = pair.first;
         cout << "post:" << endl;
         print(post_sentences.at(post_and_responses.post_id));
@@ -437,7 +435,8 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
     }
 }
 
-void interact(const HyperParams &hyper_params, ModelParams &model_params) {
+void interact(const HyperParams &hyper_params, ModelParams &model_params,
+        const DefaultConfig &default_config) {
     hyper_params.print();
     while (true) {
         string post;
@@ -450,12 +449,12 @@ void interact(const HyperParams &hyper_params, ModelParams &model_params) {
         GraphBuilder graph_builder;
         graph_builder.init(hyper_params);
         graph_builder.forward(graph, words, hyper_params, model_params, false);
-        vector<shared_ptr<DecoderComponents>> decoder_components_vector;
-        decoder_components_vector.push_back(buildDecoderComponents());
+        vector<DecoderComponents> decoder_components_vector;
+        decoder_components_vector.resize(hyper_params.beam_size);
         cout << format("decodeTestPosts - beam_size:%1% decoder_components_vector.size:%2%") %
             hyper_params.beam_size % decoder_components_vector.size() << endl;
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
-                hyper_params.beam_size, hyper_params, model_params, false);
+                hyper_params.beam_size, hyper_params, model_params, default_config, false);
         const vector<WordIdAndProbability> &word_ids = pair.first;
         cout << "post:" << endl;
         cout << post << endl;
@@ -572,6 +571,7 @@ int main(int argc, char *argv[]) {
     vector<vector<string>> response_sentences = readSentences(default_config.response_file);
 
     Alphabet alphabet;
+    shared_ptr<Json::Value> root_ptr;
     if (default_config.program_mode == ProgramMode::TRAINING) {
         unordered_map<string, int> word_counts;
         auto wordStat = [&]() {
@@ -626,7 +626,7 @@ int main(int argc, char *argv[]) {
         alphabet.init(word_counts, hyper_params.word_cutoff);
         cout << boost::format("alphabet size:%1%") % alphabet.size() << endl;
     } else if (default_config.split_unknown_words) {
-        shared_ptr<Json::Value> root_ptr = loadModel(default_config.input_model_file);
+        root_ptr = loadModel(default_config.input_model_file);
         Json::Value &root = *root_ptr;
         vector<string> words = stringVectorFromJson(
                 root["model_params"]["lookup_table"]["word_ids"]["m_id_to_string"]);
@@ -675,18 +675,18 @@ int main(int argc, char *argv[]) {
         if (default_config.input_model_file == "") {
             allocate_model_params(default_config, hyper_params, model_params, &alphabet);
         } else {
-            loadModel(default_config, hyper_params, model_params, default_config.input_model_file,
+            loadModel(default_config, hyper_params, model_params, root_ptr.get(),
                     allocate_model_params);
         }
     }
 
     if (default_config.program_mode == ProgramMode::INTERACTING) {
         hyper_params.beam_size = beam_size;
-        interact(hyper_params, model_params);
+        interact(hyper_params, model_params, default_config);
     } else if (default_config.program_mode == ProgramMode::DECODING) {
         hyper_params.beam_size = beam_size;
-        decodeTestPosts(hyper_params, model_params, test_post_and_responses, post_sentences,
-                response_sentences);
+        decodeTestPosts(hyper_params, model_params, default_config, test_post_and_responses,
+                post_sentences, response_sentences);
     } else if (default_config.program_mode == ProgramMode::METRIC) {
         path dir_path(default_config.input_model_dir);
         if (!is_directory(dir_path)) {
@@ -694,7 +694,7 @@ int main(int argc, char *argv[]) {
             abort();
         }
 
-        float max_rep_perplex = 0.0f;
+        vector<string> ordered_file_paths;
         for(auto& entry : boost::make_iterator_range(directory_iterator(dir_path), {})) {
             string basic_name = entry.path().filename().string();
             cout << format("basic_name:%1%") % basic_name << endl;
@@ -703,9 +703,20 @@ int main(int argc, char *argv[]) {
             }
 
             string model_file_path = entry.path().string();
+            ordered_file_paths.push_back(model_file_path);
+        }
+        std::sort(ordered_file_paths.begin(), ordered_file_paths.end(),
+                [](const string &a, const string &b)->bool {
+                using boost::filesystem::last_write_time;
+                return last_write_time(a) < last_write_time(b);
+                });
+
+        float max_rep_perplex = 0.0f;
+        for(const string &model_file_path : ordered_file_paths) {
             cout << format("model_file_path:%1%") % model_file_path << endl;
             ModelParams model_params;
-            loadModel(default_config, hyper_params, model_params, model_file_path,
+            shared_ptr<Json::Value> root_ptr = loadModel(model_file_path);
+            loadModel(default_config, hyper_params, model_params, root_ptr.get(),
                     allocate_model_params);
             float rep_perplex = metricTestPosts(hyper_params, model_params,
                     test_post_and_responses, post_sentences, response_sentences);
@@ -747,7 +758,7 @@ int main(int argc, char *argv[]) {
                 cout << format("batch_i:%1% iteration:%2%") % batch_i % iteration << endl;
                 Graph graph;
                 vector<shared_ptr<GraphBuilder>> graph_builders;
-                vector<shared_ptr<DecoderComponents>> decoder_components_vector;
+                vector<DecoderComponents> decoder_components_vector;
                 vector<ConversationPair> conversation_pair_in_batch;
                 for (int i = 0; i < hyper_params.batch_size; ++i) {
                     shared_ptr<GraphBuilder> graph_builder(new GraphBuilder);
@@ -760,9 +771,9 @@ int main(int argc, char *argv[]) {
                     graph_builder->forward(graph, post_sentences.at(post_id), hyper_params,
                             model_params, true);
                     int response_id = train_conversation_pairs.at(instance_index).response_id;
-                    shared_ptr<DecoderComponents> decoder_components(buildDecoderComponents());
+                    DecoderComponents decoder_components;
                     decoder_components_vector.push_back(decoder_components);
-                    graph_builder->forwardDecoder(graph, *decoder_components,
+                    graph_builder->forwardDecoder(graph, decoder_components,
                             response_sentences.at(response_id),
                             hyper_params, model_params, true);
                 }
@@ -775,7 +786,7 @@ int main(int argc, char *argv[]) {
                     vector<int> word_ids = toIds(response_sentences.at(response_id),
                             model_params.lookup_table);
                     vector<Node*> result_nodes =
-                        toNodePointers(decoder_components_vector.at(i)->wordvector_to_onehots);
+                        toNodePointers(decoder_components_vector.at(i).wordvector_to_onehots);
 #if USE_GPU
                     vector<const dtype *> vals;
                     vector<dtype*> losses;
@@ -836,8 +847,8 @@ int main(int argc, char *argv[]) {
                         graph_builder.forward(graph, post_sentences.at(conversation_pair.post_id),
                                 hyper_params, model_params, false);
 
-                        shared_ptr<DecoderComponents> decoder_components(buildDecoderComponents());
-                        graph_builder.forwardDecoder(graph, *decoder_components,
+                        DecoderComponents decoder_components;
+                        graph_builder.forwardDecoder(graph, decoder_components,
                                 response_sentences.at(conversation_pair.response_id),
                                 hyper_params, model_params, false);
 
@@ -846,7 +857,7 @@ int main(int argc, char *argv[]) {
                         vector<int> word_ids = toIds(response_sentences.at(
                                     conversation_pair.response_id), model_params.lookup_table);
                         vector<Node*> result_nodes = toNodePointers(
-                                decoder_components->wordvector_to_onehots);
+                                decoder_components.wordvector_to_onehots);
                         return MaxLogProbabilityLoss(result_nodes, word_ids, 1).first;
                     };
                     cout << format("checking grad - conversation_pair size:%1%") %

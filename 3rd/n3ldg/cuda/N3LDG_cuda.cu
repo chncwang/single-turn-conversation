@@ -1101,7 +1101,6 @@ cudaError_t MemoryPool::Malloc(void **p, int size) {
         ++n;
     }
     cudaError_t status = cudaErrorMemoryAllocation;
-    int loop = 0;
     while (status != cudaSuccess) {
         if (free_blocks_.at(n).empty()) {
             int higher_power = n + 1;
@@ -1135,7 +1134,6 @@ cudaError_t MemoryPool::Malloc(void **p, int size) {
             busy_blocks_.insert(std::make_pair(block.p, block));
             free_blocks_.at(n).erase(free_blocks_.at(n).rbegin()->first);
         }
-        ++loop;
     }
     profiler.EndEvent();
 

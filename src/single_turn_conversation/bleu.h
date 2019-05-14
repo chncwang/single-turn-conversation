@@ -22,11 +22,15 @@ struct CandidateAndReferences {
     }
 };
 
+// TODO bug remained, the last stop symbol should be removed when comparing
 float mostMatchedCount(const CandidateAndReferences &candidate_and_references,
         int gram_len) {
     int max_mached_count = 0;
     const auto &references = candidate_and_references.references;
     const auto &candidate = candidate_and_references.candidate;
+    if (candidate.size() < gram_len) {
+        return 0;
+    }
     for (const std::vector<int> &reference : references) {
         int matched_count = 0;
         for (int i = 0; i < candidate.size() + 1 - gram_len; ++i) {

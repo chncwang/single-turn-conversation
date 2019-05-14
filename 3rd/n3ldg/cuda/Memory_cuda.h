@@ -11,6 +11,7 @@
 #include <iostream>
 #include <json/json.h>
 #include <boost/format.hpp>
+#include <boost/range/irange.hpp>
 
 using namespace std;
 
@@ -62,13 +63,19 @@ public:
 
     void Init(float size_in_gb) {
         cout << boost::format("MemoryPool Init size:%1%") % size_in_gb << endl;
+        vector<void*> pointers;
         if (size_in_gb > 0.0f) {
-            void *m = NULL;
-            if (this->Malloc(&m, size_in_gb * (1 << 9)) != cudaSuccess) {
-                cerr << "MemoryPool Init: OMM error!" << endl;
-                abort();
+            for (int i = 0; i < static_cast<int>(size_in_gb); ++i) {
+                void *m = NULL;
+                if (this->Malloc(&m, (1 << 30)) != cudaSuccess) {
+                    cerr << "MemoryPool Init: OMM error!" << endl;
+                    abort();
+                }
+                pointers.push_back(m);
             }
-            this->Free(m);
+            for (void* m : pointers) {
+                this->Free(m);
+            }
         }
     }
 
