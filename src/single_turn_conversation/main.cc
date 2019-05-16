@@ -249,6 +249,8 @@ void print(const vector<string> &words) {
 void analyze(const vector<int> &results, const vector<int> &answers, Metric &metric) {
     if (results.size() != answers.size()) {
         cerr << "results size is not equal to answers size" << endl;
+        cerr << boost::format("results size:%1% answers size:%2%\n") % results.size() %
+            answers.size();
         abort();
     }
 
@@ -772,10 +774,10 @@ int main(int argc, char *argv[]) {
                             model_params, true);
                     int response_id = train_conversation_pairs.at(instance_index).response_id;
                     DecoderComponents decoder_components;
-                    decoder_components_vector.push_back(decoder_components);
                     graph_builder->forwardDecoder(graph, decoder_components,
                             response_sentences.at(response_id),
                             hyper_params, model_params, true);
+                    decoder_components_vector.push_back(decoder_components);
                 }
 
                 graph.compute();
@@ -787,6 +789,7 @@ int main(int argc, char *argv[]) {
                             model_params.lookup_table);
                     vector<Node*> result_nodes =
                         toNodePointers(decoder_components_vector.at(i).wordvector_to_onehots);
+                    cout << boost::format("result_nodes size:%1%") % result_nodes.size() << endl;
 #if USE_GPU
                     vector<const dtype *> vals;
                     vector<dtype*> losses;

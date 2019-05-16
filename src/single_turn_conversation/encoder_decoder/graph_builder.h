@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <vector>
+#include <array>
 #include <string>
 #include <memory>
 #include <tuple>
@@ -26,15 +27,19 @@ struct WordIdAndProbability {
 
 class BeamSearchResult {
 public:
-    BeamSearchResult() = default;
+    BeamSearchResult() {
+        ngram_counts_ = {0, 0, 0};
+    }
     BeamSearchResult(const BeamSearchResult &beam_search_result) = default;
     BeamSearchResult(const DecoderComponents &decoder_components,
             const std::vector<WordIdAndProbability> &pathh,
             dtype log_probability) : decoder_components_(decoder_components), path_(pathh),
-    final_log_probability(log_probability) {}
+            final_log_probability(log_probability) {
+                ngram_counts_ = {0, 0, 0};
+            }
 
     dtype finalScore() const {
-        return final_log_probability + extra_score_;
+        return final_log_probability / path_.size()  + extra_score_;
     }
 
     dtype finalLogProbability() const {
@@ -57,11 +62,20 @@ public:
         return extra_score_;
     }
 
+    const std::array<int, 3> &ngramCounts() const {
+        return ngram_counts_;
+    }
+
+    void setNgramCounts(const std::array<int, 3> &counts) {
+        ngram_counts_ = counts;
+    }
+
 private:
     DecoderComponents decoder_components_;
     std::vector<WordIdAndProbability> path_;
     dtype final_log_probability;
     dtype extra_score_;
+    std::array<int, 3> ngram_counts_ = {};
 };
 
 void printWordIds(const vector<WordIdAndProbability> &word_ids_with_probability_vector,
@@ -106,11 +120,17 @@ void updateBeamSearchResultScore(BeamSearchResult &beam_search_result,
                 const WordIdAndProbability &a) {return a.word_id;});
     dtype extra_score = 0.0f;
     vector<dtype> penalties = {penalty.one, penalty.two, penalty.three};
-    for (int i = 1; i < 4; ++i) {
+    std::array<int, 3> counts;
+    for (int i = 3; i > 0; --i) {
         int duplicate_count = countNgramDuplicate(ids, i);
+        counts.at(i - 1) = duplicate_count;
         extra_score -= penalties.at(i - 1) * duplicate_count;
     }
     beam_search_result.setExtraScore(beam_search_result.getExtraScore() + extra_score);
+    std::array<int, 3> original_counts = beam_search_result.ngramCounts();
+    std::array<int, 3> new_counts = {original_counts.at(0) + counts.at(0),
+        original_counts.at(1) = counts.at(1), original_counts.at(2) + counts.at(2)};
+    beam_search_result.setNgramCounts(new_counts);
 }
 
 std::vector<BeamSearchResult> mostProbableResults(
@@ -120,7 +140,8 @@ std::vector<BeamSearchResult> mostProbableResults(
         int k,
         const ModelParams &model_params,
         const DefaultConfig &default_config,
-        bool is_first) {
+        bool is_first,
+        set<int> &searched_word_ids) {
     std::vector<Node *> nodes;
     for (const DecoderComponents &decoder_components : beam) {
         nodes.push_back(decoder_components.wordvector_to_onehots.at(current_word - 1));
@@ -143,6 +164,13 @@ std::vector<BeamSearchResult> mostProbableResults(
         auto tuple = toExp(node);
 
         for (int j = 0; j < nodes.at(i)->getDim(); ++j) {
+            if (is_first) {
+                if (searched_word_ids.find(j) != searched_word_ids.end()) {
+                    cout << boost::format("word id searched:%1% word:%2%\n") % j %
+                        model_params.lookup_table.elems.from_id(j);
+                    continue;
+                }
+            }
             if (j == model_params.lookup_table.getElemId(::unknownkey)) {
                 continue;
             }
@@ -150,14 +178,26 @@ std::vector<BeamSearchResult> mostProbableResults(
             dtype log_probability = value - log(std::get<2>(tuple));
             dtype word_probability = exp(log_probability);
             std::vector<WordIdAndProbability> word_ids;
+            std::array<int, 3> counts = {0, 0, 0};
+            dtype extra_score = 0.0f;
             if (!last_results.empty()) {
                 log_probability += last_results.at(i).finalLogProbability();
                 word_ids = last_results.at(i).getPath();
+                counts = last_results.at(i).ngramCounts();
+                extra_score = last_results.at(i).getExtraScore();
             }
 
             word_ids.push_back(WordIdAndProbability(j, word_probability));
             BeamSearchResult beam_search_result(beam.at(i), word_ids, log_probability);
+            beam_search_result.setNgramCounts(counts);
+            beam_search_result.setExtraScore(extra_score);
             updateBeamSearchResultScore(beam_search_result, default_config.toNgramPenalty());
+            int one_gram_count = beam_search_result.ngramCounts().at(0);
+            if (one_gram_count > beam_search_result.getPath().size()) {
+                cout << boost::format("one_gram_count:%1% path size:%2%") % one_gram_count %
+                    beam_search_result.getPath().size() << endl;
+                break;
+            }
 
             if (queue.size() < k) {
                 queue.push(beam_search_result);
@@ -170,6 +210,14 @@ std::vector<BeamSearchResult> mostProbableResults(
 
     while (!queue.empty()) {
         auto &e = queue.top();
+        if (is_first) {
+            int size = e.getPath().size();
+            if (size != 1) {
+                cerr << boost::format("size is not 1:%1%\n") % size;
+                abort();
+            }
+            searched_word_ids.insert(e.getPath().at(0).word_id);
+        }
         results.push_back(e);
         queue.pop();
     }
@@ -306,62 +354,83 @@ struct GraphBuilder {
             ModelParams &model_params,
             const DefaultConfig &default_config,
             bool is_training) {
-        auto beam = decoder_components_beam;
         std::vector<std::pair<std::vector<WordIdAndProbability>, dtype>> word_ids_result;
         std::vector<BeamSearchResult> most_probable_results;
         std::vector<std::string> last_answers;
         bool succeeded = false;
+        std::set<int> searched_word_ids;
 
-        for (int i = 0;; ++i) {
-            last_answers.clear();
-            if (i > 0) {
-                most_probable_results = mostProbableResults(beam, most_probable_results, i, k,
-                        model_params, default_config, i == 1);
-                auto last_beam = beam;
-                beam.clear();
-                std::vector<BeamSearchResult> stop_removed_results;
-                int j = 0;
-                for (BeamSearchResult &beam_search_result : most_probable_results) {
-                    const std::vector<WordIdAndProbability> &word_ids =
-                        beam_search_result.getPath();
-                    int last_word_id = word_ids.at(word_ids.size() - 1).word_id;
-                    const std::string &word = model_params.lookup_table.elems.from_id(
-                            last_word_id);
-                    if (word == STOP_SYMBOL) {
-                        word_ids_result.push_back(std::make_pair(word_ids,
-                                    beam_search_result.finalLogProbability()));
-                        succeeded = word == STOP_SYMBOL;
-                        break;
-                    } else {
-                        stop_removed_results.push_back(beam_search_result);
-                        last_answers.push_back(word);
-                        beam.push_back(beam_search_result.decoderComponents());
-                    }
-                    ++j;
-                }
-                most_probable_results = stop_removed_results;
-            }
+        for (int iter = 0; ; ++iter) {
+            cout << boost::format("forwardDecoderUsingBeamSearch iter:%1%\n") % iter;
+            most_probable_results.clear();
+            auto beam = decoder_components_beam;
+            cout << boost::format("beam size:%1%\n") % beam.size();
 
-            if (beam.empty() || succeeded) {
+            int ended_count = word_ids_result.size();
+            if (ended_count >= k) {
                 break;
             }
 
-            for (int beam_i = 0; beam_i < beam.size(); ++beam_i) {
-                DecoderComponents &decoder_components = beam.at(beam_i);
-                forwardDecoderByOneStep(graph, decoder_components, i,
-                        i == 0 ? nullptr : &last_answers.at(beam_i), hyper_params,
-                        model_params, is_training);
-            }
+            for (int i = 0;; ++i) {
+                cout << boost::format("forwardDecoderUsingBeamSearch i:%1%\n") % i;
+                int left_k = k - word_ids_result.size();
+                if (left_k <= 0) {
+                    cout << boost::format("break for left_k:%1%") % left_k << endl;
+                    break;
+                }
+                last_answers.clear();
+                if (i > 0) {
+                    most_probable_results = mostProbableResults(beam, most_probable_results, i,
+                            left_k, model_params, default_config, i == 1, searched_word_ids);
+                    cout << boost::format("most_probable_results size:%1%") %
+                        most_probable_results.size() << endl;
+                    auto last_beam = beam;
+                    beam.clear();
+                    std::vector<BeamSearchResult> stop_removed_results;
+                    int j = 0;
+                    for (BeamSearchResult &beam_search_result : most_probable_results) {
+//                        cout << boost::format("1gram:%1% len:%2%") %
+//                            beam_search_result.ngramCounts().at(0) %
+//                            beam_search_result.getPath().size() << endl;
+                        const std::vector<WordIdAndProbability> &word_ids =
+                            beam_search_result.getPath();
+                        int last_word_id = word_ids.at(word_ids.size() - 1).word_id;
+                        const std::string &word = model_params.lookup_table.elems.from_id(
+                                last_word_id);
+                        if (word == STOP_SYMBOL) {
+                            word_ids_result.push_back(std::make_pair(word_ids,
+                                        beam_search_result.finalScore()));
+                            succeeded = word == STOP_SYMBOL;
+                        } else {
+                            stop_removed_results.push_back(beam_search_result);
+                            last_answers.push_back(word);
+                            beam.push_back(beam_search_result.decoderComponents());
+                        }
+                        ++j;
+                    }
+                    most_probable_results = stop_removed_results;
+                }
 
-            graph.compute();
+                if (beam.empty()) {
+                    cout << boost::format("break for beam empty\n");
+                    break;
+                }
+
+                for (int beam_i = 0; beam_i < beam.size(); ++beam_i) {
+                    DecoderComponents &decoder_components = beam.at(beam_i);
+                    forwardDecoderByOneStep(graph, decoder_components, i,
+                            i == 0 ? nullptr : &last_answers.at(beam_i), hyper_params,
+                            model_params, is_training);
+                }
+
+                graph.compute();
+            }
         }
 
         if (word_ids_result.size() < k) {
-            std::cout << boost::format("word_ids_result size is %1%, but beam_size is %2%") %
+            std::cerr << boost::format("word_ids_result size is %1%, but beam_size is %2%") %
                 word_ids_result.size() % k << std::endl;
-        }
-        if (word_ids_result.empty()) {
-            return std::make_pair(std::vector<WordIdAndProbability>(), 0.0f);
+            abort();
         }
 
         for (const auto &pair : word_ids_result) {
