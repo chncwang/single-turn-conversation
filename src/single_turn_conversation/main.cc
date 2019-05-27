@@ -543,13 +543,16 @@ int main(int argc, char *argv[]) {
     };
     wordStat();
 
-    if (default_config.split_unknown_words && default_config.program_mode ==
-            ProgramMode::TRAINING) {
-        post_sentences = reprocessSentences(post_sentences, word_counts, hyper_params.word_cutoff);
+    if (default_config.split_unknown_words) {
+        auto f = [&] {
+            word_counts.clear();
+            wordStat();
+        };
+        post_sentences = reprocessSentences(post_sentences, word_counts,
+                hyper_params.word_cutoff);
         response_sentences = reprocessSentences(response_sentences, word_counts,
                 hyper_params.word_cutoff);
-        word_counts.clear();
-        wordStat();
+        f();
     }
 
     word_counts[unknownkey] = 1000000000;
@@ -622,7 +625,7 @@ int main(int argc, char *argv[]) {
             model_params.lookup_table.elems = &alphabet;
             loadModel(hyper_params, model_params, model_file_path, allocate_model_params);
             float rep_perplex = metricTestPosts(hyper_params, model_params,
-                    test_post_and_responses, post_sentences, response_sentences);
+                    dev_post_and_responses, post_sentences, response_sentences);
             cout << format("model %1% rep_perplex is %2%") % model_file_path % rep_perplex << endl;
             if (max_rep_perplex < rep_perplex) {
                 max_rep_perplex = rep_perplex;

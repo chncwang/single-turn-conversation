@@ -159,4 +159,26 @@ vector<vector<string>> reprocessSentences(const vector<vector<string>> &sentence
     return result;
 }
 
+void reprocessSentences(const vector<PostAndResponses> bundles,
+        vector<vector<string>> &posts,
+        vector<vector<string>> &responses,
+        const unordered_map<string, int> &word_counts,
+        int min_occurences) {
+    vector<vector<string>> result;
+
+    cout << "bund count:" << bundles.size() << endl;
+    int i = 0;
+
+    for (const PostAndResponses &bundle : bundles) {
+        cout << i++ / (float)bundles.size() << endl;
+        int post_id = bundle.post_id;
+        auto &post = posts.at(post_id);
+        post = reprocessSentence(post, word_counts, min_occurences);
+        for (int response_id : bundle.response_ids) {
+            auto &res = responses.at(response_id);
+            res = reprocessSentence(res, word_counts, min_occurences);
+        }
+    }
+}
+
 #endif
