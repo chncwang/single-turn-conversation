@@ -21,9 +21,7 @@ using namespace Eigen;
 
 class BucketNode : public Node {
 public:
-    BucketNode() : Node() {
-        node_type = "bucket";
-    }
+    BucketNode() : Node("bucket") {}
 
     virtual void init(int ndim) {
 #if USE_GPU
@@ -43,17 +41,16 @@ public:
         loss = 0;
 #endif
 #if USE_GPU
-        n3ldg_cuda::Memset(val.value, dim, value);
-        n3ldg_cuda::Memset(loss.value, dim, 0.0f);
+        n3ldg_cuda::Memset(val().value, getDim(), value);
+        n3ldg_cuda::Memset(loss().value, getDim(), 0.0f);
 #if TEST_CUDA
-        n3ldg_cuda::Assert(val.verify("bucket forward"));
-        n3ldg_cuda::Assert(loss.verify("loss verify"));
+        n3ldg_cuda::Assert(val().verify("bucket forward"));
+        n3ldg_cuda::Assert(loss().verify("loss verify"));
 #endif
 #else
-        val = value;
-        loss = 0;
+        val() = value;
+        loss() = 0;
 #endif
-        degree = 0;
         cg->addNode(this);
     }
 
@@ -63,17 +60,15 @@ public:
 
     void forward(Graph *cg) {
 #if USE_GPU
-        n3ldg_cuda::Memset(loss.value, dim, 0.0f);
+        n3ldg_cuda::Memset(loss().value, getDim(), 0.0f);
 #else
-        loss = 0;
+        loss() = 0;
 #endif
-        degree = 0;
         cg->addNode(this);
     }
 
     void forwardArr(Graph *cg, dtype *value) {
-      degree = 0;
-      Vec(val.v, dim) = Vec(value, dim);
+      Vec(val().v, getDim()) = Vec(value, getDim());
       cg->addNode(this);
     }
 
@@ -81,7 +76,7 @@ public:
 
     void backward() {}
 
-    PExecute generate();
+    PExecutor generate();
 
     bool typeEqual(PNode other) {
         return Node::typeEqual(other);
@@ -89,11 +84,11 @@ public:
 
 };
 
-class BucketExecute : public Execute {
+class BucketExecutor : public Executor {
 };
 
-PExecute BucketNode::generate() {
-    BucketExecute* exec = new BucketExecute();
+PExecutor BucketNode::generate() {
+    BucketExecutor* exec = new BucketExecutor();
     exec->batch.push_back(this);
     return exec;
 }

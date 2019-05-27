@@ -18,7 +18,7 @@
 class SparseParams {
   public:
     SparseParam W;
-    PAlphabet elems;
+    Alphabet elems;
     int nVSize;
     int nDim;
 
@@ -26,7 +26,6 @@ class SparseParams {
     SparseParams() {
         nVSize = 0;
         nDim = 0;
-        elems = NULL;
     }
 
     void exportAdaParams(ModelUpdate& ada) {
@@ -43,35 +42,27 @@ class SparseParams {
     }
 
 
-    //random initization
-    void init(PAlphabet alpha, int nOSize) {
+    void init(const Alphabet &alpha, int nOSize) {
         elems = alpha;
-        nVSize = elems->size();
+        nVSize = elems.size();
         initWeights(nOSize);
     }
 
     int getFeatureId(const string& strFeat) {
-        int idx = elems->from_string(strFeat);
-        if(!elems->m_b_fixed && elems->m_size >= nVSize) {
-            std::cout << "Sparse Alphabet stopped collecting features" << std::endl;
-            elems->set_fixed_flag(true);
-        }
+        int idx = elems.from_string(strFeat);
         return idx;
     }
 
 };
 
-//only implemented sparse linear node.
-//non-linear transformations are not support,
 class SparseNode : public Node {
   public:
     SparseParams* param;
     vector<int> ins;
 
-    SparseNode() : Node() {
+    SparseNode() : Node("sparsenode") {
         ins.clear();
         param = NULL;
-        node_type = "sparsenode";
     }
 
     void setParam(SparseParams* paramInit) {
@@ -88,21 +79,18 @@ class SparseNode : public Node {
                 ins.push_back(featId);
             }
         }
-        degree = 0;
         cg->addNode(this);
     }
 
     void compute() {
-        param->W.value(ins, val);
+        param->W.value(ins, val());
     }
 
-    //no output losses
     void backward() {
-        //assert(param != NULL);
-        param->W.loss(ins, loss);
+        param->W.loss(ins, loss());
     }
 
-    PExecute generate();
+    PExecutor generate();
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) {
@@ -119,10 +107,10 @@ class SparseNode : public Node {
 
 };
 
-class SparseExecute :public Execute {};
+class SparseExecutor :public Executor {};
 
-PExecute SparseNode::generate() {
-    SparseExecute* exec = new SparseExecute();
+PExecutor SparseNode::generate() {
+    SparseExecutor* exec = new SparseExecutor();
     exec->batch.push_back(this);
     return exec;
 }

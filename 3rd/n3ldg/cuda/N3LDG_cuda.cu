@@ -504,7 +504,7 @@ void PrintInts(const int* p, int len) {
     CheckCudaError();
 }
 
-void InitCuda(int device_id) {
+void InitCuda(int device_id, float memory_in_gb) {
     std::cout << "device_id:" << device_id << std::endl;
     CallCuda(cudaSetDeviceFlags(cudaDeviceMapHost));
 
@@ -518,6 +518,7 @@ void InitCuda(int device_id) {
 #endif
     CallCuda(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
     CallCuda(cudaPrintfInit());
+    MemoryPool::Ins().Init(memory_in_gb);
 }
 
 void EndCuda() {
@@ -1100,17 +1101,12 @@ cudaError_t MemoryPool::Malloc(void **p, int size) {
         ++n;
     }
     cudaError_t status = cudaErrorMemoryAllocation;
-    int loop = 0;
     while (status != cudaSuccess) {
-        //cout << "n:" << n << endl;
         if (free_blocks_.at(n).empty()) {
-            //cout << "free_blocks_.at(n).empty()" << endl;
             int higher_power = n + 1;
-            //cout << "higher_power:" << higher_power << endl;
             while (higher_power <= MAX_BLOCK_POWER && free_blocks_.at(higher_power).empty()) {
                 ++higher_power;
             }
-            //cout << "higher_power:" << higher_power << endl;
             if (higher_power > MAX_BLOCK_POWER) {
                 while (status != cudaSuccess) {
                     status = cudaMalloc(p, fit_size);
@@ -1118,9 +1114,7 @@ cudaError_t MemoryPool::Malloc(void **p, int size) {
                 CallCuda(status);
                 MemoryBlock block(*p, fit_size);
                 busy_blocks_.insert(std::make_pair(*p, block));
-                //cout << "malloc successfully" << endl;
             } else {
-                //cout << "higher_power:" << higher_power << endl;
                 auto &v = free_blocks_.at(higher_power);
                 MemoryBlock &to_split = v.rbegin()->second;
                 int half_size = to_split.size >> 1;
@@ -1140,7 +1134,6 @@ cudaError_t MemoryPool::Malloc(void **p, int size) {
             busy_blocks_.insert(std::make_pair(block.p, block));
             free_blocks_.at(n).erase(free_blocks_.at(n).rbegin()->first);
         }
-        ++loop;
     }
     profiler.EndEvent();
 
@@ -3209,6 +3202,52 @@ void UpdateAdam(dtype *val, dtype *grad, int row, int col, bool is_bias, dtype *
     int block_count = DefaultBlockCount(row * col);
     dtype x = 1.0f / (1 - pow(belta1, iter + 1));
     KernelUpdateAdam<<<block_count, TPB>>>(val, grad, row, col, is_bias, aux_mean,
+            aux_square,
+            iter,
+            belta1,
+            belta2,
+            alpha,
+            reg,
+            eps,
+            x);
+    CheckCudaError();
+}
+
+__global__ void KernelUpdateAdamW(dtype *val, dtype *grad, int row, int col, bool is_bias,
+        dtype *aux_mean,
+        dtype *aux_square,
+        int iter,
+        dtype belta1,
+        dtype belta2,
+        dtype alpha,
+        dtype reg,
+        dtype eps,
+        dtype x) {
+    int index = DeviceDefaultIndex();
+    int step = DeviceDefaultStep();
+    int len = row * col;
+    for (int i = index; i < len; i += step) {
+        aux_mean[i] = belta1 * aux_mean[i] + (1 - belta1) * grad[i];
+        aux_square[i] = belta2 * aux_square[i] + (1 - belta2) * grad[i] *
+            grad[i];
+        dtype lr_t = alpha * cuda_sqrt(1 - cuda_pow(belta2, iter + 1)) * x;
+        dtype square_plus_eps = aux_square[i] + eps;
+        val[i] = (1 - (is_bias? 0.0f : reg)) * val[i] - aux_mean[i] * lr_t /
+            cuda_sqrt(square_plus_eps);
+    }
+}
+
+void UpdateAdamW(dtype *val, dtype *grad, int row, int col, bool is_bias, dtype *aux_mean,
+        dtype *aux_square,
+        int iter,
+        dtype belta1,
+        dtype belta2,
+        dtype alpha,
+        dtype reg,
+        dtype eps) {
+    int block_count = DefaultBlockCount(row * col);
+    dtype x = 1.0f / (1 - pow(belta1, iter + 1));
+    KernelUpdateAdamW<<<block_count, TPB>>>(val, grad, row, col, is_bias, aux_mean,
             aux_square,
             iter,
             belta1,

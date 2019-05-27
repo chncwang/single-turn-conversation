@@ -11,6 +11,12 @@ enum ProgramMode {
     METRIC = 3,
 };
 
+struct NgramPenalty {
+    float one;
+    float two;
+    float three;
+};
+
 struct DefaultConfig {
     std::string pair_file;
     std::string post_file;
@@ -29,6 +35,14 @@ struct DefaultConfig {
     std::string output_model_file_prefix;
     std::string input_model_file;
     std::string input_model_dir;
+    float memory_in_gb;
+    float ngram_penalty_1;
+    float ngram_penalty_2;
+    float ngram_penalty_3;
+
+    NgramPenalty toNgramPenalty() const {
+        return {ngram_penalty_1, ngram_penalty_2, ngram_penalty_3};
+    }
 
     void print() const {
         std::cout << "pair_file:" << pair_file << std::endl
@@ -47,7 +61,11 @@ struct DefaultConfig {
             << "hold_batch_size:" << hold_batch_size << std::endl
             << "output_model_file_prefix" << output_model_file_prefix << std::endl
             << "input_model_file:" << input_model_file << std::endl
-            << "input_model_dir:" << input_model_dir << std::endl;
+            << "input_model_dir:" << input_model_dir << std::endl
+            << "memory_in_gb:" << memory_in_gb << std::endl
+            << "ngram_penalty_1:" << ngram_penalty_1 << std::endl
+            << "ngram_penalty_2:" << ngram_penalty_2 << std::endl
+            << "ngram_penalty_3:" << ngram_penalty_3 << std::endl;
     }
 };
 

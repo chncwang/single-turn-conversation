@@ -16,6 +16,9 @@
 #include "Graph.h"
 #include "ModelUpdate.h"
 #include "profiler.h"
+#include "boost/format.hpp"
+
+using boost::format;
 
 class LookupTable : public N3LDGSerializable
 #if USE_GPU
@@ -23,7 +26,7 @@ class LookupTable : public N3LDGSerializable
 #endif
 {
 public:
-    PAlphabet elems;
+    Alphabet elems;
     SparseParam E;
     bool bFineTune;
     int nDim;
@@ -33,7 +36,6 @@ public:
     LookupTable() {
         nVSize = 0;
         nDim = 0;
-        elems = NULL;
         nUNKId = -1;
         bFineTune = false;
     }
@@ -48,20 +50,19 @@ public:
     }
 #endif
 
-    //random initization
-    void init(PAlphabet alpha, int dim, bool fineTune = true) {
+    void init(const Alphabet &alpha, int dim, bool fineTune = true) {
         elems = alpha;
-        nVSize = elems->size();
-        nUNKId = elems->from_string(unknownkey);
+        nVSize = elems.size();
+        nUNKId = elems.from_string(unknownkey);
         initWeights(dim, fineTune);
     }
 
     //initialization by pre-trained embeddings
-    bool init(PAlphabet alpha, const string& inFile, bool fineTune = true, dtype norm = -1) {
+    void init(const Alphabet &alpha, const string& inFile, bool fineTune = true, dtype norm = -1) {
         elems = alpha;
-        nVSize = elems->size();
-        nUNKId = elems->from_string(unknownkey);
-        return initWeights(inFile, fineTune, norm);
+        nVSize = elems.size();
+        nUNKId = elems.from_string(unknownkey);
+        initWeights(inFile, fineTune, norm);
     }
 
     void initWeights(int dim, bool tune) {
@@ -70,6 +71,7 @@ public:
             abort();
         }
         nDim = dim;
+        cout << format("initWeights dim:%1% vocabulary_size:%2%\n") % nDim % nVSize;
         E.init(nDim, nVSize);
         E.val.random(sqrt(1.0 / nDim));
         //E.val.norm2one();
@@ -80,10 +82,9 @@ public:
     }
 
     // default should be fineTune, just for initialization
-    bool initWeights(const string& inFile, bool tune, dtype norm = -1) {
-        if (nVSize == 0 || !elems->is_fixed() || (nVSize == 1 && nUNKId >= 0)) {
-            cout << "nVSize:" << nVSize << " is_fixed:" << elems->is_fixed() << " nUNKId:" <<
-                nUNKId << endl;
+    void initWeights(const string& inFile, bool tune, dtype norm = -1) {
+        if (nVSize == 0 || (nVSize == 1 && nUNKId >= 0)) {
+            cout << "nVSize:" << nVSize << " nUNKId:" << nUNKId << endl;
             std::cerr << "please check the alphabet" << std::endl;
             abort();
         }
@@ -92,13 +93,11 @@ public:
         inf.open(inFile.c_str());
 
         if (!inf.is_open()) {
-            std::cout << "please check the input file" << std::endl;
-            return false;
+            std::cerr << "please check the input file" << std::endl;
+            abort();
         }
 
         string strLine, curWord;
-        int wordId;
-
         vector<string> sLines;
         while (1) {
             if (!my_getline(inf, strLine)) {
@@ -110,7 +109,8 @@ public:
         }
         inf.close();
         if (sLines.size() == 0) {
-            return false;
+            cerr << "sLines size is 0" << endl;
+            abort();
         }
 
         //find the first line, decide the wordDim;
@@ -120,6 +120,7 @@ public:
         split_bychar(sLines[0], vecInfo, ' ');
         nDim = vecInfo.size() - 1;
 
+        cout << format("nDim:%1% nVSize:%2%") % nDim % nVSize << endl;
         E.init(nDim, nVSize);
 
         std::cout << "word embedding dim is " << nDim << std::endl;
@@ -135,9 +136,8 @@ public:
                 std::cout << "error embedding file" << std::endl;
             }
             curWord = vecInfo[0];
-            //we assume the keys are normalized
-            wordId = elems->from_string(curWord);
-            if (wordId >= 0) {
+            if (elems.find_string(curWord)) {
+                int wordId = elems.insert_string(curWord);
                 count++;
                 if (nUNKId == wordId) {
                     bHasUnknown = true;
@@ -155,7 +155,7 @@ public:
         if (count == 0) {
             E.val.random(sqrt(3.0 / nDim));
             std::cout << "find no overlapped lexicons in the embedding file" << std::endl;
-            return false;
+            abort();
         }
 
         if (nUNKId >= 0 && !bHasUnknown) {
@@ -188,7 +188,6 @@ public:
 #if USE_GPU
         E.val.copyFromHostToDevice();
 #endif
-        return true;
     }
 
     void exportAdaParams(ModelUpdate& ada) {
@@ -199,7 +198,11 @@ public:
 
 
     int getElemId(const string& strFeat) const {
-        return elems->from_string(strFeat);
+        return elems.find_string(strFeat) ? elems.from_string(strFeat) : nUNKId;
+    }
+
+    bool findElemId(const string &str) const {
+        return elems.find_string(str);
     }
 
     Json::Value toJson() const {
@@ -209,15 +212,18 @@ public:
         json["dim"] = nDim;
         json["vocabulary_size"] = nVSize;
         json["unkown_id"] = nUNKId;
+        json["word_ids"] = elems.toJson();
         return json;
     }
 
     void fromJson(const Json::Value &json) {
-        E.fromJson(json["e"]);
         bFineTune = json["finetune"].asBool();
         nDim = json["dim"].asInt();
         nVSize = json["vocabulary_size"].asInt();
         nUNKId = json["unkown_id"].asInt();
+        elems.fromJson(json["word_ids"]);
+        E.init(nDim, nVSize);
+        E.fromJson(json["e"]);
     }
 };
 
@@ -227,10 +233,9 @@ public:
     LookupTable* param;
     int xid;
 
-    LookupNode() {
+    LookupNode() : Node("lookup") {
         xid = -1;
         param = NULL;
-        node_type = "lookup";
     }
 
     void setParam(LookupTable* paramInit) {
@@ -245,14 +250,15 @@ public:
     //this should be leaf nodes
     void forward(Graph *cg, const string& strNorm) {
         assert(param != NULL);
-        xid = param->getElemId(strNorm);
-        if (xid < 0 && param->nUNKId >= 0) {
+        if (!param->findElemId(strNorm)) {
+            if (param->nUNKId < 0) {
+                cerr << "nUNKId is negative:" << param->nUNKId << endl;
+                abort();
+            }
             xid = param->nUNKId;
+        } else {
+            xid = param->getElemId(strNorm);
         }
-        if (param->bFineTune && xid < 0) {
-            std::cout << "Caution: unknown words are not modeled !" << std::endl;
-        }
-        degree = 0;
         cg->addNode(this);
     }
 
@@ -260,7 +266,7 @@ public:
         this->forward(&graph, word);
     }
 
-    PExecute generate();
+    PExecutor generate() override;
 
     // better to rewrite for deep understanding
     bool typeEqual(PNode other) override {
@@ -280,25 +286,25 @@ public:
     }
 
     // for which do no require merge
-    void compute() {
+    void compute() override {
         if (xid >= 0) {
-            param->E.value(xid, val);
+            param->E.value(xid, val());
         } else {
-            val.zero();
+            val().zero();
         }
     }
 
-    void backward() {
+    void backward() override {
         assert(param != NULL);
         if (xid == param->nUNKId || (xid >= 0 && param->bFineTune)) {
-            param->E.loss(xid, loss);
+            param->E.loss(xid, loss());
         }
     }
 };
 
 
 #if USE_GPU
-class LookupExecute :public Execute {
+class LookupExecutor :public Executor {
 public:
     int dim;
     LookupTable *table;
@@ -312,7 +318,7 @@ public:
         for (int idx = 0; idx < count; idx++) {
             LookupNode *n = static_cast<LookupNode*>(batch[idx]);
             xids.push_back(n->xid);
-            vals.push_back(n->val.value);
+            vals.push_back(n->val().value);
         }
 
         n3ldg_cuda::LookupForward(xids, table->E.val.value, count, dim, vals);
@@ -329,7 +335,7 @@ public:
         std::vector<dtype*> losses;
         losses.reserve(count);
         for (Node *n : batch) {
-            losses.push_back(n->loss.value);
+            losses.push_back(n->loss().value);
         }
         n3ldg_cuda::LookupBackward(xids, table->nUNKId, table->bFineTune,
                 losses,
@@ -351,15 +357,15 @@ public:
     }
 };
 #else
-class LookupExecute :public Execute {};
+class LookupExecutor :public Executor {};
 #endif
 
-PExecute LookupNode::generate() {
-    LookupExecute* exec = new LookupExecute();
+PExecutor LookupNode::generate() {
+    LookupExecutor* exec = new LookupExecutor();
     exec->batch.push_back(this);
 #if USE_GPU
     exec->table = param;
-    exec->dim = dim;
+    exec->dim = getDim();
 #endif
     return exec;
 }

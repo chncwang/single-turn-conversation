@@ -87,9 +87,9 @@ public:
             abort();
         }
 
-        if (x.at(0)->dim != _param->hidden_dim || guide.dim != _param->guide_dim) {
+        if (x.at(0)->getDim() != _param->hidden_dim || guide.getDim() != _param->guide_dim) {
             std::cerr << "input dim does not match for attention  operation" << std::endl;
-            cerr << boost::format("x.at(0)->dim:%1%, _param->hidden_dim:%2% guide.dim:%3% _param->guide_dim:%4%") % x.at(0)->dim % _param->hidden_dim % guide.dim % _param->guide_dim << endl;
+            cerr << boost::format("x.at(0)->dim:%1%, _param->hidden_dim:%2% guide.dim:%3% _param->guide_dim:%4%") % x.at(0)->getDim() % _param->hidden_dim % guide.getDim() % _param->guide_dim << endl;
             abort();
         }
 
@@ -182,7 +182,7 @@ class AttentionVBuilder {
             return;
         }
         _nSize = x.size();
-        if (x.at(0)->dim != _nHiddenDim || guide->dim != _nGuideDim) {
+        if (x.at(0)->getDim() != _nHiddenDim || guide->getDim() != _nGuideDim) {
             std::cout << "input dim does not match for attention  operation" << std::endl;
             return;
         }
@@ -242,7 +242,7 @@ public:
             return;
         }
         _nSize = x.size();
-        if (x.at(0)->dim != _nHiddenDim) {
+        if (x.at(0)->getDim() != _nHiddenDim) {
             std::cout << "input dim does not match for attention  operation" << std::endl;
             return;
         }
@@ -324,7 +324,7 @@ class SelfAttentionVBuilder {
             return;
         }
         _nSize = x.size();
-        if (x.at(0)->dim != _nHiddenDim) {
+        if (x.at(0)->getDim() != _nHiddenDim) {
             std::cout << "input dim does not match for attention  operation" << std::endl;
             return;
         }

@@ -3,12 +3,15 @@
 
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <codecvt>
 #include <fstream>
 #include <iterator>
 #include <regex>
 #include <iostream>
 #include <utility>
+#include <atomic>
+#include <mutex>
 #include "single_turn_conversation/conversation_structure.h"
 #include "single_turn_conversation/def.h"
 #include "single_turn_conversation/default_config.h"
@@ -16,8 +19,10 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/regex.hpp>
 #include <boost/algorithm/string/regex.hpp>
+#include <boost/asio.hpp>
 
 using boost::format;
+using namespace boost::asio;
 
 std::vector<PostAndResponses> readPostAndResponsesVector(const std::string &filename) {
     DefaultConfig &default_config = GetDefaultConfig();
@@ -144,18 +149,62 @@ vector<string> reprocessSentence(const vector<string> &sentence,
 }
 
 vector<vector<string>> reprocessSentences(const vector<vector<string>> &sentences,
-        const unordered_map<string, int> &word_counts,
-        int min_occurences) {
+        const unordered_set<string> &words,
+        const unordered_set<int> &ids) {
     cout << boost::format("sentences size:%1%") % sentences.size() << endl;
+
+    thread_pool pool(16);
     vector<vector<string>> result;
-    int i = 0;
+    map<int, vector<string>> result_map;
+    mutex result_mutex;
+    mutex cout_mutex;
+    atomic_int i(0);
+    int id = 0;
     for (const auto &sentence : sentences) {
-        if (i % 1000 == 0) {
-            cout << static_cast<float>(i) / sentences.size() << endl;
-        }
-        result.push_back(reprocessSentence(sentence, word_counts, min_occurences));
-        ++i;
+        auto f = [&, id]() {
+            if (i % 1000 == 0) {
+                cout_mutex.lock();
+                cout << static_cast<float>(i) / sentences.size() << endl;
+                cout_mutex.unlock();
+            }
+            vector<string> processed_sentence;
+            if (ids.find(id) == ids.end()) {
+                processed_sentence = sentence;
+            } else {
+                for (const string &word : sentence) {
+                    if (isPureChinese(word)) {
+                        auto it = words.find(word);
+                        if (it == words.end()) {
+                            for (int i = 0; i < word.size(); i += 3) {
+                                processed_sentence.push_back(word.substr(i, 3));
+                            }
+                        } else {
+                            processed_sentence.push_back(word);
+                        }
+                    } else {
+                        processed_sentence.push_back(word);
+                    }
+                }
+            }
+            result_mutex.lock();
+            result_map.insert(make_pair(id, processed_sentence));
+            result_mutex.unlock();
+            ++i;
+        };
+        post(pool, f);
+        ++id;
     }
+    pool.join();
+
+    for (int i = 0; i < sentences.size(); ++i) {
+        auto it = result_map.find(i);
+        if (it == result_map.end()) {
+            cerr << boost::format("id %1% not found\n") % i;
+            abort();
+        }
+        result.push_back(it->second);
+    }
+
     return result;
 }
 

@@ -16,8 +16,6 @@ struct ModelParams : public N3LDGSerializable
     LSTM1Params left_to_right_encoder_params;
     LSTM1Params right_to_left_encoder_params;
     LSTM1Params decoder_params;
-    UniParams transformed_h0_params;
-    UniParams transformed_c0_params;
     AttentionParams attention_parrams;
 
     Json::Value toJson() const override {
@@ -27,8 +25,6 @@ struct ModelParams : public N3LDGSerializable
         json["left_to_right_encoder_params"] = left_to_right_encoder_params.toJson();
         json["right_to_left_encoder_params"] = right_to_left_encoder_params.toJson();
         json["decoder_params"] = decoder_params.toJson();
-        json["transformed_h0_params"] = transformed_h0_params.toJson();
-        json["transformed_c0_params"] = transformed_c0_params.toJson();
         json["attention_parrams"] = attention_parrams.toJson();
         return json;
     }
@@ -39,16 +35,13 @@ struct ModelParams : public N3LDGSerializable
         left_to_right_encoder_params.fromJson(json["left_to_right_encoder_params"]);
         right_to_left_encoder_params.fromJson(json["right_to_left_encoder_params"]);
         decoder_params.fromJson(json["decoder_params"]);
-        transformed_h0_params.fromJson(json["transformed_h0_params"]);
-        transformed_c0_params.fromJson(json["transformed_c0_params"]);
         attention_parrams.fromJson(json["attention_parrams"]);
     }
 
 #if USE_GPU
     std::vector<n3ldg_cuda::Transferable *> transferablePtrs() override {
         return {&lookup_table, &hidden_to_wordvector_params, &left_to_right_encoder_params,
-            &right_to_left_encoder_params, &decoder_params, &transformed_h0_params,
-            &transformed_c0_params, &attention_parrams };
+            &right_to_left_encoder_params, &decoder_params, &attention_parrams };
     }
 #endif
 };

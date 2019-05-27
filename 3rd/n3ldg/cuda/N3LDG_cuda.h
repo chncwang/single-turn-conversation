@@ -185,7 +185,7 @@ void BatchMemset(const std::vector<dtype*> &vec, int count, int dim,
 void PrintNums(const dtype* p, int len);
 void PrintInts(const int* p, int len);
 
-void InitCuda(int device_id = 0);
+void InitCuda(int device_id = 0, float memory_in_gb = 0.0f);
 void EndCuda();
 
 cudaError_t MyCudaMemcpy(void *dest, const void *src, size_t count, cudaMemcpyKind kind);
@@ -413,6 +413,14 @@ void UpdateAdam(dtype *val, dtype *grad, int row, int col, dtype *aux_mean,
         dtype *aux_square,
         const bool *indexers,
         int *iters,
+        dtype belta1,
+        dtype belta2,
+        dtype alpha,
+        dtype reg,
+        dtype eps);
+void UpdateAdamW(dtype *val, dtype *grad, int row, int col, bool is_bias, dtype *aux_mean,
+        dtype *aux_square,
+        int iter,
         dtype belta1,
         dtype belta2,
         dtype alpha,
