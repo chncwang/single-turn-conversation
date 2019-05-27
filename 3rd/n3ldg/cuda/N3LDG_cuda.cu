@@ -3213,6 +3213,52 @@ void UpdateAdam(dtype *val, dtype *grad, int row, int col, bool is_bias, dtype *
     CheckCudaError();
 }
 
+__global__ void KernelUpdateAdamW(dtype *val, dtype *grad, int row, int col, bool is_bias,
+        dtype *aux_mean,
+        dtype *aux_square,
+        int iter,
+        dtype belta1,
+        dtype belta2,
+        dtype alpha,
+        dtype reg,
+        dtype eps,
+        dtype x) {
+    int index = DeviceDefaultIndex();
+    int step = DeviceDefaultStep();
+    int len = row * col;
+    for (int i = index; i < len; i += step) {
+        aux_mean[i] = belta1 * aux_mean[i] + (1 - belta1) * grad[i];
+        aux_square[i] = belta2 * aux_square[i] + (1 - belta2) * grad[i] *
+            grad[i];
+        dtype lr_t = alpha * cuda_sqrt(1 - cuda_pow(belta2, iter + 1)) * x;
+        dtype square_plus_eps = aux_square[i] + eps;
+        val[i] = (1 - (is_bias? 0.0f : reg)) * val[i] - aux_mean[i] * lr_t /
+            cuda_sqrt(square_plus_eps);
+    }
+}
+
+void UpdateAdamW(dtype *val, dtype *grad, int row, int col, bool is_bias, dtype *aux_mean,
+        dtype *aux_square,
+        int iter,
+        dtype belta1,
+        dtype belta2,
+        dtype alpha,
+        dtype reg,
+        dtype eps) {
+    int block_count = DefaultBlockCount(row * col);
+    dtype x = 1.0f / (1 - pow(belta1, iter + 1));
+    KernelUpdateAdamW<<<block_count, TPB>>>(val, grad, row, col, is_bias, aux_mean,
+            aux_square,
+            iter,
+            belta1,
+            belta2,
+            alpha,
+            reg,
+            eps,
+            x);
+    CheckCudaError();
+}
+
 __global__ void KernelUpdateAdam(dtype *val, dtype *grad, int row, int col,
         dtype *aux_mean,
         dtype *aux_square,

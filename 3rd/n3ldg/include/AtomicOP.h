@@ -536,76 +536,88 @@ PExecutor PDotNode::generate() {
 
 class DropoutNode : public Node {
 public:
-    Node* in = nullptr;
-    Tensor1D drop_mask;
-    dtype drop_value = 0.0f;
-    bool is_training = true;
-
-    DropoutNode(dtype dropout) : Node("dropout"), drop_value(dropout) {}
+    DropoutNode(dtype dropout, bool is_training) : Node("dropout"), drop_value_(dropout),
+    is_training_(is_training) {}
 
     void init(int dimm) override {
         Node::init(dimm);
-        drop_mask.init(dimm);
+        drop_mask_.init(dimm);
     }
 
 #if USE_GPU
     void initOnHostAndDevice(int ndim) override {
         Node::initOnHostAndDevice(ndim);
-        drop_mask.init(ndim);
+        drop_mask_.init(ndim);
     }
 #endif
 
     virtual void generate_dropmask() {
-        int dropNum = (int)(getDim() * drop_value);
+        int dropNum = (int)(getDim() * drop_value_);
         std::vector<int> tmp_masks(getDim());
         for (int idx = 0; idx < getDim(); idx++) {
             tmp_masks[idx] = idx < dropNum ? 0 : 1;
         }
         random_shuffle(tmp_masks.begin(), tmp_masks.end());
         for (int idx = 0; idx < getDim(); idx++) {
-            drop_mask[idx] = tmp_masks[idx];
+            drop_mask_[idx] = tmp_masks[idx];
         }
     }
 
     void forward(Graph &graph, Node &x) {
-        in = &x;
-        in->addParent(this);
+        in_ = &x;
+        in_->addParent(this);
         graph.addNode(this);
     }
 
     void compute() override {
-        if (is_training) {
+        if (is_training_) {
 #if !TEST_CUDA
             generate_dropmask();
 #endif
         } else {
-            drop_mask = 1 - drop_value;
+            drop_mask_ = 1 - drop_value_;
         }
-//        std::cout << "before compute:" << in->val.toString() << std::endl;
-        val().vec() = in->val().vec() * drop_mask.vec();
-//        std::cout << "after compute:" << val.toString() << std::endl;
+//        cout << boost::format("compute is_training:%1%\n") % is_training_;
+//        std::cout << "before compute:" << in_->val().toString() << std::endl;
+        val().vec() = in_->val().vec() * drop_mask_.vec();
+//        std::cout << "after compute:" << val().toString() << std::endl;
     }
 
     void backward() override {
-//        std::cout << "before backward:" << loss.toString() << std::endl;
-        in->loss().vec() += loss().vec() * drop_mask.vec();
-//        std::cout << "after backward:" << in->loss.toString() << std::endl;
+//        cout << boost::format("backward is_training:%1%\n") % is_training_;
+//        std::cout << "before backward:" << loss().toString() << std::endl;
+        in_->loss().vec() += loss().vec() * drop_mask_.vec();
+//        std::cout << "after backward:" << in_->loss().toString() << std::endl;
     }
 
     bool typeEqual(Node *other) override {
         DropoutNode *o = static_cast<DropoutNode*>(other);
-        if (o->is_training != is_training) {
+        if (o->is_training_ != is_training_) {
             std::cerr << "is_training not equal" << std::endl;
             abort();
         }
-        return Node::typeEqual(other) && abs(drop_value - o->drop_value) < 0.001f;
+        return Node::typeEqual(other) && abs(drop_value_ - o->drop_value_) < 0.001f;
     }
 
     size_t typeHashCode() const override {
-        return Node::typeHashCode() ^ (std::hash<int>{}((int)(10000 * drop_value)) << 1);
+        return Node::typeHashCode() ^ (std::hash<int>{}((int)(10000 * drop_value_)) << 1);
     }
 
     PExecutor generate() override;
+
+    Node* in() {
+        return in_;
+    }
+
+    bool isTraning() {
+        return is_training_;
+    }
+
+private:
+    Node* in_ = nullptr;
+    Tensor1D drop_mask_;
+    dtype drop_value_ = 0.0f;
+    bool is_training_ = true;
 };
 
 class DropoutExecutor :public Executor {
@@ -633,7 +645,7 @@ class DropoutExecutor :public Executor {
 #if TEST_CUDA
             tanh->in->val.copyFromHostToDevice();
 #endif
-            xs.push_back(tanh->in->val().value);
+            xs.push_back(tanh->in()->val().value);
             ys.push_back(tanh->val().value);
         }
 
@@ -668,7 +680,7 @@ class DropoutExecutor :public Executor {
 #endif
             vals.push_back(tanh->val().value);
             losses.push_back(tanh->loss().value);
-            in_losses.push_back(tanh->in->loss().value);
+            in_losses.push_back(tanh->in()->loss().value);
         }
         n3ldg_cuda::DropoutBackward(losses, vals, count, dim, is_training, drop_mask.value,
                 drop_value, in_losses);
@@ -688,7 +700,7 @@ class DropoutExecutor :public Executor {
 PExecutor DropoutNode::generate() {
     DropoutExecutor* exec = new DropoutExecutor();
     exec->batch.push_back(this);
-    exec->is_training = is_training;
+    exec->is_training = isTraning();
     exec->dim = getDim();
     return exec;
 }

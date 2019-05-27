@@ -210,13 +210,15 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
         abort();
     }
     hyper_params.l2_reg = l2_reg;
-    string optimzer = ini_reader.Get("hyper", "optimzer", "");
-    if (optimzer == "adam") {
+    string optimizer = ini_reader.Get("hyper", "optimzer", "");
+    if (optimizer == "adam") {
         hyper_params.optimizer = Optimizer::ADAM;
-    } else if (optimzer == "adagrad") {
+    } else if (optimizer == "adagrad") {
         hyper_params.optimizer = Optimizer::ADAGRAD;
+    } else if (optimizer == "adamw") {
+        hyper_params.optimizer = Optimizer::ADAMW;
     } else {
-        cerr << "invalid optimzer:" << optimzer << endl;
+        cerr << "invalid optimzer:" << optimizer << endl;
         abort();
     }
 
@@ -343,7 +345,7 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
             print(post_sentences.at(post_and_responses.post_id));
 
             const vector<int> &response_ids = post_and_responses.response_ids;
-            float min_perplex = -1.0f;
+            float avg_perplex = 0.0f;
             cout << "response size:" << response_ids.size() << endl;
             for (int response_id : response_ids) {
                 //            cout << "response:" << endl;
@@ -363,21 +365,19 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
                         return model_params.lookup_table.getElemId(w);
                         });
                 float perplex = computePerplex(nodes, word_ids);
-                //            cout << format("perplex:%1%") % perplex << endl;
-                if (min_perplex < 0.0f || perplex < min_perplex) {
-                    min_perplex = perplex;
-                }
+                avg_perplex += perplex;
             }
-            cout << "min_perplex:" << min_perplex << endl;
+            avg_perplex /= response_ids.size();
+            cout << "avg_perplex:" << avg_perplex << endl;
             rep_perplex_mutex.lock();
-            rep_perplex += 1.0f / min_perplex;
+            rep_perplex += avg_perplex;
             rep_perplex_mutex.unlock();
         };
         post(pool, f);
     }
     pool.join();
 
-    cout << "repciprocal perplex:" << rep_perplex << endl;
+    cout << "total avg perplex:" << rep_perplex / post_and_responses_vector.size() << endl;
     return rep_perplex;
 }
 
@@ -848,12 +848,12 @@ int main(int argc, char *argv[]) {
                         Graph graph;
 
                         graph_builder.forward(graph, post_sentences.at(conversation_pair.post_id),
-                                hyper_params, model_params, false);
+                                hyper_params, model_params, true);
 
                         DecoderComponents decoder_components;
                         graph_builder.forwardDecoder(graph, decoder_components,
                                 response_sentences.at(conversation_pair.response_id),
-                                hyper_params, model_params, false);
+                                hyper_params, model_params, true);
 
                         graph.compute();
 
@@ -869,7 +869,16 @@ int main(int argc, char *argv[]) {
                             "");
                 }
 
-                model_update.updateAdam(10.0f);
+                if (hyper_params.optimizer == Optimizer::ADAM) {
+                    model_update.updateAdam(10.0f);
+                } else if (hyper_params.optimizer == Optimizer::ADAGRAD) {
+                    model_update.update(10.0f);
+                } else if (hyper_params.optimizer == Optimizer::ADAMW) {
+                    model_update.updateAdamW(10.0f);
+                } else {
+                    cerr << "no optimzer set" << endl;
+                    abort();
+                }
 
                 if (default_config.save_model_per_batch) {
                     saveModel(hyper_params, model_params, default_config.output_model_file_prefix,

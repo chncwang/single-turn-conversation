@@ -39,7 +39,7 @@ public:
             }
 
     dtype finalScore() const {
-        return final_log_probability / path_.size()  + extra_score_;
+        return (final_log_probability + extra_score_) / path_.size();
     }
 
     dtype finalLogProbability() const {
@@ -259,9 +259,8 @@ struct GraphBuilder {
             input_lookup->setParam(model_params.lookup_table);
             input_lookup->forward(graph, word);
 
-            DropoutNode* dropout_node(new DropoutNode(hyper_params.dropout));
+            DropoutNode* dropout_node(new DropoutNode(hyper_params.dropout, is_training));
             dropout_node->init(hyper_params.word_dim);
-            dropout_node->is_training = is_training;
             dropout_node->forward(graph, *input_lookup);
             encoder_lookups.push_back(dropout_node);
         }
@@ -318,9 +317,8 @@ struct GraphBuilder {
             before_dropout->setParam(model_params.lookup_table);
             before_dropout->forward(graph, *answer);
 
-            DropoutNode* decoder_lookup(new DropoutNode(hyper_params.dropout));
+            DropoutNode* decoder_lookup(new DropoutNode(hyper_params.dropout, is_training));
             decoder_lookup->init(hyper_params.word_dim);
-            decoder_lookup->is_training = is_training;
             decoder_lookup->forward(graph, *before_dropout);
             decoder_components.decoder_lookups.push_back(decoder_lookup);
             last_input = decoder_components.decoder_lookups.at(i - 1);

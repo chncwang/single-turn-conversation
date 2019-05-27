@@ -210,9 +210,8 @@ struct DynamicLSTMBuilder {
         hidden_before_dropout->init(out_dim);
         _hiddens_before_dropout.push_back(hidden_before_dropout);
 
-        DropoutNode *hidden = new DropoutNode(dropout);
+        DropoutNode *hidden = new DropoutNode(dropout, is_training);
         hidden->init(out_dim);
-        hidden->is_training = is_training;
         _hiddens.push_back(hidden);
 
         PAddNode * inputgate_add = new PAddNode;

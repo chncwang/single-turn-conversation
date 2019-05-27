@@ -8,7 +8,8 @@
 
 enum Optimizer {
     ADAM = 0,
-    ADAGRAD = 1
+    ADAGRAD = 1,
+    ADAMW = 2
 };
 
 struct HyperParams : public N3LDGSerializable {

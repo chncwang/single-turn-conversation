@@ -108,6 +108,14 @@ class ModelUpdate {
 #endif
     }
 
+    void updateAdamW(dtype max_scale) {
+
+    }
+
+    void updateAdamW() {
+
+    }
+
     void rescaleGrad(dtype scale) {
         for (int idx = 0; idx < _params.size(); idx++) {
             _params[idx]->rescaleGrad(scale);

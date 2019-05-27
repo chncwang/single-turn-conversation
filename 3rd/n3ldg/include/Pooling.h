@@ -135,7 +135,7 @@ public:
         int nSize = x.size();
         ins.clear();
         for (int i = 0; i < nSize; i++) {
-            assert(x[i]->val.dim == dim);
+            assert(x[i]->getVal().dim == getDim());
             ins.push_back(x[i]);
         }
 
@@ -222,7 +222,7 @@ public:
         int nSize = x.size();
         ins.clear();
         for (int i = 0; i < nSize; i++) {
-            assert(x[i]->val.dim == dim);
+            assert(x[i]->getVal().dim == getDim());
             ins.push_back(x[i]);
         }
 
