@@ -763,9 +763,6 @@ int main(int argc, char *argv[]) {
             unique_ptr<Metric> metric = unique_ptr<Metric>(new Metric);
             for (int batch_i = 0; batch_i < train_conversation_pairs.size() /
                     hyper_params.batch_size; ++batch_i) {
-                if (batch_i > 10) {
-                    break;
-                }
                 cout << format("batch_i:%1% iteration:%2%") % batch_i % iteration << endl;
                 Graph graph;
                 vector<shared_ptr<GraphBuilder>> graph_builders;
@@ -798,7 +795,6 @@ int main(int argc, char *argv[]) {
                             model_params.lookup_table);
                     vector<Node*> result_nodes =
                         toNodePointers(decoder_components_vector.at(i).wordvector_to_onehots);
-                    cout << boost::format("result_nodes size:%1%") % result_nodes.size() << endl;
 #if USE_GPU
                     vector<const dtype *> vals;
                     vector<dtype*> losses;
@@ -898,7 +894,6 @@ int main(int argc, char *argv[]) {
             }
 
             cout << "loss_sum:" << loss_sum << " last_loss_sum:" << endl;
-            break;
             if (loss_sum > last_loss_sum) {
                 if (epoch == 0) {
                     cerr << "loss is larger than last epoch but epoch is 0" << endl;
