@@ -15,12 +15,14 @@
 #include "single_turn_conversation/conversation_structure.h"
 #include "single_turn_conversation/def.h"
 #include "single_turn_conversation/default_config.h"
+#include "tinyutf8.h"
 #include <boost/format.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/regex.hpp>
 #include <boost/algorithm/string/regex.hpp>
 #include <boost/asio.hpp>
 
+using namespace std;
 using boost::format;
 using namespace boost::asio;
 
@@ -90,6 +92,11 @@ std::vector<ConversationPair> readConversationPairs(const std::string &filename)
     return results;
 }
 
+bool isPureChinese(const string &word) {
+    std::regex expression("^[\u4e00-\u9fff]+$");
+    return std::regex_search(word, expression);
+}
+
 std::vector<std::vector<std::string>> readSentences(const std::string &filename) {
     std::string line;
     std::ifstream ifs(filename);
@@ -105,19 +112,34 @@ std::vector<std::vector<std::string>> readSentences(const std::string &filename)
         }
 
         const std::string &sentence = strs.at(1);
-        std::vector<std::string> words;
+        std::vector<string> words;
         boost::split(words, sentence, boost::is_any_of(" "));
-        words.push_back(STOP_SYMBOL);
-        results.push_back(words);
+        std::vector<utf8_string> utf8_words;
+        for (const string &word : words) {
+            utf8_string s(word);
+            utf8_words.push_back(s);
+        }
+
+        std::vector<std::string> characters;
+        for (const utf8_string &word : utf8_words) {
+            for (int i = 0; i < word.length(); ++i) {
+                characters.push_back(word.substr(i, 1).cpp_str());
+            }
+        }
+
+        characters.push_back(STOP_SYMBOL);
+        results.push_back(characters);
+        if (i % 10000 == 0) {
+            cout << boost::format("i:%1%\n") % i;
+            for (const string &c : characters) {
+                cout << c << " ";
+            }
+            cout << endl;
+        }
         ++i;
     }
 
     return results;
-}
-
-bool isPureChinese(const string &word) {
-    std::regex expression("^[\u4e00-\u9fff]+$");
-    return std::regex_search(word, expression);
 }
 
 vector<string> reprocessSentence(const vector<string> &sentence,
