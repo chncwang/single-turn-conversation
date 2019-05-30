@@ -113,13 +113,16 @@ public:
 
 
 
-struct AttentionVParams {
+struct AttentionVParams : public N3LDGSerializable
+#if USE_GPU
+, public TransferableComponents
+#endif
+{
     BiParams bi_atten;
     int hidden_dim;
     int guide_dim;
 
-    AttentionVParams() {
-    }
+    AttentionVParams() = default;
 
     void exportAdaParams(ModelUpdate& ada) {
         bi_atten.exportAdaParams(ada);
@@ -130,69 +133,63 @@ struct AttentionVParams {
         hidden_dim = nHidden;
         guide_dim = nGuide;
     }
+
+    Json::Value toJson() const override {
+        Json::Value json;
+        json["bi_atten"] = bi_atten.toJson();
+        json["hidden_dim"] = hidden_dim;
+        json["guide_dim"] = guide_dim;
+        return json;
+    }
+
+    void fromJson(const Json::Value &json) override {
+        bi_atten.fromJson(json["bi_atten"]);
+        hidden_dim = json["hidden_dim"].asInt();
+        guide_dim = json["guide_dim"].asInt();
+    }
+
+#if USE_GPU
+    std::vector<Transferable *> transferablePtrs() override {
+        return {&bi_atten};
+    }
+
+    virtual std::string name() const {
+        return "AttentionVParams";
+    }
+#endif
 };
 
 class AttentionVBuilder {
-  public:
-    int _nSize;
-    int _nHiddenDim;
-    int _nGuideDim;
-
-    vector<BiNode> _weights;
-    AttentionSoftMaxVNode _hidden;
+public:
+    vector<BiNode *> _weights;
+    AttentionSoftMaxVNode* _hidden = new AttentionSoftMaxVNode;
     AttentionVParams* _param;
 
-  public:
-    AttentionVBuilder() {
-        clear();
+    void init(AttentionVParams& paramInit) {
+        _param = &paramInit;
+        _hidden->init(paramInit.hidden_dim);
     }
 
-    ~AttentionVBuilder() {
-        clear();
-    }
-
-  public:
-    void resize(int maxsize) {
-        _weights.resize(maxsize);
-        _hidden.setParam(maxsize);
-    }
-
-    void clear() {
-        _weights.clear();
-    }
-
-  public:
-    void init(AttentionVParams* paramInit) {
-        _param = paramInit;
-        _nHiddenDim = _param->hidden_dim;
-        _nGuideDim = _param->guide_dim;
-
-        int maxsize = _weights.size();
-        for (int idx = 0; idx < maxsize; idx++) {
-            _weights.at(idx).setParam(&_param->bi_atten);
-            _weights.at(idx).init(_nHiddenDim);
-        }
-        _hidden.init(_nHiddenDim);
-    }
-
-  public:
-    void forward(Graph *cg, const vector<Node *>& x, Node * guide) {
+    void forward(Graph &cg, const vector<Node *>& x, Node &guide) {
         if (x.size() == 0) {
-            std::cout << "empty inputs for lstm operation" << std::endl;
-            return;
+            std::cerr << "empty inputs for lstm operation" << std::endl;
+            abort();
         }
-        _nSize = x.size();
-        if (x.at(0)->getDim() != _nHiddenDim || guide->getDim() != _nGuideDim) {
-            std::cout << "input dim does not match for attention  operation" << std::endl;
-            return;
+        if (x.at(0)->getDim() != _param->hidden_dim || guide.getDim() != _param->guide_dim) {
+            std::cerr << "input dim does not match for attention  operation" << std::endl;
+            abort();
         }
 
-        vector<Node *> aligns;
-        for (int idx = 0; idx < _nSize; idx++) {
-            _weights.at(idx).forward(cg, x.at(idx), guide);
-            aligns.push_back(&_weights.at(idx));
+        for (int i = 0; i < x.size(); ++i) {
+            BiNode *weight_node = new BiNode;
+            weight_node->setParam(_param->bi_atten);
+            weight_node->init(_param->hidden_dim);
+            weight_node->forward(cg, *x.at(i), guide);
+            _weights.push_back(weight_node);
         }
-        _hidden.forward(cg, x, aligns);
+
+        vector<Node*> weights = toNodePointers<BiNode>(_weights);
+        _hidden->forward(cg, x, weights);
     }
 };
 
@@ -277,7 +274,7 @@ struct SelfAttentionVParams {
 };
 
 class SelfAttentionVBuilder {
-  public:
+public:
     int _nSize;
     int _nHiddenDim;
 
@@ -285,26 +282,6 @@ class SelfAttentionVBuilder {
     AttentionSoftMaxVNode _hidden;
     SelfAttentionVParams* _param;
 
-  public:
-    SelfAttentionVBuilder() {
-        clear();
-    }
-
-    ~SelfAttentionVBuilder() {
-        clear();
-    }
-
-  public:
-    void resize(int maxsize) {
-        _weights.resize(maxsize);
-        _hidden.setParam(maxsize);
-    }
-
-    void clear() {
-        _weights.clear();
-    }
-
-  public:
     void init(SelfAttentionVParams* paramInit) {
         _param = paramInit;
         _nHiddenDim = _param->hidden_dim;
@@ -317,8 +294,7 @@ class SelfAttentionVBuilder {
         _hidden.init(_nHiddenDim);
     }
 
-  public:
-    void forward(Graph *cg, const vector<Node *>& x) {
+    void forward(Graph &cg, const vector<Node *>& x) {
         if (x.size() == 0) {
             std::cout << "empty inputs for lstm operation" << std::endl;
             return;
@@ -331,7 +307,7 @@ class SelfAttentionVBuilder {
 
         vector<Node *> aligns;
         for (int idx = 0; idx < _nSize; idx++) {
-            _weights.at(idx).forward(cg, x.at(idx));
+            _weights.at(idx).forward(cg, *x.at(idx));
             aligns.push_back(&_weights.at(idx));
         }
         _hidden.forward(cg, x, aligns);

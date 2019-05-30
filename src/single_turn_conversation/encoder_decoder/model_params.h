@@ -16,7 +16,7 @@ struct ModelParams : public N3LDGSerializable
     LSTM1Params left_to_right_encoder_params;
     LSTM1Params right_to_left_encoder_params;
     LSTM1Params decoder_params;
-    AttentionParams attention_parrams;
+    AttentionVParams attention_parrams;
 
     Json::Value toJson() const override {
         Json::Value json;

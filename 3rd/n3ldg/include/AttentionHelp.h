@@ -103,10 +103,7 @@ public:
                 }
             }
         }
-
-
     }
-
 };
 
 
@@ -233,50 +230,30 @@ PExecutor AttentionSoftMaxNode::generate() {
 
 
 class AttentionSoftMaxVNode : public Node {
-  public:
+public:
     vector<Tensor1D> masks, mask_losses;
     vector<Tensor1D> unnormed_masks;
     Tensor1D sum;
     vector<Node *> unnormeds;
     vector<Node *> ins;
 
-  public:
-    AttentionSoftMaxVNode() : Node("AttentionSoftmaxV") {
-        ins.clear();
-        unnormeds.clear();
-    }
-
-    ~AttentionSoftMaxVNode() {
-        masks.clear();
-        mask_losses.clear();
-        unnormed_masks.clear();
-        ins.clear();
-        unnormeds.clear();
-    }
-
-    void setParam(int maxsize) {
-        masks.resize(maxsize);
-        mask_losses.resize(maxsize);
-        unnormed_masks.resize(maxsize);
-    }
-
+    AttentionSoftMaxVNode() : Node("AttentionSoftmaxV") {}
 
     void init(int ndim) {
         Node::init(ndim);
-        int count = masks.size();
-        for (int idx = 0; idx < count; idx++) {
-            masks[idx].init(ndim);
-            mask_losses[idx].init(ndim);
-            unnormed_masks[idx].init(ndim);
-        }
+//        int count = masks.size();
+//        for (int idx = 0; idx < count; idx++) {
+//            masks[idx].init(ndim);
+//            mask_losses[idx].init(ndim);
+//            unnormed_masks[idx].init(ndim);
+//        }
         sum.init(ndim);
 #if !USE_GPU
         sum.zero();
 #endif
     }
 
-  public:
-    void forward(Graph *cg, const vector<Node *>& x, const vector<Node *>& a) {
+    void forward(Graph &cg, const vector<Node *>& x, const vector<Node *>& a) {
         if (x.size() == 0) {
             std::cerr << "empty inputs for attention help node" << std::endl;
             abort();
@@ -285,9 +262,8 @@ class AttentionSoftMaxVNode : public Node {
             std::cerr << "the number of input nodes does not equal the number of attention factors." << std::endl;
             abort();
         }
+
         int nSize = x.size();
-        ins.clear();
-        unnormeds.clear();
         for (int i = 0; i < nSize; i++) {
             if (x.at(i)->val().dim != getDim() || a.at(i)->val().dim != getDim()) {
                 std::cerr << "input matrixes are not matched" << std::endl;
@@ -302,23 +278,23 @@ class AttentionSoftMaxVNode : public Node {
             unnormeds.at(i)->addParent(this);
         }
 
-        cg->addNode(this);
+        cg.addNode(this);
     }
 
-
-  public:
     PExecutor generate();
 
-    // better to rewrite for deep understanding
     bool typeEqual(Node * other) {
         return Node::typeEqual(other);
     }
 
-  public:
-
     void compute() {
         int nSize = ins.size();
-
+        unnormed_masks.resize(nSize);
+        masks.resize(nSize);
+        for (int i = 0; i < nSize; ++i) {
+            unnormed_masks.at(i).init(getDim());
+            masks.at(i).init(getDim());
+        }
         sum.zero();
         for (int i = 0; i < nSize; ++i) {
             unnormed_masks.at(i).vec() = unnormeds.at(i)->val().vec().unaryExpr(ptr_fun(fexp));
@@ -337,6 +313,11 @@ class AttentionSoftMaxVNode : public Node {
 
     void backward() {
         int nSize = ins.size();
+        mask_losses.resize(nSize);
+        for (int i = 0; i < nSize; ++i) {
+            mask_losses.at(i).init(getDim());
+        }
+
         for (int i = 0; i < nSize; i++) {
             ins.at(i)->loss().vec() += loss().vec() * masks.at(i).vec();
             mask_losses.at(i).vec() = loss().vec() * ins.at(i)->val().vec();
@@ -352,10 +333,7 @@ class AttentionSoftMaxVNode : public Node {
                 }
             }
         }
-
-
     }
-
 };
 
 #if USE_GPU
