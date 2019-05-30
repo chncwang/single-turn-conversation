@@ -860,12 +860,13 @@ __global__ void KernelCopyForBiNodeForward(const dtype **x1s,
         int count,
         int x1_len,
         int x2_len,
+        bool use_b,
         int b_len) {
     int index = DeviceDefaultIndex();
     int step = DeviceDefaultStep();
     int x1_total_len = count * x1_len;
     int x2_total_len = count * x2_len;
-    int b_total_len = count * b_len;
+    int b_total_len = use_b ? count * b_len : 0;
 
     int total_len = x1_total_len + x2_total_len + b_total_len;
 
@@ -896,6 +897,7 @@ void CopyForBiNodeForward(const std::vector<dtype*>& x1s,
         int count,
         int x1_len,
         int x2_len,
+        bool use_b,
         int b_len) {
     int len = x1_len + x2_len + b_len;
     int block_count = DefaultBlockCount(count * len);
@@ -912,6 +914,7 @@ void CopyForBiNodeForward(const std::vector<dtype*>& x1s,
             count,
             x1_len,
             x2_len,
+            use_b,
             b_len);
     CheckCudaError();
 }
@@ -1384,6 +1387,7 @@ __global__ void KernelAddLtyToParamBiasAndAddLxToInputLossesForBiBackward(
         int out_dim,
         int in_dim1,
         int in_dim2,
+        bool use_b,
         dtype *block_sums,
         int *global_block_count) {
     __shared__ volatile dtype shared_arr[TPB];
@@ -1413,7 +1417,9 @@ __global__ void KernelAddLtyToParamBiasAndAddLxToInputLossesForBiBackward(
                 for (int i = 0; i < gridDim.y; ++i) {
                     sum += block_sums[gridDim.y * blockIdx.x + i];
                 }
-                DeviceAtomicAdd(b + dim_i, sum);
+                if (use_b) {
+                    DeviceAtomicAdd(b + dim_i, sum);
+                }
             }
         }
     } else if (dim_i < out_dim + in_dim1) {
@@ -1440,7 +1446,8 @@ void AddLtyToParamBiasAndAddLxToInputLossesForBiBackward(const dtype *lty,
         int count,
         int out_dim,
         int in_dim1,
-        int in_dim2) {
+        int in_dim2,
+        bool use_b) {
     int block_y = (count - 1 + TPB) / TPB;
     dim3 block_dim(out_dim + in_dim1 + in_dim2, block_y, 1);
     NumberPointerArray loss1_arr;
@@ -1453,7 +1460,7 @@ void AddLtyToParamBiasAndAddLxToInputLossesForBiBackward(const dtype *lty,
     global_block_count_arr.init(out_dim);
     KernelAddLtyToParamBiasAndAddLxToInputLossesForBiBackward<<<block_dim,
         TPB>>>(lty, lx1, lx2, b, loss1_arr.value, loss2_arr.value, count,
-                out_dim, in_dim1, in_dim2, block_sums.value,
+                out_dim, in_dim1, in_dim2, use_b, block_sums.value,
                 global_block_count_arr.value);
     CheckCudaError();
 }

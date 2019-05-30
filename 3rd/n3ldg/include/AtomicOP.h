@@ -135,7 +135,7 @@ public:
         for (Node *n : batch) {
             TanhNode *tanh = static_cast<TanhNode*>(n);
 #if TEST_CUDA
-            tanh->in->val.copyFromHostToDevice();
+            tanh->in->val().copyFromHostToDevice();
 #endif
             xs.push_back(tanh->in->val().value);
             ys.push_back(tanh->val().value);
@@ -145,7 +145,7 @@ public:
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            n3ldg_cuda::Assert(batch.at(idx)->val.verify("Tanh forward"));
+            n3ldg_cuda::Assert(batch.at(idx)->getVal().verify("Tanh forward"));
         }
 #endif
     }
@@ -193,8 +193,8 @@ public:
         for (Node *n : batch) {
             TanhNode *tanh = static_cast<TanhNode*>(n);
 #if TEST_CUDA
-            tanh->loss.copyFromHostToDevice();
-            tanh->in->loss.copyFromHostToDevice();
+            tanh->loss().copyFromHostToDevice();
+            tanh->in->loss().copyFromHostToDevice();
 #endif
             vals.push_back(tanh->val().value);
             losses.push_back(tanh->loss().value);
@@ -208,7 +208,7 @@ public:
         }
         for (Node *n : batch) {
             TanhNode *tanh = static_cast<TanhNode*>(n);
-            n3ldg_cuda::Assert(tanh->in->loss.verify("TanhExecutor backward"));
+            n3ldg_cuda::Assert(tanh->in->getLoss().verify("TanhExecutor backward"));
         }
 #endif
     }
@@ -310,7 +310,7 @@ public:
         for (Node *n : batch) {
             SigmoidNode *tanh = static_cast<SigmoidNode*>(n);
 #if TEST_CUDA
-            tanh->in->val.copyFromHostToDevice();
+            tanh->in->val().copyFromHostToDevice();
 #endif
             xs.push_back(tanh->in->val().value);
             ys.push_back(tanh->val().value);
@@ -320,7 +320,7 @@ public:
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            n3ldg_cuda::Assert(batch.at(idx)->val.verify("Sigmoid forward"));
+            n3ldg_cuda::Assert(batch.at(idx)->getVal().verify("Sigmoid forward"));
         }
 #endif
     }
@@ -337,8 +337,8 @@ public:
         for (Node *n : batch) {
             SigmoidNode *tanh = static_cast<SigmoidNode*>(n);
 #if TEST_CUDA
-            tanh->loss.copyFromHostToDevice();
-            tanh->in->loss.copyFromHostToDevice();
+            tanh->loss().copyFromHostToDevice();
+            tanh->in->loss().copyFromHostToDevice();
 #endif
             vals.push_back(tanh->val().value);
             losses.push_back(tanh->loss().value);
@@ -352,7 +352,7 @@ public:
         }
         for (Node *n : batch) {
             SigmoidNode *tanh = static_cast<SigmoidNode*>(n);
-            n3ldg_cuda::Assert(tanh->in->loss.verify("SigmoidExecutor backward"));
+            n3ldg_cuda::Assert(tanh->in->getLoss().verify("SigmoidExecutor backward"));
         }
 #endif
     }
@@ -477,10 +477,10 @@ public:
 #if TEST_CUDA
         for (Node *node : batch) {
             PDotNode *dot = static_cast<PDotNode*>(node);
-            n3ldg_cuda::Assert(dot->in1->val.verify("PDot in1"));
-            n3ldg_cuda::Assert(dot->in2->val.verify("PDot in2"));
+            n3ldg_cuda::Assert(dot->in1->getVal().verify("PDot in1"));
+            n3ldg_cuda::Assert(dot->in2->getVal().verify("PDot in2"));
             node->compute();
-            n3ldg_cuda::Assert(node->val.verify("PDot forward"));
+            n3ldg_cuda::Assert(node->getVal().verify("PDot forward"));
         }
 #endif
     }
@@ -504,16 +504,13 @@ public:
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->backward();
-            n3ldg_cuda::Assert(batch[idx]->loss.verify(
-                        "PDotExecutor backward"));
+            n3ldg_cuda::Assert(batch[idx]->getLoss().verify("PDotExecutor backward"));
         }
 
         for (Node *node : batch) {
             PDotNode *dot = static_cast<PDotNode*>(node);
-            n3ldg_cuda::Assert(dot->in1->loss.verify(
-                        "PDotExecutor backward in1"));
-            n3ldg_cuda::Assert(dot->in2->loss.verify(
-                        "PDotExecutor backward in2"));
+            n3ldg_cuda::Assert(dot->in1->getLoss().verify("PDotExecutor backward in1"));
+            n3ldg_cuda::Assert(dot->in2->getLoss().verify("PDotExecutor backward in2"));
         }
 #endif
     }
@@ -613,6 +610,10 @@ public:
         return is_training_;
     }
 
+    Tensor1D &dropMask() {
+        return drop_mask_;
+    }
+
 private:
     Node* in_ = nullptr;
     Tensor1D drop_mask_;
@@ -643,10 +644,10 @@ class DropoutExecutor :public Executor {
         for (Node *n : batch) {
             DropoutNode *tanh = static_cast<DropoutNode*>(n);
 #if TEST_CUDA
-            tanh->in->val.copyFromHostToDevice();
+            tanh->in()->val().copyFromHostToDevice();
 #endif
-            xs.push_back(tanh->in()->val().value);
-            ys.push_back(tanh->val().value);
+            xs.push_back(tanh->in()->getVal().value);
+            ys.push_back(tanh->getVal().value);
         }
 
         CalculateDropMask(count, dim, drop_mask);
@@ -656,12 +657,12 @@ class DropoutExecutor :public Executor {
         for (int i = 0; i < count; ++i) {
             for (int j = 0; j < dim; ++j) {
                 dtype v = drop_mask[i][j];
-                static_cast<DropoutNode*>(batch.at(i))->drop_mask[j] = v <= drop_value ? 0 : 1;
+                static_cast<DropoutNode*>(batch.at(i))->dropMask()[j] = v <= drop_value ? 0 : 1;
             }
         }
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            n3ldg_cuda::Assert(batch.at(idx)->val.verify("Dropout forward"));
+            n3ldg_cuda::Assert(batch.at(idx)->val().verify("Dropout forward"));
         }
 #endif
     }
@@ -675,8 +676,8 @@ class DropoutExecutor :public Executor {
         for (Node *n : batch) {
             DropoutNode *tanh = static_cast<DropoutNode*>(n);
 #if TEST_CUDA
-            tanh->loss.copyFromHostToDevice();
-            tanh->in->loss.copyFromHostToDevice();
+            tanh->loss().copyFromHostToDevice();
+            tanh->in()->loss().copyFromHostToDevice();
 #endif
             vals.push_back(tanh->val().value);
             losses.push_back(tanh->loss().value);
@@ -690,7 +691,7 @@ class DropoutExecutor :public Executor {
         }
         for (Node *n : batch) {
             DropoutNode *tanh = static_cast<DropoutNode*>(n);
-            n3ldg_cuda::Assert(tanh->in->loss.verify("DropoutExecutor backward"));
+            n3ldg_cuda::Assert(tanh->in()->loss().verify("DropoutExecutor backward"));
         }
 #endif
     }

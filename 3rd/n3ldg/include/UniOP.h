@@ -278,17 +278,17 @@ class UniExecutor :public Executor {
             UniNode* ptr = (UniNode*)batch[idx];
             n3ldg_cuda::Assert(ptr->in->val().verify("Uni forward in"));
             for (int idy = 0; idy < inDim; idy++) {
-                x[idx][idy] = ptr->in->val[idy];
+                x[idx][idy] = ptr->in->getVal()[idy];
             }
             if (param->bUseB) {
                 for (int idy = 0; idy < outDim; idy++) {
-                    b[idx][idy] = param->b.val().v[idy];
+                    b[idx][idy] = param->b.val.v[idy];
                 }
             }
         }
         n3ldg_cuda::Assert(x.verify("forward x"));
 
-        ty.mat() = param->W.val().mat() * x.mat();
+        ty.mat() = param->W.val.mat() * x.mat();
 
         if (param->bUseB) {
             ty.vec() = ty.vec() + b.vec();
@@ -299,7 +299,7 @@ class UniExecutor :public Executor {
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
             for (int idy = 0; idy < outDim; idy++) {
-                ptr->val[idy] = y[idx][idy];
+                ptr->val()[idy] = y[idx][idy];
             }
         }
 
@@ -366,7 +366,7 @@ class UniExecutor :public Executor {
         n3ldg_cuda::MatrixMultiplyMatrix(lty.value, x.value,
                 param->W.grad.value, outDim, count, inDim, true, true, false);
 #if TEST_CUDA
-        n3ldg_cuda::Assert(param->W.val().verify("uni W.val init"));
+        n3ldg_cuda::Assert(param->W.val.verify("uni W.val init"));
 #endif
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, lty.value,
                 lx.value, inDim, outDim, count, false, false, true);
@@ -389,7 +389,7 @@ class UniExecutor :public Executor {
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
             for (int idy = 0; idy < outDim; idy++) {
-                ly[idx][idy] = ptr->loss[idy];
+                ly[idx][idy] = ptr->getLoss()[idy];
             }
         }
 
@@ -409,13 +409,13 @@ class UniExecutor :public Executor {
         }
         n3ldg_cuda::Assert(param->b.grad.verify("backward b grad"));
 
-        lx.mat() += param->W.val().mat().transpose() * lty.mat();
+        lx.mat() += param->W.val.mat().transpose() * lty.mat();
         n3ldg_cuda::Assert(lx.verify("backward lx"));
 
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
             for (int idy = 0; idy < inDim; idy++) {
-                ptr->in->loss[idy] += lx[idx][idy];
+                ptr->in->loss()[idy] += lx[idx][idy];
             }
         }
 
@@ -510,16 +510,16 @@ public:
         for (int idx = 0; idx < count; idx++) {
             LinearNode* ptr = (LinearNode*)batch[idx];
             for (int idy = 0; idy < inDim; idy++) {
-                x[idx][idy] = ptr->in->val[idy];
+                x[idx][idy] = ptr->in->getVal()[idy];
             }
             if (param->bUseB) {
                 for (int i = 0; i < outDim; ++i) {
-                    b[idx][i] = param->b.val().v[i];
+                    b[idx][i] = param->b.val.v[i];
                 }
             }
         }
 
-        y.mat() = param->W.val().mat() * x.mat();
+        y.mat() = param->W.val.mat() * x.mat();
         if (param->bUseB) {
             y.vec() += b.vec();
         }
@@ -530,7 +530,7 @@ public:
         for (int idx = 0; idx < count; idx++) {
             LinearNode* ptr = (LinearNode*)batch[idx];
             for (int idy = 0; idy < outDim; idy++) {
-                ptr->val[idy] = y[idx][idy];
+                ptr->val()[idy] = y[idx][idy];
             }
             n3ldg_cuda::Assert(ptr->val().verify("linear forward val"));
         }
@@ -569,7 +569,7 @@ public:
         for (int idx = 0; idx < count; idx++) {
             LinearNode* ptr = (LinearNode*)batch[idx];
             for (int idy = 0; idy < outDim; idy++) {
-                ly[idx][idy] = ptr->loss[idy];
+                ly[idx][idy] = ptr->getLoss()[idy];
             }
         }
 
@@ -587,13 +587,13 @@ public:
             n3ldg_cuda::Assert(param->b.grad.verify("backward b grad"));
         }
 
-        lx.mat() += param->W.val().mat().transpose() * ly.mat();
+        lx.mat() += param->W.val.mat().transpose() * ly.mat();
         n3ldg_cuda::Assert(lx.verify("linear execute backward lx"));
 
         for (int idx = 0; idx < count; idx++) {
             LinearNode* ptr = (LinearNode*)batch[idx];
             for (int idy = 0; idy < inDim; idy++) {
-                ptr->in->loss[idy] += lx[idx][idy];
+                ptr->in->loss()[idy] += lx[idx][idy];
             }
         }
 
@@ -693,15 +693,15 @@ struct LinearWordVectorNode : public Node {
         graph.addNode(this);
     }
 
-    void compute() {
+    void compute() override {
         abort();
     }
 
-    void backward() {
+    void backward() override {
         abort();
     }
 
-    Executor* generate();
+    Executor* generate() override;
 
     bool typeEqual(PNode other) override {
         bool result = Node::typeEqual(other);
@@ -758,18 +758,18 @@ struct LinearWordVectorExecutor : public Executor {
         for (int idx = 0; idx < count; idx++) {
             LinearWordVectorNode* ptr = (LinearWordVectorNode*)batch[idx];
             for (int idy = 0; idy < inDim; idy++) {
-                x[idx][idy] = ptr->input->val[idy];
+                x[idx][idy] = ptr->input->val()[idy];
             }
         }
 
-        y.mat() = param->val().mat().transpose() * x.mat();
+        y.mat() = param->val.mat().transpose() * x.mat();
         n3ldg_cuda::Assert(x.verify("forward x"));
         n3ldg_cuda::Assert(y.verify("linear word forward y"));
 
         for (int idx = 0; idx < count; idx++) {
             LinearNode* ptr = (LinearNode*)batch[idx];
             for (int idy = 0; idy < outDim; idy++) {
-                ptr->val[idy] = y[idx][idy];
+                ptr->val()[idy] = y[idx][idy];
             }
             n3ldg_cuda::Assert(ptr->val().verify("linear forward val"));
         }
@@ -806,7 +806,7 @@ struct LinearWordVectorExecutor : public Executor {
         for (int idx = 0; idx < count; idx++) {
             Node* ptr = batch[idx];
             for (int idy = 0; idy < outDim; idy++) {
-                ly[idx][idy] = ptr->loss[idy];
+                ly[idx][idy] = ptr->getLoss()[idy];
             }
         }
 
@@ -816,13 +816,13 @@ struct LinearWordVectorExecutor : public Executor {
         param->grad.mat() += x.mat() * ly.mat().transpose();
         n3ldg_cuda::Assert(param->grad.verify("LinearExecutor backward W grad"));
 
-        lx.mat() += param->val().mat() * ly.mat();
+        lx.mat() += param->val.mat() * ly.mat();
         n3ldg_cuda::Assert(lx.verify("linear execute backward lx"));
 
         for (int idx = 0; idx < count; idx++) {
             LinearWordVectorNode* ptr = (LinearWordVectorNode*)batch[idx];
             for (int idy = 0; idy < inDim; idy++) {
-                ptr->input->loss[idy] += lx[idx][idy];
+                ptr->input->loss()[idy] += lx[idx][idy];
             }
         }
 

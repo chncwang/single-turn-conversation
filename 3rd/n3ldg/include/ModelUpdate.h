@@ -46,7 +46,6 @@ class ModelUpdate {
         }
     }
 
-
     void update() {
         for (int idx = 0; idx < _params.size(); idx++) {
             _params[idx]->updateAdagrad(_alpha, _reg, _eps);
@@ -58,13 +57,6 @@ class ModelUpdate {
         dtype sumNorm = 0.0;
         for (int idx = 0; idx < _params.size(); idx++) {
             sumNorm += _params[idx]->squareGradNorm();
-        }
-        if (std::isnan(double(sumNorm)) || sumNorm > 1e20) { //too large
-#if USE_GPU
-            abort();
-#endif
-            clearGrad();
-            return;
         }
         dtype norm = sqrt(sumNorm);
         if (norm > maxScale) {
@@ -110,7 +102,7 @@ class ModelUpdate {
 
     void updateAdamW(dtype max_scale) {
 #if TEST_CUDA
-        maxScale = 10;
+        max_scale = 10;
 #endif
         dtype sumNorm = 0.0;
         for (int idx = 0; idx < _params.size(); idx++) {

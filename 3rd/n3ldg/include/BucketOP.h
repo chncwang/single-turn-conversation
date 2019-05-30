@@ -37,8 +37,8 @@ public:
 
     void forward(Graph *cg, dtype value) {
 #if TEST_CUDA
-        val  = value;
-        loss = 0;
+        val()  = value;
+        loss() = 0;
 #endif
 #if USE_GPU
         n3ldg_cuda::Memset(val().value, getDim(), value);

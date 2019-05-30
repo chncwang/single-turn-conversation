@@ -9,6 +9,7 @@
 #define SPARSEPARAM_H_
 
 #include "BaseParam.h"
+#include <boost/format.hpp>
 
 // Notice: aux_square is an aux_squareiliary variable to help parameter updating
 // The in-out dimension definiation is different with dense parameters.
@@ -92,8 +93,8 @@ public:
 #endif
 #else
         int inDim = indexers.size();
+        cout << boost::format("inDim:%1% row:%2%") % inDim % grad.row << endl;
         for (int index = 0; index < inDim; index++) {
-            if (!indexers[index]) continue;
             for (int idx = 0; idx < grad.row; idx++) {
                 grad[index][idx] = 0;
             }

@@ -124,7 +124,7 @@ public:
             batch[idx]->compute();
         }
         for (Node *n : batch) {
-            n3ldg_cuda::Assert(n->val.verify("PAdd forward"));
+            n3ldg_cuda::Assert(n->val().verify("PAdd forward"));
         }
 #endif
     }
@@ -166,7 +166,7 @@ public:
         for (Node *n : batch) {
             PAddNode *add = static_cast<PAddNode*>(n);
             for (Node *in : add->ins) {
-                n3ldg_cuda::Assert(in->loss.verify("PAddExecutor backward"));
+                n3ldg_cuda::Assert(in->loss().verify("PAddExecutor backward"));
             }
         }
 #endif

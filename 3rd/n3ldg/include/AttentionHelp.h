@@ -163,7 +163,7 @@ public:
 #if TEST_CUDA
         for (Node *n : batch) {
             n->compute();
-            n3ldg_cuda::Assert(n->val.verify("AttentionSoftMaxExecutor forward"));
+            n3ldg_cuda::Assert(n->val().verify("AttentionSoftMaxExecutor forward"));
         }
 #endif
         profiler.EndCudaEvent();
@@ -202,12 +202,11 @@ public:
         for (Node *n : batch) {
             AttentionSoftMaxNode *att = static_cast<AttentionSoftMaxNode*>(n);
             for (Node *in : att->ins) {
-                n3ldg_cuda::Assert(in->loss.verify(
-                            "AttentionSoftMaxExecutor backward ins"));
+                n3ldg_cuda::Assert(in->loss().verify("AttentionSoftMaxExecutor backward ins"));
             }
 
             for (Node *un : att->unnormeds) {
-                n3ldg_cuda::Assert(un->loss.verify(
+                n3ldg_cuda::Assert(un->loss().verify(
                             "AttentionSoftMaxExecutor backward unnormeds"));
             }
         }
@@ -374,11 +373,13 @@ public:
             vals.push_back(att->val().value);
             for (int i = 0; i < att->ins.size(); ++i) {
 #if TEST_CUDA
-                n3ldg_cuda::Assert(att->ins.at(i)->val.verify("AttentionSoftMaxVExecutor forward initial val"));
+                n3ldg_cuda::Assert(att->ins.at(i)->val().verify(
+                            "AttentionSoftMaxVExecutor forward initial val"));
 #endif
                 ins.push_back(att->ins.at(i)->val().value);
 #if TEST_CUDA
-                n3ldg_cuda::Assert(att->unnormeds.at(i)->val.verify("AttentionSoftMaxVExecutor forward  initial unnormeds"));
+                n3ldg_cuda::Assert(att->unnormeds.at(i)->val().verify(
+                            "AttentionSoftMaxVExecutor forward  initial unnormeds"));
 #endif
                 unnormeds.push_back(att->unnormeds.at(i)->val().value);
             }
@@ -397,7 +398,7 @@ public:
 #if TEST_CUDA
         for (Node *n : batch) {
             n->compute();
-            n3ldg_cuda::Assert(n->val.verify("AttentionSoftMaxVExecutor forward"));
+            n3ldg_cuda::Assert(n->val().verify("AttentionSoftMaxVExecutor forward"));
         }
 #endif
     }
@@ -433,12 +434,11 @@ public:
         for (Node *n : batch) {
             AttentionSoftMaxVNode *att = static_cast<AttentionSoftMaxVNode*>(n);
             for (Node *in : att->ins) {
-                n3ldg_cuda::Assert(in->loss.verify(
-                            "AttentionSoftMaxExecutor backward ins"));
+                n3ldg_cuda::Assert(in->loss().verify("AttentionSoftMaxExecutor backward ins"));
             }
 
             for (Node *un : att->unnormeds) {
-                n3ldg_cuda::Assert(un->loss.verify(
+                n3ldg_cuda::Assert(un->loss().verify(
                             "AttentionSoftMaxExecutor backward unnormeds"));
             }
         }

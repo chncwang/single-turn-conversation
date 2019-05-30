@@ -76,8 +76,7 @@ public:
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            n3ldg_cuda::Assert(batch[idx]->val.verify(
-                        "PMultiExecutor forward"));
+            n3ldg_cuda::Assert(batch[idx]->val().verify("PMultiExecutor forward"));
         }
 #endif
     }
@@ -105,9 +104,9 @@ public:
         }
         for (Node *n : batch) {
             PMultiNode *pmulti = static_cast<PMultiNode*>(n);
-            n3ldg_cuda::Assert(pmulti->in1->loss.verify(
+            n3ldg_cuda::Assert(pmulti->in1->loss().verify(
                         "PMultiExecutor backward in1 loss"));
-            n3ldg_cuda::Assert(pmulti->in2->loss.verify(
+            n3ldg_cuda::Assert(pmulti->in2->loss().verify(
                         "PMultiExecutor backward in2 loss"));
         }
 #endif

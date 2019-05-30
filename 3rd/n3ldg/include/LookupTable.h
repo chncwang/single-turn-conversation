@@ -325,7 +325,7 @@ public:
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            n3ldg_cuda::Assert(batch[idx]->val.verify("lookup forward"));
+            n3ldg_cuda::Assert(batch[idx]->val().verify("lookup forward"));
         }
 #endif
     }

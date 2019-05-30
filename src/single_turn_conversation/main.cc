@@ -814,7 +814,7 @@ int main(int argc, char *argv[]) {
                     }
 
                     for (const Node *node : result_nodes) {
-                        n3ldg_cuda::Assert(node->loss.verify("cross entropy loss"));
+                        n3ldg_cuda::Assert(node->getLoss().verify("cross entropy loss"));
                     }
 #endif
 #else

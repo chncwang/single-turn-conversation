@@ -256,6 +256,7 @@ void CopyForBiNodeForward(const std::vector<dtype*>& x1s,
         int count,
         int x1_len,
         int x2_len,
+        bool use_b,
         int b_len);
 void MatrixMultiplyMatrix(dtype *W, dtype *x, dtype *y, int row, int col,
         int count,
@@ -283,7 +284,8 @@ void AddLtyToParamBiasAndAddLxToInputLossesForBiBackward(const dtype *lty,
         int count,
         int out_dim,
         int in_dim1,
-        int in_dim2);
+        int in_dim2,
+        bool use_b);
 void CalculateDropoutMask(dtype dropout_ratio, int count, int dim, dtype *mask);
 void ConcatForward(const std::vector<dtype*> &in_vals,
         const std::vector<int> &in_dims,

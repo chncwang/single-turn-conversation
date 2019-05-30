@@ -60,7 +60,7 @@ public:
         return json;
     }
 
-    void fromJson(const Json::Value &json) {
+    void fromJson(const Json::Value &json) override {
         bUseB = json["use_b"].asBool();
         W1.fromJson(json["w1"]);
         W2.fromJson(json["w2"]);
@@ -276,7 +276,7 @@ class BiExecutor :public Executor {
         }
 
         n3ldg_cuda::CopyForBiNodeForward(x1s, x2s, param->b.val.value,
-                x1.value, x2.value, ty.value, count, inDim1, inDim2, outDim);
+                x1.value, x2.value, ty.value, count, inDim1, inDim2, param->bUseB, outDim);
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             BiNode* ptr = (BiNode*)batch[idx];
@@ -288,7 +288,7 @@ class BiExecutor :public Executor {
             }
             if (param->bUseB) {
                 for (int idy = 0; idy < outDim; idy++) {
-                    b[idx][idy] = param->b.val().v[idy];
+                    b[idx][idy] = param->b.val.v[idy];
                 }
             }
         }
@@ -427,12 +427,14 @@ class BiExecutor :public Executor {
             losses2.push_back(ptr->in2->getLoss().value);
         }
 #if TEST_CUDA
-        n3ldg_cuda::Assert(param->b.grad.verify(
-                    "bi backward param b init"));
+        if (param->bUseB) {
+            n3ldg_cuda::Assert(param->b.grad.verify(
+                        "bi backward param b init"));
+        }
 #endif
         n3ldg_cuda::AddLtyToParamBiasAndAddLxToInputLossesForBiBackward(
                 lty.value, lx1.value, lx2.value, param->b.grad.value,
-                losses1, losses2, count, outDim, inDim1, inDim2);
+                losses1, losses2, count, outDim, inDim1, inDim2, param->bUseB);
 #if TEST_CUDA
         param->W1.grad.mat() += lty.mat() * x1.mat().transpose();
         param->W2.grad.mat() += lty.mat() * x2.mat().transpose();

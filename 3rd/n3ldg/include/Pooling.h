@@ -93,18 +93,18 @@ public:
     MaxPoolNode(const string &node_type) : PoolNode(node_type) {}
 
 #if TEST_CUDA
-    void setMask() {
+    void setMask() override {
         int nSize = ins.size();
         int thread_count = 8;
         while (thread_count < nSize) {
             thread_count <<= 1;
         }
 
-        for (int dim_i = 0; dim_i < dim; ++dim_i) {
+        for (int dim_i = 0; dim_i < getDim(); ++dim_i) {
             dtype shared_arr[1024];
             dtype shared_indexers[1024];
             for (int i = 0; i < 1024; ++i) {
-                shared_arr[i] = i < nSize ? ins[i]->val[dim_i] : -INFINITY;
+                shared_arr[i] = i < nSize ? ins[i]->val()[dim_i] : -INFINITY;
                 shared_indexers[i] = i;
             }
             for (int i = (thread_count >> 1); i > 0; i >>= 1) {
@@ -180,18 +180,18 @@ public:
     MinPoolNode() : PoolNode("min-pooling") {}
 
 #if TEST_CUDA
-    void setMask() {
+    void setMask() override {
         int nSize = ins.size();
         int thread_count = 8;
         while (thread_count < nSize) {
             thread_count <<= 1;
         }
 
-        for (int dim_i = 0; dim_i < dim; ++dim_i) {
+        for (int dim_i = 0; dim_i < getDim(); ++dim_i) {
             dtype shared_arr[1024];
             dtype shared_indexers[1024];
             for (int i = 0; i < 1024; ++i) {
-                shared_arr[i] = i < nSize ? ins[i]->val[dim_i] : INFINITY;
+                shared_arr[i] = i < nSize ? ins[i]->val()[dim_i] : INFINITY;
                 shared_indexers[i] = i;
             }
             for (int i = (thread_count >> 1); i > 0; i >>= 1) {
@@ -292,7 +292,7 @@ public:
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            n3ldg_cuda::Assert(batch[idx]->val.verify("max pooling forward"));
+            n3ldg_cuda::Assert(batch[idx]->val().verify("max pooling forward"));
             MaxPoolNode *n = static_cast<MaxPoolNode*>(batch[idx]);
             if (!n3ldg_cuda::Verify(n->masks.data(),
                         hit_inputs.value + idx * dim, dim,
@@ -330,7 +330,7 @@ public:
 
         for (int idx = 0; idx < count; idx++) {
             for (Node *n : static_cast<MaxPoolNode*>(batch[idx])->ins) {
-                n3ldg_cuda::Assert(n->loss.verify("max pooling backward"));
+                n3ldg_cuda::Assert(n->loss().verify("max pooling backward"));
             }
         }
 #endif
@@ -382,7 +382,7 @@ public:
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            n3ldg_cuda::Assert(batch[idx]->val.verify("min pooling forward"));
+            n3ldg_cuda::Assert(batch[idx]->val().verify("min pooling forward"));
             MinPoolNode *n = static_cast<MinPoolNode*>(batch[idx]);
             if (!n3ldg_cuda::Verify(n->masks.data(),
                         hit_inputs.value + idx * dim, dim,
@@ -419,7 +419,7 @@ public:
 
         for (int idx = 0; idx < count; idx++) {
             for (Node *n : static_cast<MaxPoolNode*>(batch[idx])->ins) {
-                n3ldg_cuda::Assert(n->loss.verify("max pooling backward"));
+                n3ldg_cuda::Assert(n->loss().verify("max pooling backward"));
             }
         }
 #endif
@@ -549,7 +549,7 @@ public:
         }
 
         for (Node *n : batch) {
-            n3ldg_cuda::Assert(n->val.verify("sum pool forward"));
+            n3ldg_cuda::Assert(n->val().verify("sum pool forward"));
         }
 #endif
     }
@@ -579,7 +579,7 @@ public:
         for (Node *n : batch) {
             SumPoolNode *sum = static_cast<SumPoolNode*>(n);
             for (Node *in : sum->ins) {
-                n3ldg_cuda::Assert(in->loss.verify("SumPoolExecutor backward"));
+                n3ldg_cuda::Assert(in->loss().verify("SumPoolExecutor backward"));
             }
         }
 #endif
@@ -703,7 +703,7 @@ public:
         }
 
         for (Node *n : batch) {
-            n3ldg_cuda::Assert(n->val.verify("avg pool forward"));
+            n3ldg_cuda::Assert(n->val().verify("avg pool forward"));
         }
 #endif
     }
@@ -733,7 +733,7 @@ public:
         for (Node *n : batch) {
             AvgPoolNode *sum = static_cast<AvgPoolNode*>(n);
             for (Node *in : sum->ins) {
-                n3ldg_cuda::Assert(in->loss.verify("AvgPoolExecutor backward"));
+                n3ldg_cuda::Assert(in->loss().verify("AvgPoolExecutor backward"));
             }
         }
 #endif

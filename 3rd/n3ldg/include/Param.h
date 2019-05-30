@@ -150,7 +150,7 @@ public:
         aux_mean.vec() = belta1 * aux_mean.vec() + (1 - belta1) * grad.vec();
         aux_square.vec() = belta2 * aux_square.vec() + (1 - belta2) * grad.vec().square();
         dtype lr_t = alpha * sqrt(1 - pow(belta2, iter + 1)) / (1 - pow(belta1, iter + 1));
-        val.vec() = (1 - (isBias() ? 0.0f : lamda)) * val.vec() -
+        val.vec() = (1 - (isBias() ? 0.0f : reg)) * val.vec() -
             aux_mean.vec() * lr_t / (aux_square.vec() + eps).sqrt();
         n3ldg_cuda::Assert(val.verify("Param adam"));
 #endif
