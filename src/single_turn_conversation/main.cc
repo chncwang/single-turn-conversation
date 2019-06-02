@@ -682,6 +682,7 @@ int main(int argc, char *argv[]) {
         if (default_config.input_model_file == "") {
             allocate_model_params(default_config, hyper_params, model_params, &alphabet);
         } else {
+            root_ptr = loadModel(default_config.input_model_file);
             loadModel(default_config, hyper_params, model_params, root_ptr.get(),
                     allocate_model_params);
         }
