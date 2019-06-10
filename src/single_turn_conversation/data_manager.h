@@ -121,6 +121,7 @@ std::vector<std::vector<std::string>> readSentences(const std::string &filename)
         }
 
         std::vector<std::string> characters;
+        characters.push_back(BEGIN_SYMBOL);
         for (const utf8_string &word : utf8_words) {
             for (int i = 0; i < word.length(); ++i) {
                 characters.push_back(word.substr(i, 1).cpp_str());
