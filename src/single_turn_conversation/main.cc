@@ -128,6 +128,7 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
     default_config.dev_size = ini_reader.GetInteger(SECTION, "dev_size", 0);
     default_config.test_size = ini_reader.GetInteger(SECTION, "test_size", 0);
     default_config.device_id = ini_reader.GetInteger(SECTION, "device_id", 0);
+    default_config.seed = ini_reader.GetInteger(SECTION, "seed", 0);
     default_config.output_model_file_prefix = ini_reader.Get(SECTION, "output_model_file_prefix",
             "");
     default_config.input_model_file = ini_reader.Get(SECTION, "input_model_file", "");
@@ -534,8 +535,7 @@ int main(int argc, char *argv[]) {
             default_config.pair_file);
     cout << "post_and_responses_vector size:" << post_and_responses_vector.size() << endl;
 
-    const int SEED = 0;
-    default_random_engine engine(SEED);
+    default_random_engine engine(default_config.seed);
     shuffle(begin(post_and_responses_vector), end(post_and_responses_vector),
             engine);
     vector<PostAndResponses> dev_post_and_responses, test_post_and_responses,

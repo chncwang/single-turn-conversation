@@ -32,6 +32,7 @@ struct DefaultConfig {
     int test_size;
     int device_id;
     int hold_batch_size;
+    int seed;
     std::string output_model_file_prefix;
     std::string input_model_file;
     std::string input_model_dir;
@@ -59,6 +60,7 @@ struct DefaultConfig {
             << "test_size:" << test_size << std::endl
             << "device_id:" << device_id << std::endl
             << "hold_batch_size:" << hold_batch_size << std::endl
+            << "seed:" << seed << std::endl
             << "output_model_file_prefix" << output_model_file_prefix << std::endl
             << "input_model_file:" << input_model_file << std::endl
             << "input_model_dir:" << input_model_dir << std::endl
