@@ -41,9 +41,7 @@ using boost::filesystem::is_directory;
 using boost::filesystem::directory_iterator;
 
 void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
-    model_params.decoder_params.exportAdaParams(model_update);
     model_params.left_to_right_encoder_params.exportAdaParams(model_update);
-    model_params.right_to_left_encoder_params.exportAdaParams(model_update);
     model_params.hidden_to_wordvector_params.exportAdaParams(model_update);
     model_params.lookup_table.exportAdaParams(model_update);
     model_params.attention_parrams.exportAdaParams(model_update);
@@ -53,11 +51,8 @@ void exportToGradChecker(ModelParams &model_params, CheckGrad &grad_checker) {
     grad_checker.add(model_params.lookup_table.E, "lookup_table");
     grad_checker.add(model_params.hidden_to_wordvector_params.W, "hidden_to_wordvector_params W");
     grad_checker.add(model_params.hidden_to_wordvector_params.b, "hidden_to_wordvector_params b");
-    grad_checker.add(model_params.decoder_params.cell_hidden.W, "decoder cell_hidden W");
     grad_checker.add(model_params.left_to_right_encoder_params.cell_hidden.W,
             "left to right encoder cell_hidden W");
-    grad_checker.add(model_params.right_to_left_encoder_params.cell_hidden.W,
-            "right to left encoder cell_hidden W");
     grad_checker.add(model_params.attention_parrams.bi_atten.W1, "attention W1");
     grad_checker.add(model_params.attention_parrams.bi_atten.W2, "attention W2");
 }
@@ -151,19 +146,12 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
     }
     hyper_params.word_dim = word_dim;
 
-    int encoding_hidden_dim = ini_reader.GetInteger("hyper", "encoding_hidden_dim", 0);
+    int encoding_hidden_dim = ini_reader.GetInteger("hyper", "hidden_dim", 0);
     if (encoding_hidden_dim <= 0) {
-        cerr << "encoding hidden_dim wrong" << endl;
+        cerr << "hidden_dim wrong" << endl;
         abort();
     }
-    hyper_params.encoding_hidden_dim = encoding_hidden_dim;
-
-    int decoding_hidden_dim = ini_reader.GetInteger("hyper", "decoding_hidden_dim", 0);
-    if (decoding_hidden_dim <= 0) {
-        cerr << "decoding hidden_dim wrong" << endl;
-        abort();
-    }
-    hyper_params.decoding_hidden_dim = decoding_hidden_dim;
+    hyper_params.hidden_dim = encoding_hidden_dim;
 
     float dropout = ini_reader.GetReal("hyper", "dropout", 0.0);
     if (dropout < -1.0f || dropout >=1.0f) {
@@ -353,7 +341,6 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
                 //            print(response_sentences.at(response_id));
                 Graph graph;
                 GraphBuilder graph_builder;
-                graph_builder.init(hyper_params);
                 graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id),
                         hyper_params, model_params, false);
                 DecoderComponents decoder_components;
@@ -393,7 +380,6 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
         Graph graph;
         GraphBuilder graph_builder;
-        graph_builder.init(hyper_params);
         graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id), hyper_params,
                 model_params, false);
         vector<DecoderComponents> decoder_components_vector;
@@ -455,7 +441,6 @@ void interact(const DefaultConfig &default_config, const HyperParams &hyper_para
 
         Graph graph;
         GraphBuilder graph_builder;
-        graph_builder.init(hyper_params);
         graph_builder.forward(graph, words, hyper_params, model_params, false);
         vector<DecoderComponents> decoder_components_vector;
         decoder_components_vector.resize(hyper_params.beam_size);
@@ -665,17 +650,11 @@ int main(int argc, char *argv[]) {
                 model_params.lookup_table.init(*alphabet, hyper_params.word_dim, true);
             }
         }
-        model_params.left_to_right_encoder_params.init(hyper_params.encoding_hidden_dim,
-                hyper_params.word_dim);
-        model_params.right_to_left_encoder_params.init(hyper_params.encoding_hidden_dim,
-                hyper_params.word_dim);
-        model_params.decoder_params.init(hyper_params.decoding_hidden_dim,
-                hyper_params.word_dim + 2 * hyper_params.encoding_hidden_dim);
+        model_params.left_to_right_encoder_params.init(hyper_params.hidden_dim,
+                hyper_params.word_dim + hyper_params.hidden_dim);
         model_params.hidden_to_wordvector_params.init(hyper_params.word_dim,
-                hyper_params.decoding_hidden_dim + 2 * hyper_params.encoding_hidden_dim +
-                hyper_params.word_dim);
-        model_params.attention_parrams.init(hyper_params.encoding_hidden_dim * 2,
-                hyper_params.decoding_hidden_dim);
+                hyper_params.hidden_dim + hyper_params.hidden_dim + hyper_params.word_dim);
+        model_params.attention_parrams.init(hyper_params.hidden_dim, hyper_params.hidden_dim);
     };
 
     if (default_config.program_mode != ProgramMode::METRIC) {
@@ -772,7 +751,6 @@ int main(int argc, char *argv[]) {
                 for (int i = 0; i < hyper_params.batch_size; ++i) {
                     shared_ptr<GraphBuilder> graph_builder(new GraphBuilder);
                     graph_builders.push_back(graph_builder);
-                    graph_builder->init(hyper_params);
                     int instance_index = batch_i * hyper_params.batch_size + i;
                     int post_id = train_conversation_pairs.at(instance_index).post_id;
                     conversation_pair_in_batch.push_back(train_conversation_pairs.at(
@@ -850,7 +828,6 @@ int main(int argc, char *argv[]) {
                 if (default_config.check_grad) {
                     auto loss_function = [&](const ConversationPair &conversation_pair) -> dtype {
                         GraphBuilder graph_builder;
-                        graph_builder.init(hyper_params);
                         Graph graph;
 
                         graph_builder.forward(graph, post_sentences.at(conversation_pair.post_id),

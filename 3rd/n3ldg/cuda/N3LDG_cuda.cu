@@ -367,9 +367,10 @@ void Tensor2D::copyFromDeviceToHost() {
     CallCuda(MyCudaMemcpy(v, value, size * sizeof(dtype), cudaMemcpyDeviceToHost));
 }
 
-void Assert(bool v) {
+void Assert(bool v, const std::string &message) {
 #if TEST_CUDA
     if (!v) {
+        std::cerr << message << std::endl;
         abort();
     }
 #endif
@@ -810,6 +811,26 @@ void DropoutBackward(const std::vector<dtype*> &losses,
     CheckCudaError();
 }
 
+__global__ void KernelBucketForward(const dtype *input, int count, int dim, dtype **ys) {
+    int index = DeviceDefaultIndex();
+    for (int i = index; i < count * dim; i+= DeviceDefaultStep()) {
+        int count_i = i / dim;
+        int dim_i = i % dim;
+        ys[count_i][dim_i] = input[count_i * dim + dim_i];
+    }
+}
+
+void BucketForward(const std::vector<dtype> input, int count, int dim, std::vector<dtype*> &ys) {
+    NumberArray input_arr;
+    NumberPointerArray ys_arr;
+    input_arr.init((dtype*)input.data(), input.size());
+    ys_arr.init((dtype**)ys.data(), ys.size());
+    int block_count = DefaultBlockCount(count * dim);
+    KernelBucketForward<<<block_count, TPB>>>((const dtype*)input_arr.value, count, dim,
+            ys_arr.value);
+    CheckCudaError();
+}
+
 __global__ void KernelCopyForUniNodeForward(const dtype** xs, const dtype* b,
         dtype* xs_dest,
         dtype* b_dest,
@@ -943,7 +964,7 @@ __global__ void KernelVerify(dtype *host, dtype *device, int len,
     int index = DeviceDefaultIndex();
     if (index < len) {
         dtype loss = host[index] - device[index];
-        if (DeviceAbs(loss) > 0.0001) {
+        if (DeviceAbs(loss) > 0.001 && DeviceAbs(loss) > 0.001 * DeviceAbs(host[index])) {
             *success = false;
             printf("KernelVerify %s: host:%f device:%f loss:%f index:%d\n",
                     message, host[index], device[index], loss, index);

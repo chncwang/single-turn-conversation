@@ -93,7 +93,6 @@ public:
 #endif
 #else
         int inDim = indexers.size();
-        cout << boost::format("inDim:%1% row:%2%") % inDim % grad.row << endl;
         for (int index = 0; index < inDim; index++) {
             for (int idx = 0; idx < grad.row; idx++) {
                 grad[index][idx] = 0;

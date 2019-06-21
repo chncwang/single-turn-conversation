@@ -177,6 +177,7 @@ public:
         }
         if (x.at(0)->getDim() != _param->hidden_dim || guide.getDim() != _param->guide_dim) {
             std::cerr << "input dim does not match for attention  operation" << std::endl;
+            std::cerr << boost::format("input dim:%1% hidden dim:%2% guide.getDim():%3% param->guide_dim:%4%") % x.at(0)->getDim() % _param->hidden_dim % guide.getDim() % _param->guide_dim << std::endl;
             abort();
         }
 

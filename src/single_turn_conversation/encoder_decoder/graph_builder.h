@@ -234,23 +234,18 @@ std::vector<BeamSearchResult> mostProbableResults(
 }
 
 struct GraphBuilder {
-    std::vector<DropoutNode *> encoder_lookups;
+    std::vector<Node *> encoder_lookups;
     DynamicLSTMBuilder left_to_right_encoder;
-    DynamicLSTMBuilder right_to_left_encoder;
-    std::vector<ConcatNode *> concated_encoder_nodes;
-    BucketNode *hidden_bucket = new BucketNode;
-    BucketNode *word_bucket = new BucketNode;
-
-    void init(const HyperParams &hyper_params) {
-        hidden_bucket->init(hyper_params.encoding_hidden_dim);
-        word_bucket->init(hyper_params.word_dim);
-    }
 
     void forward(Graph &graph, const std::vector<std::string> &sentence,
             const HyperParams &hyper_params,
             ModelParams &model_params,
             bool is_training) {
+        BucketNode *hidden_bucket = new BucketNode;
+        hidden_bucket->init(hyper_params.hidden_dim);
         hidden_bucket->forward(graph);
+        BucketNode *word_bucket = new BucketNode;
+        word_bucket->init(hyper_params.word_dim);
         word_bucket->forward(graph);
 
         for (const std::string &word : sentence) {
@@ -262,35 +257,21 @@ struct GraphBuilder {
             DropoutNode* dropout_node(new DropoutNode(hyper_params.dropout, is_training));
             dropout_node->init(hyper_params.word_dim);
             dropout_node->forward(graph, *input_lookup);
-            encoder_lookups.push_back(dropout_node);
+
+            BucketNode *bucket = new BucketNode();
+            bucket->init(hyper_params.hidden_dim);
+            bucket->forward(graph);
+
+            ConcatNode *concat = new ConcatNode;
+            concat->init(dropout_node->getDim() + bucket->getDim());
+            concat->forward(graph, {dropout_node, bucket});
+
+            encoder_lookups.push_back(concat);
         }
 
-        for (DropoutNode* node : encoder_lookups) {
+        for (Node* node : encoder_lookups) {
             left_to_right_encoder.forward(graph, model_params.left_to_right_encoder_params, *node,
                     *hidden_bucket, *hidden_bucket, hyper_params.dropout, is_training);
-        }
-
-        int size = encoder_lookups.size();
-
-        for (int i = size - 1; i >= 0; --i) {
-            right_to_left_encoder.forward(graph, model_params.right_to_left_encoder_params,
-                    *encoder_lookups.at(i), *hidden_bucket, *hidden_bucket, hyper_params.dropout,
-                    is_training);
-        }
-
-        if (left_to_right_encoder.size() != right_to_left_encoder.size()) {
-            std::cerr << "left_to_right_encoder size is not equal to right_to_left_encoder" <<
-                std::endl;
-            abort();
-        }
-
-        for (int i = 0; i < size; ++i) {
-            ConcatNode* concat_node(new ConcatNode);
-            concat_node->init(2 * hyper_params.encoding_hidden_dim);
-            std::vector<Node*> nodes = {left_to_right_encoder._hiddens.at(i),
-                    right_to_left_encoder._hiddens.at(i)};
-            concat_node->forward(graph, nodes);
-            concated_encoder_nodes.push_back(concat_node);
         }
     }
 
@@ -323,12 +304,15 @@ struct GraphBuilder {
             decoder_components.decoder_lookups.push_back(decoder_lookup);
             last_input = decoder_components.decoder_lookups.at(i - 1);
         } else {
-            last_input = word_bucket;
+            BucketNode *bucket = new BucketNode;
+            bucket->init(hyper_params.word_dim);
+            bucket->forward(graph);
+            last_input = bucket;
         }
 
-        std::vector<Node *> encoder_hiddens = transferVector<Node *, ConcatNode*>(
-                concated_encoder_nodes, [](ConcatNode *concat) {
-                return concat;
+        std::vector<Node *> encoder_hiddens = transferVector<Node *, DropoutNode*>(
+                left_to_right_encoder._hiddens, [](DropoutNode *dropout) {
+                return dropout;
                 });
 
         decoder_components.forward(graph, hyper_params, model_params, *last_input,

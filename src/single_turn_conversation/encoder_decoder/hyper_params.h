@@ -5,6 +5,10 @@
 #include <fstream>
 #include <cmath>
 #include <boost/format.hpp>
+#include <string>
+#include "serializable.h"
+
+using std::string;
 
 enum Optimizer {
     ADAM = 0,
@@ -14,8 +18,7 @@ enum Optimizer {
 
 struct HyperParams : public N3LDGSerializable {
     int word_dim;
-    int encoding_hidden_dim;
-    int decoding_hidden_dim;
+    int hidden_dim;
     float dropout;
     int batch_size;
     int beam_size;
@@ -29,8 +32,7 @@ struct HyperParams : public N3LDGSerializable {
     Json::Value toJson() const override {
         Json::Value json;
         json["word_dim"] = word_dim;
-        json["encoding_hidden_dim"] = encoding_hidden_dim;
-        json["decoding_hidden_dim"] = decoding_hidden_dim;
+        json["hidden_dim"] = hidden_dim;
         json["dropout"] = dropout;
         json["batch_size"] = batch_size;
         json["beam_size"] = beam_size;
@@ -45,8 +47,7 @@ struct HyperParams : public N3LDGSerializable {
 
     void fromJson(const Json::Value &json) override {
         word_dim = json["word_dim"].asInt();
-        encoding_hidden_dim = json["encoding_hidden_dim"].asInt();
-        decoding_hidden_dim = json["decoding_hidden_dim"].asInt();
+        hidden_dim = json["hidden_dim"].asInt();
         dropout = json["dropout"].asFloat();
         batch_size = json["batch_size"].asInt();
         beam_size = json["beam_size"].asInt();
@@ -60,8 +61,7 @@ struct HyperParams : public N3LDGSerializable {
 
     void print() const {
         std::cout << "word_dim:" << word_dim << std::endl
-            << "encoding_hidden_dim:" << encoding_hidden_dim << std::endl
-            << "decoding_hidden_dim:" << decoding_hidden_dim << std::endl
+            << "hidden_dim:" << hidden_dim << std::endl
             << "dropout:" << dropout << std::endl
             << "batch_size:" << batch_size << std::endl
             << "beam_size:" << beam_size << std::endl

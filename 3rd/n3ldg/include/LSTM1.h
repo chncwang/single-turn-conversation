@@ -153,41 +153,49 @@ struct DynamicLSTMBuilder {
         LinearNode *inputgate_hidden = new LinearNode;
         inputgate_hidden->init(out_dim);
         inputgate_hidden->setParam(lstm_params.input_hidden);
+        inputgate_hidden->setNodeName("lstm inputgate_hidden");
         _inputgates_hidden.push_back(inputgate_hidden);
 
         LinearNode *inputgate_input = new LinearNode;
         inputgate_input->init(out_dim);
         inputgate_input->setParam(lstm_params.input_input);
+        inputgate_input->setNodeName("lstm inputgate_input");
         _inputgates_input.push_back(inputgate_input);
 
         LinearNode *forgetgate_hidden = new LinearNode;
         forgetgate_hidden->init(out_dim);
         forgetgate_hidden->setParam(lstm_params.forget_hidden);
+        forgetgate_hidden->setNodeName("lstm forgetgate_hidden");
         _forgetgates_hidden.push_back(forgetgate_hidden);
 
         LinearNode *forgetgate_input = new LinearNode;
         forgetgate_input->init(out_dim);
         forgetgate_input->setParam(lstm_params.forget_input);
+        forgetgate_input->setNodeName("lstm forgetgate_input");
         _forgetgates_input.push_back(forgetgate_input);
 
         LinearNode *halfcell_hidden = new LinearNode;
         halfcell_hidden->init(out_dim);
         halfcell_hidden->setParam(lstm_params.cell_hidden);
+        halfcell_hidden->setNodeName("lstm halfcell_hidden");
         _halfcells_hidden.push_back(halfcell_hidden);
 
         LinearNode *halfcell_input = new LinearNode;
         halfcell_input->init(out_dim);
         halfcell_input->setParam(lstm_params.cell_input);
+        halfcell_input->setNodeName("lstm halfcell_input");
         _halfcells_input.push_back(halfcell_input);
 
         LinearNode *outputgate_hidden = new LinearNode;
         outputgate_hidden->init(out_dim);
         outputgate_hidden->setParam(lstm_params.output_hidden);
+        outputgate_hidden->setNodeName("lstm outputgate_hidden");
         _outputgates_hidden.push_back(outputgate_hidden);
 
         LinearNode *outputgate_input = new LinearNode;
         outputgate_input->init(out_dim);
         outputgate_input->setParam(lstm_params.output_input);
+        outputgate_input->setNodeName("lstm outputgate_input");
         _outputgates_input.push_back(outputgate_input);
 
         PMultiNode *inputfilter = new PMultiNode;

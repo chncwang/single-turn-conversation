@@ -176,7 +176,7 @@ struct BoolArray {
 bool Verify(bool *host, bool *device, int len, const char* message);
 bool Verify(int *host, int *device, int len, const char* message);
 
-void Assert(bool v);
+void Assert(bool v, const std::string &message = "");
 void Memset(dtype *p, int len, dtype value);
 void Memset(bool *p, int len, bool value);
 void *Malloc(int size);
@@ -240,6 +240,7 @@ void DropoutBackward(const std::vector<dtype*> &losses,
         const dtype *drop_mask,
         dtype drop_factor,
         std::vector<dtype*> &in_losses);
+void BucketForward(const std::vector<dtype> input, int count, int dim, std::vector<dtype*> &ys);
 void CopyForUniNodeForward(const std::vector<dtype*> &xs, const dtype* b,
         dtype* xs_dest,
         dtype* b_dest,

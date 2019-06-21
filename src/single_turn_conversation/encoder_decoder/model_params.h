@@ -14,8 +14,6 @@ struct ModelParams : public N3LDGSerializable
     LookupTable lookup_table;
     UniParams hidden_to_wordvector_params;
     LSTM1Params left_to_right_encoder_params;
-    LSTM1Params right_to_left_encoder_params;
-    LSTM1Params decoder_params;
     AttentionVParams attention_parrams;
 
     Json::Value toJson() const override {
@@ -23,8 +21,6 @@ struct ModelParams : public N3LDGSerializable
         json["lookup_table"] = lookup_table.toJson();
         json["hidden_to_wordvector_params"] = hidden_to_wordvector_params.toJson();
         json["left_to_right_encoder_params"] = left_to_right_encoder_params.toJson();
-        json["right_to_left_encoder_params"] = right_to_left_encoder_params.toJson();
-        json["decoder_params"] = decoder_params.toJson();
         json["attention_parrams"] = attention_parrams.toJson();
         return json;
     }
@@ -33,15 +29,13 @@ struct ModelParams : public N3LDGSerializable
         lookup_table.fromJson(json["lookup_table"]);
         hidden_to_wordvector_params.fromJson(json["hidden_to_wordvector_params"]);
         left_to_right_encoder_params.fromJson(json["left_to_right_encoder_params"]);
-        right_to_left_encoder_params.fromJson(json["right_to_left_encoder_params"]);
-        decoder_params.fromJson(json["decoder_params"]);
         attention_parrams.fromJson(json["attention_parrams"]);
     }
 
 #if USE_GPU
     std::vector<n3ldg_cuda::Transferable *> transferablePtrs() override {
         return {&lookup_table, &hidden_to_wordvector_params, &left_to_right_encoder_params,
-            &right_to_left_encoder_params, &decoder_params, &attention_parrams };
+             &attention_parrams };
     }
 #endif
 };

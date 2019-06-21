@@ -1,5 +1,4 @@
 #ifndef UNIOP_H_
-
 #define UNIOP_H_
 
 /*
@@ -195,14 +194,14 @@ public:
         param = paramInit;
     }
 
-    void forward(Graph *cg, PNode x) {
-        in = x;
-        in->addParent(this);
-        cg->addNode(this);
-    }
-
     void forward(Graph &graph, Node &x) {
-        forward(&graph, &x);
+        if (x.getDim() != param->W.inDim()) {
+            cerr << boost::format("input dim:%1% node in dim:%2%") % x.getDim() % param->W.inDim() << endl;
+            abort();
+        }
+        in = &x;
+        in->addParent(this);
+        graph.addNode(this);
     }
 
     void compute() override {
@@ -525,7 +524,7 @@ public:
         }
 
         n3ldg_cuda::Assert(x.verify("forward x"));
-        n3ldg_cuda::Assert(y.verify("linear forward y"));
+        n3ldg_cuda::Assert(y.verify("linear forward y"), batch.at(0)->getNodeName());
 
         for (int idx = 0; idx < count; idx++) {
             LinearNode* ptr = (LinearNode*)batch[idx];

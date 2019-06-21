@@ -28,19 +28,19 @@ struct DecoderComponents {
         shared_ptr<AttentionVBuilder> attention_builder(new AttentionVBuilder);
         attention_builder->init(model_params.attention_parrams);
         Node *guide = decoder.size() == 0 ?
-            static_cast<Node*>(bucket(hyper_params.decoding_hidden_dim,
+            static_cast<Node*>(bucket(hyper_params.hidden_dim,
                         graph)) : static_cast<Node*>(decoder._hiddens.at(decoder.size() - 1));
         attention_builder->forward(graph, encoder_hiddens, *guide);
         contexts.push_back(attention_builder->_hidden);
 
         ConcatNode* concat = new ConcatNode;
-        concat->init(hyper_params.word_dim + hyper_params.encoding_hidden_dim * 2);
+        concat->init(hyper_params.word_dim + hyper_params.hidden_dim);
         vector<Node *> ins = {&input, attention_builder->_hidden};
         concat->forward(graph, ins);
 
-        decoder.forward(graph, model_params.decoder_params, *concat,
-                *bucket(hyper_params.decoding_hidden_dim, graph),
-                *bucket(hyper_params.decoding_hidden_dim, graph),
+        decoder.forward(graph, model_params.left_to_right_encoder_params, *concat,
+                *bucket(hyper_params.hidden_dim, graph),
+                *bucket(hyper_params.hidden_dim, graph),
                 hyper_params.dropout, is_training);
     }
 
@@ -49,7 +49,7 @@ struct DecoderComponents {
             int i) {
         ConcatNode *concat_node = new ConcatNode();
         int context_dim = contexts.at(0)->getDim();
-        concat_node->init(context_dim + hyper_params.decoding_hidden_dim + hyper_params.word_dim);
+        concat_node->init(context_dim + hyper_params.hidden_dim + hyper_params.word_dim);
         vector<Node *> concat_inputs = {contexts.at(i), decoder._hiddens.at(i),
             i == 0 ? bucket(hyper_params.word_dim, graph) : decoder_to_wordvectors.at(i - 1)};
         concat_node->forward(graph, concat_inputs);
