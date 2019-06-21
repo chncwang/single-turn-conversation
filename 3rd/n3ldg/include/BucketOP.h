@@ -43,7 +43,7 @@ public:
     void forward(Graph &graph, dtype v) {
         vector<dtype> input;
         for (int i = 0; i < getDim(); ++i) {
-            input.push_back(i);
+            input.push_back(v);
         }
         forward(graph, input);
     }
