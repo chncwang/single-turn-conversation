@@ -738,11 +738,27 @@ int main(int argc, char *argv[]) {
 
         for (int epoch = 0; ; ++epoch) {
             cout << "epoch:" << epoch << endl;
+            auto cmp = [&] (const ConversationPair &a, const ConversationPair &b)->bool {
+                auto len = [&] (const ConversationPair &pair)->int {
+                    return post_sentences.at(pair.post_id).size() +
+                        response_sentences.at(pair.response_id).size();
+                };
+                return len(a) < len(b);
+            };
+            sort(begin(train_conversation_pairs), end(train_conversation_pairs), cmp);
             shuffle(begin(train_conversation_pairs), end(train_conversation_pairs), engine);
+            int valid_len = train_conversation_pairs.size() / hyper_params.batch_size *
+                hyper_params.batch_size;
+            int batch_count = valid_len / hyper_params.batch_size;
+            cout << boost::format("valid_len:%1% batch_count:%2%") % valid_len % batch_count <<
+                endl;
+            for (int i = 0; i < hyper_params.batch_size; ++i) {
+                auto begin_pos = begin(train_conversation_pairs) + i * batch_count;
+                shuffle(begin_pos, begin_pos + batch_count, engine);
+            }
 
             unique_ptr<Metric> metric = unique_ptr<Metric>(new Metric);
-            for (int batch_i = 0; batch_i < train_conversation_pairs.size() /
-                    hyper_params.batch_size; ++batch_i) {
+            for (int batch_i = 0; batch_i < batch_count; ++batch_i) {
                 cout << format("batch_i:%1% iteration:%2%") % batch_i % iteration << endl;
                 Graph graph;
                 vector<shared_ptr<GraphBuilder>> graph_builders;
@@ -751,7 +767,7 @@ int main(int argc, char *argv[]) {
                 for (int i = 0; i < hyper_params.batch_size; ++i) {
                     shared_ptr<GraphBuilder> graph_builder(new GraphBuilder);
                     graph_builders.push_back(graph_builder);
-                    int instance_index = batch_i * hyper_params.batch_size + i;
+                    int instance_index = i * batch_count + batch_i;
                     int post_id = train_conversation_pairs.at(instance_index).post_id;
                     conversation_pair_in_batch.push_back(train_conversation_pairs.at(
                                 instance_index));
