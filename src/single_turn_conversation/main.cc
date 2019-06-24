@@ -746,7 +746,6 @@ int main(int argc, char *argv[]) {
                 return len(a) < len(b);
             };
             sort(begin(train_conversation_pairs), end(train_conversation_pairs), cmp);
-            shuffle(begin(train_conversation_pairs), end(train_conversation_pairs), engine);
             int valid_len = train_conversation_pairs.size() / hyper_params.batch_size *
                 hyper_params.batch_size;
             int batch_count = valid_len / hyper_params.batch_size;
@@ -767,7 +766,7 @@ int main(int argc, char *argv[]) {
                 for (int i = 0; i < hyper_params.batch_size; ++i) {
                     shared_ptr<GraphBuilder> graph_builder(new GraphBuilder);
                     graph_builders.push_back(graph_builder);
-                    int instance_index = i * batch_count + batch_i;
+                    int instance_index = batch_i * hyper_params.batch_size + i;
                     int post_id = train_conversation_pairs.at(instance_index).post_id;
                     conversation_pair_in_batch.push_back(train_conversation_pairs.at(
                                 instance_index));
