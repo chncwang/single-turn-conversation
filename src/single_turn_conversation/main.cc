@@ -763,10 +763,13 @@ int main(int argc, char *argv[]) {
                 vector<shared_ptr<GraphBuilder>> graph_builders;
                 vector<DecoderComponents> decoder_components_vector;
                 vector<ConversationPair> conversation_pair_in_batch;
+                auto getSentenceIndex = [batch_i, batch_count](int i) {
+                    return i * batch_count + batch_i;
+                };
                 for (int i = 0; i < hyper_params.batch_size; ++i) {
                     shared_ptr<GraphBuilder> graph_builder(new GraphBuilder);
                     graph_builders.push_back(graph_builder);
-                    int instance_index = batch_i * hyper_params.batch_size + i;
+                    int instance_index = getSentenceIndex(i);
                     int post_id = train_conversation_pairs.at(instance_index).post_id;
                     conversation_pair_in_batch.push_back(train_conversation_pairs.at(
                                 instance_index));
@@ -783,7 +786,7 @@ int main(int argc, char *argv[]) {
                 graph.compute();
 
                 for (int i = 0; i < hyper_params.batch_size; ++i) {
-                    int instance_index = batch_i * hyper_params.batch_size + i;
+                    int instance_index = getSentenceIndex(i);
                     int response_id = train_conversation_pairs.at(instance_index).response_id;
                     vector<int> word_ids = toIds(response_sentences.at(response_id),
                             model_params.lookup_table);
