@@ -432,9 +432,12 @@ void interact(const DefaultConfig &default_config, const HyperParams &hyper_para
     while (true) {
         string post;
         getline(cin >> ws, post);
+        utf8_string utf8_post(post);
         vector<string> words;
-        split(words, post, is_any_of(" "));
-        words.push_back(STOP_SYMBOL);
+        for (int i = 0; i < utf8_post.size(); ++i) {
+            words.push_back(utf8_post.substr(i, 1).cpp_str());
+        }
+
         if (default_config.split_unknown_words) {
             words = reprocessSentence(words, word_counts, word_cutoff);
         }
