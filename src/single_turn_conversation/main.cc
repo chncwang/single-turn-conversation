@@ -799,8 +799,16 @@ int main(int argc, char *argv[]) {
                         vals.push_back(node->getVal().value);
                         losses.push_back(node->getLoss().value);
                     }
-                    auto result = n3ldg_cuda::SoftMaxLoss(vals, vals.size(),
-                            result_nodes.at(0)->getDim(), word_ids, hyper_params.batch_size, losses);
+                    int dim = result_nodes.at(0)->getDim();
+                    auto result = n3ldg_cuda::SoftMaxLoss(vals, vals.size(), dim, word_ids,
+                            hyper_params.batch_size, losses);
+                    auto result_ids = result.second;
+                    for (int id : result_ids) {
+                        if (id >= dim) {
+                            cerr << boost::format("id:%1% dim:%2%") % id % dim << endl;
+                            abort();
+                        }
+                    }
 #if TEST_CUDA
                     auto cpu_result = MaxLogProbabilityLoss(result_nodes, word_ids,
                             hyper_params.batch_size);

@@ -258,7 +258,6 @@ std::tuple<std::unique_ptr<Tensor1D>, std::pair<int, dtype>, dtype> toExp(const 
     exp->init(node.getDim());
     exp->vec() = (node.getVal().vec() - max).exp();
     dtype sum = static_cast<Eigen::Tensor<dtype, 0>>(exp->vec().sum())(0);
-
     return std::make_tuple(std::move(exp), std::make_pair(max_j, max), sum);
 }
 

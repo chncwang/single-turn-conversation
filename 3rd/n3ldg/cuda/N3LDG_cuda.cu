@@ -2780,6 +2780,10 @@ __global__ void KernelMax(const dtype *const *v, int count, int dim, dtype *bloc
     if (threadIdx.x == 0) {
         block_maxes[block_maxes_offset] = shared_max[0];
         block_max_is[block_maxes_offset] = shared_max_i[0];
+        //if (shared_max_i[0] >= dim) {
+        //    KernelPrintLine("dim:%d shared_max_i[0]:%d shared_max[0]:%f", dim, shared_max_i[0],
+        //            shared_max[0]);
+        //}
         if (atomicAdd(block_counters + blockIdx.x, 1) == gridDim.y - 1) {
             is_last_block = true;
         }
@@ -2788,23 +2792,40 @@ __global__ void KernelMax(const dtype *const *v, int count, int dim, dtype *bloc
 
     if (is_last_block) {
         dtype max = -INFINITY;
-        int max_i;
+        int max_i = 100000;
+        //if (threadIdx.x == 0) {
+        //    for (int i = 0; i < gridDim.y; ++i) {
+        //        int offset = blockIdx.x * gridDim.y + i;
+        //        KernelPrintLine("i:%d block_maxes[%d]:%f", i, offset, block_maxes[offset]);
+        //    }
+        //}
         for (int i = threadIdx.x; i < gridDim.y; i += blockDim.x) {
             int offset = blockIdx.x * gridDim.y + i;
             if (block_maxes[offset] > max) {
                 max = block_maxes[offset];
                 max_i = block_max_is[offset];
+                //if (max_i >= dim) {
+                //    KernelPrintLine("max_i:%d blockIdx.x:%d gridDim.y:%d i:%d offset:%d",
+                //            max_i, blockIdx.x, gridDim.y, i, offset);
+                //}
             }
         }
 
         shared_max[threadIdx.x] = max;
         shared_max_i[threadIdx.x] = max_i;
+        //if (max_i >= dim) {
+        //    KernelPrintLine("count_i:%d dim:%d max_i:%d", count_i, dim, max_i);
+        //}
         __syncthreads();
 
         for (int i = (blockDim.x >> 1); i > 0; i >>= 1) {
             if (threadIdx.x < i && shared_max[threadIdx.x + i] > shared_max[threadIdx.x]) {
                 shared_max[threadIdx.x] = shared_max[threadIdx.x + i];
                 shared_max_i[threadIdx.x] = shared_max_i[threadIdx.x + i];
+                //if (shared_max_i[threadIdx.x] >= dim) {
+                //    KernelPrintLine("index:%d v:%f" shared_max_i[threadIdx.x],
+                //            shared_max[threadIdx.x]);
+                //}
             }
             __syncthreads();
         }
@@ -2812,6 +2833,10 @@ __global__ void KernelMax(const dtype *const *v, int count, int dim, dtype *bloc
         if (threadIdx.x == 0) {
             max_vals[count_i] = shared_max[0];
             max_indexes[count_i] = shared_max_i[0];
+            //if (max_indexes[count_i] >= dim) {
+            //    KernelPrintLine("max_indexes[%d]:%d val:%f",
+            //            count_i, max_indexes[count_i], shared_max[0]);
+            //}
         }
     }
 }
@@ -2838,6 +2863,8 @@ void Max(const dtype *const *v, int count, int dim, int *max_indexes, dtype *max
     int thread_count = min(NextTwoIntegerPowerNumber(dim), TPB);
     int block_y_count = (dim - 1 + thread_count) / thread_count;
     dim3 block_dim(count, block_y_count, 1);
+    cout << boost::format("thread_count:%1% block_x_count:%2% block_y_count:%3%") % thread_count %
+        count % block_y_count << endl;
 
 //    cout << format("Max count:%1% dim:%2% thread_count:%3% block_y_count:%4%") % count % dim % thread_count
 //            % block_y_count << endl;
@@ -2850,6 +2877,7 @@ void Max(const dtype *const *v, int count, int dim, int *max_indexes, dtype *max
 
     KernelMax<<<block_dim, thread_count>>>(v, count, dim, block_maxes.value, block_max_is.value,
             block_counters.value, max_indexes, max_vals);
+    cudaPrintfDisplay(stdout, true);
 #if TEST_CUDA
     NumberArray max_val_arr;
     IntArray max_indexer_arr;
