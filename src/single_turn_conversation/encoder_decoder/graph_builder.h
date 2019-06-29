@@ -4,6 +4,7 @@
 #include <cmath>
 #include <vector>
 #include <array>
+#include <set>
 #include <string>
 #include <memory>
 #include <tuple>
@@ -39,7 +40,11 @@ public:
             }
 
     dtype finalScore() const {
-        return (final_log_probability + extra_score_) / path_.size();
+        std::set<int> unique_words;
+        for (const auto &p : path_) {
+            unique_words.insert(p.word_id);
+        }
+        return (final_log_probability + extra_score_) / unique_words.size();
     }
 
     dtype finalLogProbability() const {
@@ -355,9 +360,8 @@ struct GraphBuilder {
 
             for (int i = 0;; ++i) {
                 cout << boost::format("forwardDecoderUsingBeamSearch i:%1%\n") % i;
-                int left_k = k - word_ids_result.size();
-                if (left_k <= 0) {
-                    cout << boost::format("break for left_k:%1%") % left_k << endl;
+                int left_k = k;
+                if (word_ids_result.size() >= k || i > 30) {
                     break;
                 }
                 last_answers.clear();

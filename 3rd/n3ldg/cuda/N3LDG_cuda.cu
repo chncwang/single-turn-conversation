@@ -2863,8 +2863,8 @@ void Max(const dtype *const *v, int count, int dim, int *max_indexes, dtype *max
     int thread_count = min(NextTwoIntegerPowerNumber(dim), TPB);
     int block_y_count = (dim - 1 + thread_count) / thread_count;
     dim3 block_dim(count, block_y_count, 1);
-    cout << boost::format("thread_count:%1% block_x_count:%2% block_y_count:%3%") % thread_count %
-        count % block_y_count << endl;
+    //cout << boost::format("thread_count:%1% block_x_count:%2% block_y_count:%3%") % thread_count %
+    //    count % block_y_count << endl;
 
 //    cout << format("Max count:%1% dim:%2% thread_count:%3% block_y_count:%4%") % count % dim % thread_count
 //            % block_y_count << endl;
