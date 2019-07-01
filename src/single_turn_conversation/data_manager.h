@@ -9,9 +9,11 @@
 #include <iterator>
 #include <regex>
 #include <iostream>
+#include <algorithm>
 #include <utility>
 #include <atomic>
 #include <mutex>
+#include "N3LDG.h"
 #include "single_turn_conversation/conversation_structure.h"
 #include "single_turn_conversation/def.h"
 #include "single_turn_conversation/default_config.h"
@@ -250,6 +252,59 @@ void reprocessSentences(const vector<PostAndResponses> bundles,
             res = reprocessSentence(res, word_counts, min_occurences);
         }
     }
+}
+
+struct WordFrequencyInfo {
+    vector<int> word_frequencies;
+    vector<string> keywords_behind;
+};
+
+vector<WordFrequencyInfo> getWordFrequencyInfo(const vector<vector<string>> &sentences,
+        const unordered_map<string, int> &word_counts) {
+    vector<WordFrequencyInfo> result;
+
+    int i = 0;
+    for (const auto &sentence : sentences) {
+        WordFrequencyInfo word_frequency_info;
+        for (const string &word : sentence) {
+            int frequency;
+            auto it = word_counts.find(word);
+            if (it == word_counts.end()) {
+                frequency = word_counts.at(unknownkey);
+            } else {
+                frequency = it->second;
+            }
+            word_frequency_info.word_frequencies.push_back(frequency);
+        }
+
+        auto &word_frequencies = word_frequency_info.word_frequencies;
+        for (int i = 0; i < word_frequencies.size(); ++i) {
+            auto it = std::min_element(word_frequencies.begin() + i, word_frequencies.end());
+            string word = sentence.at(it - word_frequencies.begin());
+            word_frequency_info.keywords_behind.push_back(word);
+        }
+
+        if (i++ % 10000 == 0) {
+            for (const string &word : sentence) {
+                cout << word << " ";
+            }
+            cout << endl;
+
+            for (int frequency : word_frequencies) {
+                cout << frequency << " ";
+            }
+            cout << endl;
+
+            for (const string &word : word_frequency_info.keywords_behind) {
+                cout << word << " ";
+            }
+            cout << endl;
+        }
+
+        result.push_back(word_frequency_info);
+    }
+
+    return result;
 }
 
 #endif

@@ -618,7 +618,6 @@ int main(int argc, char *argv[]) {
         }
 
         word_counts[unknownkey] = 1000000000;
-        word_counts[STOP_SYMBOL] = 1000000000;
         alphabet.init(word_counts, hyper_params.word_cutoff);
         cout << boost::format("alphabet size:%1%") % alphabet.size() << endl;
     } else if (default_config.split_unknown_words) {
@@ -670,6 +669,8 @@ int main(int argc, char *argv[]) {
                     allocate_model_params);
         }
     }
+
+    auto word_frequency_infos = getWordFrequencyInfo(response_sentences, word_counts);
 
     if (default_config.program_mode == ProgramMode::INTERACTING) {
         hyper_params.beam_size = beam_size;
