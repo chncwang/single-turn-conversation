@@ -282,21 +282,24 @@ struct GraphBuilder {
 
     void forwardDecoder(Graph &graph, DecoderComponents &decoder_components,
             const std::vector<std::string> &answer,
+            const std::vector<std::string> &keywords,
             const HyperParams &hyper_params,
             ModelParams &model_params,
             bool is_training) {
         for (int i = 0; i < answer.size(); ++i) {
             forwardDecoderByOneStep(graph, decoder_components, i,
-                    i == 0 ? nullptr : &answer.at(i - 1), hyper_params, model_params, is_training);
+                    i == 0 ? nullptr : &answer.at(i - 1), i == 0 ? nullptr : &keywords.at(i - 1),
+                    hyper_params, model_params, is_training);
         }
     }
 
     void forwardDecoderByOneStep(Graph &graph, DecoderComponents &decoder_components, int i,
             const std::string *answer,
+            const std::string *keyword,
             const HyperParams &hyper_params,
             ModelParams &model_params,
             bool is_training) {
-        Node *last_input;
+        Node *last_input, *last_keyword;
         if (i > 0) {
             LookupNode* before_dropout(new LookupNode);
             before_dropout->init(hyper_params.word_dim);
@@ -308,11 +311,18 @@ struct GraphBuilder {
             decoder_lookup->forward(graph, *before_dropout);
             decoder_components.decoder_lookups.push_back(decoder_lookup);
             last_input = decoder_components.decoder_lookups.at(i - 1);
+
+            LookupNode *keyword_node(new LookupNode);
+            keyword_node->init(hyper_params.word_dim);
+            keyword_node->forward(graph, *keyword);
+            decoder_components.decoder_keyword_lookups.push_back(keyword_node);
+            last_keyword = decoder_components.decoder_keyword_lookups.at(i - 1);
         } else {
             BucketNode *bucket = new BucketNode;
             bucket->init(hyper_params.word_dim);
             bucket->forward(graph);
             last_input = bucket;
+            last_keyword = bucket;
         }
 
         std::vector<Node *> encoder_hiddens = transferVector<Node *, DropoutNode*>(
@@ -320,11 +330,12 @@ struct GraphBuilder {
                 return dropout;
                 });
 
-        decoder_components.forward(graph, hyper_params, model_params, *last_input,
+        decoder_components.forward(graph, hyper_params, model_params, *last_input, *last_keyword,
                 encoder_hiddens, is_training);
 
-        Node *decoder_to_wordvector = decoder_components.decoderToWordVectors(graph, hyper_params,
+        auto nodes = decoder_components.decoderToWordVectors(graph, hyper_params,
                 model_params, i);
+        Node *decoder_to_wordvector = nodes.result;
         decoder_components.decoder_to_wordvectors.push_back(decoder_to_wordvector);
 
         LinearWordVectorNode *wordvector_to_onehot(new LinearWordVectorNode);
@@ -332,6 +343,15 @@ struct GraphBuilder {
         wordvector_to_onehot->setParam(model_params.lookup_table.E);
         wordvector_to_onehot->forward(graph, *decoder_to_wordvector);
         decoder_components.wordvector_to_onehots.push_back(wordvector_to_onehot);
+
+        Node *keyword_node = nodes.keyword;
+        decoder_components.decoder_to_keyword_vectors.push_back(keyword_node);
+
+        LinearWordVectorNode *keyword_vector_to_onehot(new LinearWordVectorNode);
+        keyword_vector_to_onehot->init(model_params.lookup_table.nVSize);
+        keyword_vector_to_onehot->setParam(model_params.lookup_table.E);
+        keyword_vector_to_onehot->forward(graph, *keyword_node);
+        decoder_components.keyword_vector_to_onehots.push_back(keyword_vector_to_onehot);
     }
 
     std::pair<std::vector<WordIdAndProbability>, dtype> forwardDecoderUsingBeamSearch(Graph &graph,

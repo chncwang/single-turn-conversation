@@ -321,7 +321,8 @@ void loadModel(const DefaultConfig &default_config, HyperParams &hyper_params,
 float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         const vector<PostAndResponses> &post_and_responses_vector,
         const vector<vector<string>> &post_sentences,
-        const vector<vector<string>> &response_sentences) {
+        const vector<vector<string>> &response_sentences,
+        const vector<WordFrequencyInfo> &keyword_infos) {
     cout << "metricTestPosts begin" << endl;
     hyper_params.print();
     float rep_perplex(0.0f);
@@ -345,7 +346,9 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
                         hyper_params, model_params, false);
                 DecoderComponents decoder_components;
                 graph_builder.forwardDecoder(graph, decoder_components,
-                        response_sentences.at(response_id), hyper_params, model_params, false);
+                        response_sentences.at(response_id),
+                        keyword_infos.at(response_id).keywords_behind,
+                        hyper_params, model_params, false);
                 graph.compute();
                 vector<Node*> nodes = toNodePointers(decoder_components.wordvector_to_onehots);
                 vector<int> word_ids = transferVector<int, string>(
@@ -656,7 +659,9 @@ int main(int argc, char *argv[]) {
         model_params.left_to_right_encoder_params.init(hyper_params.hidden_dim,
                 hyper_params.word_dim + hyper_params.hidden_dim);
         model_params.hidden_to_wordvector_params.init(hyper_params.word_dim,
-                hyper_params.hidden_dim + hyper_params.hidden_dim + hyper_params.word_dim);
+                2 * hyper_params.hidden_dim + 2 * hyper_params.word_dim);
+        model_params.hidden_to_keyword_params.init(hyper_params.word_dim,
+                2 * hyper_params.hidden_dim + 2 * hyper_params.word_dim);
         model_params.attention_parrams.init(hyper_params.hidden_dim, hyper_params.hidden_dim);
     };
 
@@ -711,8 +716,8 @@ int main(int argc, char *argv[]) {
             shared_ptr<Json::Value> root_ptr = loadModel(model_file_path);
             loadModel(default_config, hyper_params, model_params, root_ptr.get(),
                     allocate_model_params);
-            float rep_perplex = metricTestPosts(hyper_params, model_params,
-                    dev_post_and_responses, post_sentences, response_sentences);
+            float rep_perplex = metricTestPosts(hyper_params, model_params, dev_post_and_responses,
+                    post_sentences, response_sentences, word_frequency_infos);
             cout << format("model %1% rep_perplex is %2%") % model_file_path % rep_perplex << endl;
             if (max_rep_perplex < rep_perplex) {
                 max_rep_perplex = rep_perplex;
@@ -784,6 +789,7 @@ int main(int argc, char *argv[]) {
                     DecoderComponents decoder_components;
                     graph_builder->forwardDecoder(graph, decoder_components,
                             response_sentences.at(response_id),
+                            word_frequency_infos.at(response_id).keywords_behind,
                             hyper_params, model_params, true);
                     decoder_components_vector.push_back(decoder_components);
                 }
@@ -867,6 +873,8 @@ int main(int argc, char *argv[]) {
                         DecoderComponents decoder_components;
                         graph_builder.forwardDecoder(graph, decoder_components,
                                 response_sentences.at(conversation_pair.response_id),
+                                word_frequency_infos.at(
+                                    conversation_pair.response_id).keywords_behind,
                                 hyper_params, model_params, true);
 
                         graph.compute();

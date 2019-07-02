@@ -6,11 +6,19 @@
 #include "single_turn_conversation/encoder_decoder/model_params.h"
 #include "single_turn_conversation/encoder_decoder/hyper_params.h"
 
+struct ResultAndKeywordVectors {
+    Node *result;
+    Node *keyword;
+};
+
 struct DecoderComponents {
     std::vector<LookupNode *> decoder_lookups_before_dropout;
     std::vector<DropoutNode *> decoder_lookups;
+    std::vector<LookupNode *> decoder_keyword_lookups;
     std::vector<Node *> decoder_to_wordvectors;
+    std::vector<Node *> decoder_to_keyword_vectors;
     std::vector<LinearWordVectorNode *> wordvector_to_onehots;
+    std::vector<LinearWordVectorNode *> keyword_vector_to_onehots;
     DynamicLSTMBuilder decoder;
     vector<Node*> contexts;
 
@@ -23,6 +31,7 @@ struct DecoderComponents {
 
     void forward(Graph &graph, const HyperParams &hyper_params, ModelParams &model_params,
             Node &input,
+            Node &keyword,
             vector<Node *> &encoder_hiddens,
             bool is_training) {
         shared_ptr<AttentionVBuilder> attention_builder(new AttentionVBuilder);
@@ -34,8 +43,8 @@ struct DecoderComponents {
         contexts.push_back(attention_builder->_hidden);
 
         ConcatNode* concat = new ConcatNode;
-        concat->init(hyper_params.word_dim + hyper_params.hidden_dim);
-        vector<Node *> ins = {&input, attention_builder->_hidden};
+        concat->init(2 * hyper_params.word_dim + hyper_params.hidden_dim);
+        vector<Node *> ins = {&input, attention_builder->_hidden, &keyword};
         concat->forward(graph, ins);
 
         decoder.forward(graph, model_params.left_to_right_encoder_params, *concat,
@@ -44,21 +53,30 @@ struct DecoderComponents {
                 hyper_params.dropout, is_training);
     }
 
-    Node* decoderToWordVectors(Graph &graph, const HyperParams &hyper_params,
+    ResultAndKeywordVectors decoderToWordVectors(Graph &graph, const HyperParams &hyper_params,
             ModelParams &model_params,
             int i) {
         ConcatNode *concat_node = new ConcatNode();
         int context_dim = contexts.at(0)->getDim();
-        concat_node->init(context_dim + hyper_params.hidden_dim + hyper_params.word_dim);
-        vector<Node *> concat_inputs = {contexts.at(i), decoder._hiddens.at(i),
-            i == 0 ? bucket(hyper_params.word_dim, graph) : decoder_to_wordvectors.at(i - 1)};
+        concat_node->init(context_dim + hyper_params.hidden_dim + 2 * hyper_params.word_dim);
+        vector<Node *> concat_inputs = {
+            contexts.at(i), decoder._hiddens.at(i),
+            i == 0 ? bucket(hyper_params.word_dim, graph) : decoder_to_wordvectors.at(i - 1),
+            i == 0 ? bucket(hyper_params.word_dim, graph) : decoder_to_keyword_vectors.at(i - 1)
+        };
         concat_node->forward(graph, concat_inputs);
 
         LinearNode *decoder_to_wordvector(new LinearNode);
         decoder_to_wordvector->init(hyper_params.word_dim);
         decoder_to_wordvector->setParam(model_params.hidden_to_wordvector_params);
         decoder_to_wordvector->forward(graph, *concat_node);
-        return decoder_to_wordvector;
+
+        LinearNode *keyword(new LinearNode);
+        keyword->init(hyper_params.word_dim);
+        keyword->setParam(model_params.hidden_to_keyword_params);
+        keyword->forward(graph, *concat_node);
+
+        return {decoder_to_wordvector, keyword};
     }
 };
 
