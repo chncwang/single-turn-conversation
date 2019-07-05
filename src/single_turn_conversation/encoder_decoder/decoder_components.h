@@ -66,15 +66,20 @@ struct DecoderComponents {
         };
         concat_node->forward(graph, concat_inputs);
 
-        LinearNode *decoder_to_wordvector(new LinearNode);
-        decoder_to_wordvector->init(hyper_params.word_dim);
-        decoder_to_wordvector->setParam(model_params.hidden_to_wordvector_params);
-        decoder_to_wordvector->forward(graph, *concat_node);
-
         LinearNode *keyword(new LinearNode);
         keyword->init(hyper_params.word_dim);
         keyword->setParam(model_params.hidden_to_keyword_params);
         keyword->forward(graph, *concat_node);
+
+        ConcatNode *keyword_concated = new ConcatNode();
+        keyword_concated->init(concat_node->getDim() + keyword->getDim());
+        keyword_concated->forward(graph, {concat_node, keyword});
+        vector<Node*> keyword_concated_inputs = {keyword, concat_node};
+
+        LinearNode *decoder_to_wordvector(new LinearNode);
+        decoder_to_wordvector->init(hyper_params.word_dim);
+        decoder_to_wordvector->setParam(model_params.hidden_to_wordvector_params);
+        decoder_to_wordvector->forward(graph, *keyword_concated);
 
         return {decoder_to_wordvector, keyword};
     }

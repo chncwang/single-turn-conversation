@@ -264,7 +264,7 @@ struct GraphBuilder {
             dropout_node->forward(graph, *input_lookup);
 
             BucketNode *bucket = new BucketNode();
-            bucket->init(hyper_params.hidden_dim);
+            bucket->init(hyper_params.hidden_dim + hyper_params.word_dim);
             bucket->forward(graph);
 
             ConcatNode *concat = new ConcatNode;
@@ -314,6 +314,7 @@ struct GraphBuilder {
 
             LookupNode *keyword_node(new LookupNode);
             keyword_node->init(hyper_params.word_dim);
+            keyword_node->setParam(model_params.lookup_table);
             keyword_node->forward(graph, *keyword);
             decoder_components.decoder_keyword_lookups.push_back(keyword_node);
             last_keyword = decoder_components.decoder_keyword_lookups.at(i - 1);
@@ -424,9 +425,9 @@ struct GraphBuilder {
 
                 for (int beam_i = 0; beam_i < beam.size(); ++beam_i) {
                     DecoderComponents &decoder_components = beam.at(beam_i);
-                    forwardDecoderByOneStep(graph, decoder_components, i,
-                            i == 0 ? nullptr : &last_answers.at(beam_i), hyper_params,
-                            model_params, is_training);
+//                    forwardDecoderByOneStep(graph, decoder_components, i,
+//                            i == 0 ? nullptr : &last_answers.at(beam_i), hyper_params,
+//                            model_params, is_training);
                 }
 
                 graph.compute();
