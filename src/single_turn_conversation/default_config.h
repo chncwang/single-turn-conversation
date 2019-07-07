@@ -33,9 +33,11 @@ struct DefaultConfig {
     int device_id;
     int hold_batch_size;
     int seed;
+    int cut_length;
     std::string output_model_file_prefix;
     std::string input_model_file;
     std::string input_model_dir;
+    std::string black_list_file;
     float memory_in_gb;
     float ngram_penalty_1;
     float ngram_penalty_2;
@@ -61,9 +63,11 @@ struct DefaultConfig {
             << "device_id:" << device_id << std::endl
             << "hold_batch_size:" << hold_batch_size << std::endl
             << "seed:" << seed << std::endl
+            << "cut_length:" << cut_length << std::endl
             << "output_model_file_prefix" << output_model_file_prefix << std::endl
             << "input_model_file:" << input_model_file << std::endl
             << "input_model_dir:" << input_model_dir << std::endl
+            << "black_list_file:" << black_list_file << std::endl
             << "memory_in_gb:" << memory_in_gb << std::endl
             << "ngram_penalty_1:" << ngram_penalty_1 << std::endl
             << "ngram_penalty_2:" << ngram_penalty_2 << std::endl

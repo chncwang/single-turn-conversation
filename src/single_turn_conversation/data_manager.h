@@ -252,4 +252,16 @@ void reprocessSentences(const vector<PostAndResponses> bundles,
     }
 }
 
+std::vector<std::string> readBlackList(const std::string &filename) {
+    std::string line;
+    std::ifstream ifs(filename);
+    std::vector<std::string> result;
+    cout << "black:" << endl;
+    while (std::getline(ifs, line)) {
+        cout << line << endl;
+        result.push_back(line);
+    }
+    return result;
+}
+
 #endif

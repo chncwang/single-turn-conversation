@@ -124,10 +124,12 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
     default_config.test_size = ini_reader.GetInteger(SECTION, "test_size", 0);
     default_config.device_id = ini_reader.GetInteger(SECTION, "device_id", 0);
     default_config.seed = ini_reader.GetInteger(SECTION, "seed", 0);
+    default_config.cut_length = ini_reader.GetInteger(SECTION, "black_list_file", 30);
     default_config.output_model_file_prefix = ini_reader.Get(SECTION, "output_model_file_prefix",
             "");
     default_config.input_model_file = ini_reader.Get(SECTION, "input_model_file", "");
     default_config.input_model_dir = ini_reader.Get(SECTION, "input_model_dir", "");
+    default_config.black_list_file = ini_reader.Get(SECTION, "black_list_file", "");
     default_config.memory_in_gb = ini_reader.GetReal(SECTION, "memory_in_gb", 0.0f);
     default_config.ngram_penalty_1 = ini_reader.GetReal(SECTION, "ngram_penalty_1", 0.0f);
     default_config.ngram_penalty_2 = ini_reader.GetReal(SECTION, "ngram_penalty_2", 0.0f);
@@ -373,7 +375,8 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         DefaultConfig &default_config,
         const vector<PostAndResponses> &post_and_responses_vector,
         const vector<vector<string>> &post_sentences,
-        const vector<vector<string>> &response_sentences) {
+        const vector<vector<string>> &response_sentences,
+        const vector<string> &black_list) {
     cout << "decodeTestPosts begin" << endl;
     hyper_params.print();
     vector<CandidateAndReferences> candidate_and_references_vector;
@@ -385,7 +388,7 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         vector<DecoderComponents> decoder_components_vector;
         decoder_components_vector.resize(hyper_params.beam_size);
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
-                hyper_params.beam_size, hyper_params, model_params, default_config, false);
+                hyper_params.beam_size, hyper_params, model_params, default_config, black_list);
         const vector<WordIdAndProbability> &word_ids_and_probability = pair.first;
         cout << "post:" << endl;
         print(post_sentences.at(post_and_responses.post_id));
@@ -427,7 +430,8 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
 void interact(const DefaultConfig &default_config, const HyperParams &hyper_params,
         ModelParams &model_params,
         unordered_map<string, int> &word_counts,
-        int word_cutoff) {
+        int word_cutoff,
+        const vector<string> black_list) {
     hyper_params.print();
     while (true) {
         string post;
@@ -451,7 +455,7 @@ void interact(const DefaultConfig &default_config, const HyperParams &hyper_para
         cout << format("decodeTestPosts - beam_size:%1% decoder_components_vector.size:%2%") %
             hyper_params.beam_size % decoder_components_vector.size() << endl;
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
-                hyper_params.beam_size, hyper_params, model_params, default_config, false);
+                hyper_params.beam_size, hyper_params, model_params, default_config, black_list);
         const vector<WordIdAndProbability> &word_ids = pair.first;
         cout << "post:" << endl;
         cout << post << endl;
@@ -671,14 +675,16 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    auto black_list = readBlackList(default_config.black_list_file);
+
     if (default_config.program_mode == ProgramMode::INTERACTING) {
         hyper_params.beam_size = beam_size;
         interact(default_config, hyper_params, model_params, word_counts,
-                hyper_params.word_cutoff);
+                hyper_params.word_cutoff, black_list);
     } else if (default_config.program_mode == ProgramMode::DECODING) {
         hyper_params.beam_size = beam_size;
         decodeTestPosts(hyper_params, model_params, default_config, test_post_and_responses,
-                post_sentences, response_sentences);
+                post_sentences, response_sentences, black_list);
     } else if (default_config.program_mode == ProgramMode::METRIC) {
         path dir_path(default_config.input_model_dir);
         if (!is_directory(dir_path)) {
