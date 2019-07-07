@@ -6,6 +6,41 @@
 
 #include "MyLib.h"
 
+#if USE_GPU
+std::pair<dtype, std::vector<int>> MaxLogProbabilityLoss(const std::vector<Node*> &result_nodes,
+        const std::vector<int> ids,
+        int batchsize) {
+    vector<const dtype *> vals;
+    vector<dtype*> losses;
+    for (const Node *node : result_nodes) {
+        vals.push_back(node->getVal().value);
+        losses.push_back(node->getLoss().value);
+    }
+    int dim = result_nodes.at(0)->getDim();
+    auto result = n3ldg_cuda::SoftMaxLoss(vals, vals.size(), dim, ids, batchsize, losses);
+    auto result_ids = result.second;
+    for (int id : result_ids) {
+        if (id >= dim) {
+            cerr << boost::format("id:%1% dim:%2%") % id % dim << endl;
+            abort();
+        }
+    }
+#if TEST_CUDA
+    auto cpu_result = MaxLogProbabilityLoss(result_nodes, word_ids,
+            hyper_params.batch_size);
+    cout << format("result loss:%1% cpu_result loss:%2%") % result.first %
+        cpu_result.first << endl;
+    if (abs(result.first - cpu_result.first) > 0.001) {
+        abort();
+    }
+
+    for (const Node *node : result_nodes) {
+        n3ldg_cuda::Assert(node->getLoss().verify("cross entropy loss"));
+    }
+#endif
+    return result;
+}
+#else
 std::pair<dtype, std::vector<int>> MaxLogProbabilityLoss(std::vector<Node *> &nodes,
         const std::vector<int> &answers,
         int batchsize) {
@@ -35,5 +70,7 @@ std::pair<dtype, std::vector<int>> MaxLogProbabilityLoss(std::vector<Node *> &no
 
     return std::make_pair(loss, std::move(results));
 }
+
+#endif
 
 #endif

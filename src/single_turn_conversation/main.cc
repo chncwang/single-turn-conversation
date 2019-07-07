@@ -218,6 +218,14 @@ vector<int> toIds(const vector<string> &sentence, LookupTable &lookup_table) {
     vector<int> ids;
     for (const string &word : sentence) {
 	int xid = lookup_table.getElemId(word);
+        if (xid >= lookup_table.nVSize) {
+            cerr << "xid:" << xid << " word:" << word << endl;
+            for (const string &w :sentence) {
+                cerr << w;
+            }
+            cerr << endl;
+            abort();
+        }
         ids.push_back(xid);
     }
     return ids;
@@ -767,6 +775,7 @@ int main(int argc, char *argv[]) {
             }
 
             unique_ptr<Metric> metric = unique_ptr<Metric>(new Metric);
+            unique_ptr<Metric> keyword_metric = unique_ptr<Metric>(new Metric);
             for (int batch_i = 0; batch_i < batch_count; ++batch_i) {
                 cout << format("batch_i:%1% iteration:%2%") % batch_i % iteration << endl;
                 Graph graph;
@@ -803,62 +812,44 @@ int main(int argc, char *argv[]) {
                             model_params.lookup_table);
                     vector<Node*> result_nodes =
                         toNodePointers(decoder_components_vector.at(i).wordvector_to_onehots);
-#if USE_GPU
-                    vector<const dtype *> vals;
-                    vector<dtype*> losses;
-                    for (const Node *node : result_nodes) {
-                        vals.push_back(node->getVal().value);
-                        losses.push_back(node->getLoss().value);
-                    }
-                    int dim = result_nodes.at(0)->getDim();
-                    auto result = n3ldg_cuda::SoftMaxLoss(vals, vals.size(), dim, word_ids,
-                            hyper_params.batch_size, losses);
-                    auto result_ids = result.second;
-                    for (int id : result_ids) {
-                        if (id >= dim) {
-                            cerr << boost::format("id:%1% dim:%2%") % id % dim << endl;
-                            abort();
-                        }
-                    }
-#if TEST_CUDA
-                    auto cpu_result = MaxLogProbabilityLoss(result_nodes, word_ids,
-                            hyper_params.batch_size);
-                    cout << format("result loss:%1% cpu_result loss:%2%") % result.first %
-                        cpu_result.first << endl;
-                    if (abs(result.first - cpu_result.first) > 0.001) {
-                        abort();
-                    }
-
-                    for (const Node *node : result_nodes) {
-                        n3ldg_cuda::Assert(node->getLoss().verify("cross entropy loss"));
-                    }
-#endif
-#else
                     auto result = MaxLogProbabilityLoss(result_nodes, word_ids,
                             hyper_params.batch_size);
-#endif
                     loss_sum += result.first;
-
                     analyze(result.second, word_ids, *metric);
-                    unique_ptr<Metric> local_metric(unique_ptr<Metric>(new Metric));
-                    analyze(result.second, word_ids, *local_metric);
 
-                    if (local_metric->getAccuracy() < 1.0f) {
-                        static int count_for_print;
-                        if (++count_for_print % 100 == 0) {
-                            count_for_print = 0;
-                            int post_id = train_conversation_pairs.at(instance_index).post_id;
-                            cout << "post:" << post_id << endl;
-                            print(post_sentences.at(post_id));
-                            cout << "golden answer:" << endl;
-                            printWordIds(word_ids, model_params.lookup_table);
-                            cout << "output:" << endl;
-                            printWordIds(result.second, model_params.lookup_table);
-                        }
+                    vector<Node *> keyword_result_nodes = toNodePointers(
+                            decoder_components_vector.at(i).keyword_vector_to_onehots);
+                    vector<int> keyword_ids = toIds(
+                            word_frequency_infos.at(response_id).keywords_behind,
+                            model_params.lookup_table);
+                    auto keyword_result = MaxLogProbabilityLoss(keyword_result_nodes, keyword_ids,
+                            hyper_params.batch_size);
+                    loss_sum += keyword_result.first;
+                    analyze(keyword_result.second, keyword_ids, *keyword_metric);
+
+                    static int count_for_print;
+                    if (++count_for_print % 100 == 0) {
+                        count_for_print = 0;
+                        int post_id = train_conversation_pairs.at(instance_index).post_id;
+                        cout << "post:" << post_id << endl;
+                        print(post_sentences.at(post_id));
+
+                        cout << "golden answer:" << endl;
+                        printWordIds(word_ids, model_params.lookup_table);
+                        cout << "output:" << endl;
+                        printWordIds(result.second, model_params.lookup_table);
+
+                        cout << "golden keywords:" << endl;
+                        printWordIds(keyword_ids, model_params.lookup_table);
+                        cout << "output:" << endl;
+                        printWordIds(keyword_result.second, model_params.lookup_table);
                     }
                 }
                 cout << "loss:" << loss_sum << endl;
+                cout << "normal:" << endl;
                 metric->print();
+                cout << "keyword:" << endl;
+                keyword_metric->print();
 
                 graph.backward();
 

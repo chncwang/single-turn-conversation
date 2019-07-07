@@ -137,4 +137,5 @@ dtype cost(PNode x, const vector<dtype> &answer, int batchsize = 1) {
     return cost;
 }
 
+
 #endif /* _SOFTMAXLOSS_H_ */
