@@ -106,8 +106,8 @@ public:
     }
 
 
-    void setParam(UniParams* paramInit) {
-        param = paramInit;
+    void setParam(UniParams& paramInit) {
+        param = &paramInit;
     }
 
     void setFunctions(dtype(*f)(const dtype&), dtype(*f_deri)(const dtype&, const dtype&)) {

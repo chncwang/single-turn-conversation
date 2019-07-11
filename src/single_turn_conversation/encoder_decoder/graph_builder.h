@@ -207,21 +207,6 @@ vector<BeamSearchResult> mostProbableResults(
 
             word_ids.push_back(WordIdAndProbability(j, word_probability));
 
-//            vector<int> ids = transferVector<int, WordIdAndProbability>(word_ids,
-//                    [](const WordIdAndProbability &in) ->int {return in.word_id;});
-//            string sentence = ::getSentence(ids, model_params);
-//            bool contain_black = false;
-//            for (const string str : black_list) {
-//                utf8_string utf8_str(str), utf8_sentece(sentence);
-//                if (utf8_sentece.find(utf8_str) != string::npos) {
-//                    contain_black = true;
-//                    break;
-//                }
-//            }
-//            if (contain_black) {
-//                continue;
-//            }
-
             BeamSearchResult beam_search_result(beam.at(i), word_ids, log_probability);
             beam_search_result.setNgramCounts(counts);
             beam_search_result.setExtraScore(extra_score);

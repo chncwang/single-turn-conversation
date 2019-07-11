@@ -51,10 +51,11 @@ struct DecoderComponents {
         int context_dim = contexts.at(0)->getDim();
         concat_node->init(context_dim + hyper_params.hidden_dim + hyper_params.word_dim);
         vector<Node *> concat_inputs = {contexts.at(i), decoder._hiddens.at(i),
-            i == 0 ? bucket(hyper_params.word_dim, graph) : decoder_to_wordvectors.at(i - 1)};
+            i == 0 ? bucket(hyper_params.word_dim, graph) :
+                static_cast<Node*>(decoder_lookups.at(i - 1))};
         concat_node->forward(graph, concat_inputs);
 
-        LinearNode *decoder_to_wordvector(new LinearNode);
+        UniNode *decoder_to_wordvector(new UniNode);
         decoder_to_wordvector->init(hyper_params.word_dim);
         decoder_to_wordvector->setParam(model_params.hidden_to_wordvector_params);
         decoder_to_wordvector->forward(graph, *concat_node);

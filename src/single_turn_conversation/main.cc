@@ -183,6 +183,20 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
     }
     hyper_params.learning_rate = learning_rate;
 
+    float min_learning_rate = ini_reader.GetReal("hyper", "min_learning_rate", 0.0001f);
+    if (min_learning_rate <= 0.0f) {
+        cerr << "min_learning_rate wrong" << endl;
+        abort();
+    }
+    hyper_params.min_learning_rate = min_learning_rate;
+
+    float learning_rate_decay = ini_reader.GetReal("hyper", "learning_rate_decay", 0.9f);
+    if (learning_rate_decay <= 0.0f || learning_rate_decay > 1.0f) {
+        cerr << "decay wrong" << endl;
+        abort();
+    }
+    hyper_params.learning_rate_decay = learning_rate_decay;
+
     int word_cutoff = ini_reader.GetReal("hyper", "word_cutoff", -1);
     if(word_cutoff == -1){
    	cerr << "word_cutoff read error" << endl;
@@ -622,7 +636,6 @@ int main(int argc, char *argv[]) {
         }
 
         word_counts[unknownkey] = 1000000000;
-        word_counts[STOP_SYMBOL] = 1000000000;
         alphabet.init(word_counts, hyper_params.word_cutoff);
         cout << boost::format("alphabet size:%1%") % alphabet.size() << endl;
     } else if (default_config.split_unknown_words) {
@@ -661,7 +674,7 @@ int main(int argc, char *argv[]) {
         model_params.left_to_right_encoder_params.init(hyper_params.hidden_dim,
                 hyper_params.word_dim + hyper_params.hidden_dim);
         model_params.hidden_to_wordvector_params.init(hyper_params.word_dim,
-                hyper_params.hidden_dim + hyper_params.hidden_dim + hyper_params.word_dim);
+                hyper_params.hidden_dim + hyper_params.hidden_dim + hyper_params.word_dim, false);
         model_params.attention_parrams.init(hyper_params.hidden_dim, hyper_params.hidden_dim);
     };
 
@@ -924,6 +937,9 @@ int main(int argc, char *argv[]) {
             } else {
                 last_saved_model = saveModel(hyper_params, model_params,
                         default_config.output_model_file_prefix, epoch);
+                model_update._alpha = (model_update._alpha - hyper_params.min_learning_rate) *
+                    hyper_params.learning_rate_decay + hyper_params.min_learning_rate;
+                hyper_params.learning_rate = model_update._alpha;
             }
 
             last_loss_sum = loss_sum;
