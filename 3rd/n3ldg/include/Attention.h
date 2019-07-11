@@ -228,7 +228,7 @@ public:
 
         int maxsize = _weights.size();
         for (int idx = 0; idx < maxsize; idx++) {
-            _weights.at(idx).setParam(&_param->uni_atten);
+            _weights.at(idx).setParam(_param->uni_atten);
             _weights.at(idx).init(1);
         }
         _hidden.init(_nHiddenDim);
@@ -289,7 +289,7 @@ public:
 
         int maxsize = _weights.size();
         for (int idx = 0; idx < maxsize; idx++) {
-            _weights.at(idx).setParam(&_param->uni_atten);
+            _weights.at(idx).setParam(_param->uni_atten);
             _weights.at(idx).init(_nHiddenDim);
         }
         _hidden.init(_nHiddenDim);

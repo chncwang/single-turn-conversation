@@ -78,7 +78,7 @@ struct DecoderComponents {
         keyword_concated->forward(graph, {concat_node, keyword});
         vector<Node*> keyword_concated_inputs = {keyword, concat_node};
 
-        LinearNode *decoder_to_wordvector(new LinearNode);
+        UniNode *decoder_to_wordvector(new UniNode);
         decoder_to_wordvector->init(hyper_params.word_dim);
         decoder_to_wordvector->setParam(model_params.hidden_to_wordvector_params);
         decoder_to_wordvector->forward(graph, *keyword_concated);

@@ -23,6 +23,8 @@ struct HyperParams : public N3LDGSerializable {
     int batch_size;
     int beam_size;
     float learning_rate;
+    float learning_rate_decay;
+    float min_learning_rate;
     int word_cutoff;
     string word_file;
     bool word_finetune;
@@ -37,6 +39,8 @@ struct HyperParams : public N3LDGSerializable {
         json["batch_size"] = batch_size;
         json["beam_size"] = beam_size;
         json["learning_rate"] = learning_rate;
+        json["learning_rate_decay"] = learning_rate_decay;
+        json["min_learning_rate"] = min_learning_rate;
         json["word_cutoff"] = word_cutoff;
         json["word_file"] = word_file;
         json["word_finetune"] = word_finetune;
@@ -52,6 +56,7 @@ struct HyperParams : public N3LDGSerializable {
         batch_size = json["batch_size"].asInt();
         beam_size = json["beam_size"].asInt();
         learning_rate = json["learning_rate"].asFloat();
+        min_learning_rate = json["min_learning_rate"].asFloat();
         word_cutoff = json["word_cutoff"].asInt();
         word_file = json["word_file"].asString();
         word_finetune = json["word_finetune"].asBool();
@@ -66,6 +71,8 @@ struct HyperParams : public N3LDGSerializable {
             << "batch_size:" << batch_size << std::endl
             << "beam_size:" << beam_size << std::endl
             << "learning_rate:" << learning_rate << std::endl
+            << "learning_rate_decay:" << learning_rate_decay << std::endl
+            << "min_learning_rate:" << min_learning_rate << std::endl
 	    << "word_cutoff:" << word_cutoff << std::endl
 	    << "word_file:" << word_file << std::endl
     	    << "word_finetune:" << word_finetune << std::endl

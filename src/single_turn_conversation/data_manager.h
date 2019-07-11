@@ -99,6 +99,33 @@ bool isPureChinese(const string &word) {
     return std::regex_search(word, expression);
 }
 
+bool containChinese(const utf8_string &word) {
+    return word.size() != word.length();
+}
+
+bool isPureEnglish(const utf8_string &word) {
+    if (containChinese(word)) {
+        return false;
+    }
+    for (int i = 0; i < word.length(); ++i) {
+        char c = word.at(i);
+        if (!((c == '-' || c == '.' || c == '/' || c == ':' || c == '_') || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool isPureNumber(const utf8_string &word) {
+    for (int i = 0; i < word.length(); ++i) {
+        char c = word.at(i);
+        if (!(c == '.' || (c >= '0' && c <= '9'))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 std::vector<std::vector<std::string>> readSentences(const std::string &filename) {
     std::string line;
     std::ifstream ifs(filename);
@@ -124,8 +151,20 @@ std::vector<std::vector<std::string>> readSentences(const std::string &filename)
 
         std::vector<std::string> characters;
         for (const utf8_string &word : utf8_words) {
-            for (int i = 0; i < word.length(); ++i) {
-                characters.push_back(word.substr(i, 1).cpp_str());
+            if (isPureEnglish(word) && !isPureNumber(word)) {
+                string w;
+                for (int i = 0; i < word.length(); ++i) {
+                    char c = word.at(i);
+                    if (c >= 'A' && c <= 'Z') {
+                        c += 'a' - 'A';
+                    }
+                    w += c;
+                }
+                characters.push_back(w);
+            } else {
+                for (int i = 0; i < word.length(); ++i) {
+                    characters.push_back(word.substr(i, 1).cpp_str());
+                }
             }
         }
 
@@ -303,7 +342,18 @@ vector<WordFrequencyInfo> getWordFrequencyInfo(const vector<vector<string>> &sen
 
         result.push_back(word_frequency_info);
     }
+    return result;
+}
 
+std::vector<std::string> readBlackList(const std::string &filename) {
+    std::string line;
+    std::ifstream ifs(filename);
+    std::vector<std::string> result;
+    cout << "black:" << endl;
+    while (std::getline(ifs, line)) {
+        cout << line << endl;
+        result.push_back(line);
+    }
     return result;
 }
 

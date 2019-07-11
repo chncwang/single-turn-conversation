@@ -42,7 +42,7 @@ public:
 
         bUseB = useB;
         if (bUseB) {
-            b.init(nOSize, 1);
+            b.init(nOSize, 0);
         }
     }
 
@@ -106,8 +106,8 @@ public:
     }
 
 
-    void setParam(UniParams* paramInit) {
-        param = paramInit;
+    void setParam(UniParams& paramInit) {
+        param = &paramInit;
     }
 
     void setFunctions(dtype(*f)(const dtype&), dtype(*f_deri)(const dtype&, const dtype&)) {
