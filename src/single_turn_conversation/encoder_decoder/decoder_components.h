@@ -55,7 +55,8 @@ struct DecoderComponents {
 
     ResultAndKeywordVectors decoderToWordVectors(Graph &graph, const HyperParams &hyper_params,
             ModelParams &model_params,
-            int i) {
+            int i,
+            bool return_keyword) {
         ConcatNode *concat_node = new ConcatNode();
         int context_dim = contexts.at(0)->getDim();
         concat_node->init(context_dim + hyper_params.hidden_dim + 2 * hyper_params.word_dim);
@@ -68,15 +69,19 @@ struct DecoderComponents {
         };
         concat_node->forward(graph, concat_inputs);
 
-        LinearNode *keyword(new LinearNode);
-        keyword->init(hyper_params.word_dim);
-        keyword->setParam(model_params.hidden_to_keyword_params);
-        keyword->forward(graph, *concat_node);
+        UniNode *keyword;
+        if (return_keyword) {
+            keyword = new UniNode;
+            keyword->init(hyper_params.word_dim);
+            keyword->setParam(model_params.hidden_to_keyword_params);
+            keyword->forward(graph, *concat_node);
+        } else {
+            keyword = nullptr;
+        }
 
         ConcatNode *keyword_concated = new ConcatNode();
-        keyword_concated->init(concat_node->getDim() + keyword->getDim());
-        keyword_concated->forward(graph, {concat_node, keyword});
-        vector<Node*> keyword_concated_inputs = {keyword, concat_node};
+        keyword_concated->init(concat_node->getDim() + hyper_params.word_dim);
+        keyword_concated->forward(graph, {concat_node, decoder_keyword_lookups.at(i)});
 
         UniNode *decoder_to_wordvector(new UniNode);
         decoder_to_wordvector->init(hyper_params.word_dim);

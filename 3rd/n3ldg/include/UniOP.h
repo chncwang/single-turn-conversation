@@ -42,7 +42,7 @@ public:
 
         bUseB = useB;
         if (bUseB) {
-            b.init(nOSize, 0);
+            b.init(nOSize, 1);
         }
     }
 

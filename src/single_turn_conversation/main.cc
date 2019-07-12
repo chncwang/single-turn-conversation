@@ -841,10 +841,18 @@ int main(int argc, char *argv[]) {
                     vector<int> keyword_ids = toIds(
                             word_frequency_infos.at(response_id).keywords_behind,
                             model_params.lookup_table);
-                    auto keyword_result = MaxLogProbabilityLoss(keyword_result_nodes, keyword_ids,
-                            hyper_params.batch_size);
+                    vector<Node *> non_null_nodes;
+                    vector<int> chnanged_keyword_ids;
+                    for (int j = 0; j < keyword_result_nodes.size(); ++j) {
+                        if (keyword_result_nodes.at(j) != nullptr) {
+                            non_null_nodes.push_back(keyword_result_nodes.at(j));
+                            chnanged_keyword_ids.push_back(keyword_ids.at(j));
+                        }
+                    }
+                    auto keyword_result = MaxLogProbabilityLoss(non_null_nodes,
+                        chnanged_keyword_ids, hyper_params.batch_size);
                     loss_sum += keyword_result.first;
-                    analyze(keyword_result.second, keyword_ids, *keyword_metric);
+                    analyze(keyword_result.second, chnanged_keyword_ids, *keyword_metric);
 
                     static int count_for_print;
                     if (++count_for_print % 100 == 0) {
@@ -859,7 +867,7 @@ int main(int argc, char *argv[]) {
                         printWordIds(result.second, model_params.lookup_table);
 
                         cout << "golden keywords:" << endl;
-                        printWordIds(keyword_ids, model_params.lookup_table);
+                        printWordIds(chnanged_keyword_ids, model_params.lookup_table);
                         cout << "output:" << endl;
                         printWordIds(keyword_result.second, model_params.lookup_table);
                     }

@@ -312,18 +312,20 @@ struct GraphBuilder {
             bool is_training) {
         for (int i = 0; i < answer.size(); ++i) {
             forwardDecoderByOneStep(graph, decoder_components, i,
-                    i == 0 ? nullptr : &answer.at(i - 1), i == 0 ? nullptr : &keywords.at(i - 1),
-                    hyper_params, model_params, is_training);
+                    i == 0 ? nullptr : &answer.at(i - 1), keywords.at(i),
+                    i == 0 ||  answer.at(i - 1) == keywords.at(i - 1), hyper_params,
+                    model_params, is_training);
         }
     }
 
     void forwardDecoderByOneStep(Graph &graph, DecoderComponents &decoder_components, int i,
             const std::string *answer,
-            const std::string *keyword,
+            const std::string &keyword,
+            bool should_predict_keyword,
             const HyperParams &hyper_params,
             ModelParams &model_params,
             bool is_training) {
-        Node *last_input, *last_keyword;
+        Node *last_input;
         if (i > 0) {
             LookupNode* before_dropout(new LookupNode);
             before_dropout->init(hyper_params.word_dim);
@@ -335,31 +337,29 @@ struct GraphBuilder {
             decoder_lookup->forward(graph, *before_dropout);
             decoder_components.decoder_lookups.push_back(decoder_lookup);
             last_input = decoder_components.decoder_lookups.at(i - 1);
-
-            LookupNode *keyword_node(new LookupNode);
-            keyword_node->init(hyper_params.word_dim);
-            keyword_node->setParam(model_params.lookup_table);
-            keyword_node->forward(graph, *keyword);
-            decoder_components.decoder_keyword_lookups.push_back(keyword_node);
-            last_keyword = decoder_components.decoder_keyword_lookups.at(i - 1);
         } else {
             BucketNode *bucket = new BucketNode;
             bucket->init(hyper_params.word_dim);
             bucket->forward(graph);
             last_input = bucket;
-            last_keyword = bucket;
         }
+
+        LookupNode *keyword_node(new LookupNode);
+        keyword_node->init(hyper_params.word_dim);
+        keyword_node->setParam(model_params.lookup_table);
+        keyword_node->forward(graph, keyword);
+        decoder_components.decoder_keyword_lookups.push_back(keyword_node);
 
         vector<Node *> encoder_hiddens = transferVector<Node *, DropoutNode*>(
                 left_to_right_encoder._hiddens, [](DropoutNode *dropout) {
                 return dropout;
                 });
 
-        decoder_components.forward(graph, hyper_params, model_params, *last_input, *last_keyword,
-                encoder_hiddens, is_training);
+        decoder_components.forward(graph, hyper_params, model_params, *last_input,
+                *decoder_components.decoder_keyword_lookups.at(i), encoder_hiddens, is_training);
 
         auto nodes = decoder_components.decoderToWordVectors(graph, hyper_params,
-                model_params, i);
+                model_params, i, should_predict_keyword);
         Node *decoder_to_wordvector = nodes.result;
         decoder_components.decoder_to_wordvectors.push_back(decoder_to_wordvector);
 
@@ -369,13 +369,17 @@ struct GraphBuilder {
         wordvector_to_onehot->forward(graph, *decoder_to_wordvector);
         decoder_components.wordvector_to_onehots.push_back(wordvector_to_onehot);
 
-        Node *keyword_node = nodes.keyword;
-        decoder_components.decoder_to_keyword_vectors.push_back(keyword_node);
+        decoder_components.decoder_to_keyword_vectors.push_back(nodes.keyword);
 
-        LinearWordVectorNode *keyword_vector_to_onehot(new LinearWordVectorNode);
-        keyword_vector_to_onehot->init(model_params.lookup_table.nVSize);
-        keyword_vector_to_onehot->setParam(model_params.lookup_table.E);
-        keyword_vector_to_onehot->forward(graph, *keyword_node);
+        LinearWordVectorNode *keyword_vector_to_onehot;
+        if (nodes.keyword == nullptr) {
+            keyword_vector_to_onehot = nullptr;
+        } else {
+            keyword_vector_to_onehot = new LinearWordVectorNode;
+            keyword_vector_to_onehot->init(model_params.lookup_table.nVSize);
+            keyword_vector_to_onehot->setParam(model_params.lookup_table.E);
+            keyword_vector_to_onehot->forward(graph, *nodes.keyword);
+        }
         decoder_components.keyword_vector_to_onehots.push_back(keyword_vector_to_onehot);
     }
 
