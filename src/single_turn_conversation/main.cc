@@ -943,11 +943,12 @@ int main(int argc, char *argv[]) {
                 model_params.copyFromHostToDevice();
 #endif
             } else {
-                last_saved_model = saveModel(hyper_params, model_params,
-                        default_config.output_model_file_prefix, epoch);
                 model_update._alpha = (model_update._alpha - hyper_params.min_learning_rate) *
                     hyper_params.learning_rate_decay + hyper_params.min_learning_rate;
                 hyper_params.learning_rate = model_update._alpha;
+                cout << "learning_rate now:" << hyper_params.learning_rate << endl;
+                last_saved_model = saveModel(hyper_params, model_params,
+                        default_config.output_model_file_prefix, epoch);
             }
 
             last_loss_sum = loss_sum;
