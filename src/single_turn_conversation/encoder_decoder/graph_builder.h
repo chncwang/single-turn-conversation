@@ -175,7 +175,6 @@ vector<BeamSearchResult> mostProbableResults(
         return a.finalScore() > b.finalScore();
     };
     priority_queue<BeamSearchResult, vector<BeamSearchResult>, decltype(cmp)> queue(cmp);
-//    int stop_id = model_params.lookup_table.getElemId(STOP_SYMBOL);
     vector<BeamSearchResult> results;
     for (int i = 0; i < (is_first ? 1 : nodes.size()); ++i) {
         const Node &node = *nodes.at(i);
@@ -288,7 +287,7 @@ struct GraphBuilder {
             dropout_node->forward(graph, *input_lookup);
 
             BucketNode *bucket = new BucketNode();
-            bucket->init(hyper_params.hidden_dim + hyper_params.word_dim);
+            bucket->init(hyper_params.hidden_dim);
             bucket->forward(graph);
 
             ConcatNode *concat = new ConcatNode;
@@ -355,8 +354,8 @@ struct GraphBuilder {
                 return dropout;
                 });
 
-        decoder_components.forward(graph, hyper_params, model_params, *last_input,
-                *decoder_components.decoder_keyword_lookups.at(i), encoder_hiddens, is_training);
+        decoder_components.forward(graph, hyper_params, model_params, *last_input, encoder_hiddens,
+                is_training);
 
         auto nodes = decoder_components.decoderToWordVectors(graph, hyper_params,
                 model_params, i, should_predict_keyword);
