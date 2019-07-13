@@ -59,6 +59,10 @@ struct DecoderComponents {
         ConcatNode *concat_node = new ConcatNode();
         int context_dim = contexts.at(0)->getDim();
         concat_node->init(context_dim + hyper_params.hidden_dim + 2 * hyper_params.word_dim);
+        if (decoder_lookups.size() != i) {
+            cerr << boost::format("size:%1% i:%2%") % decoder_lookups.size() % i << endl;
+            abort();
+        }
         vector<Node *> concat_inputs = {
             contexts.at(i), decoder._hiddens.at(i),
             i == 0 ? bucket(hyper_params.word_dim, graph) :

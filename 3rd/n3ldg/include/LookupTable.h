@@ -232,6 +232,7 @@ class LookupNode : public Node {
 public:
     LookupTable* param;
     int xid;
+    string word;
 
     LookupNode() : Node("lookup") {
         xid = -1;
@@ -249,6 +250,7 @@ public:
     //notice the output
     //this should be leaf nodes
     void forward(Graph *cg, const string& strNorm) {
+        word = strNorm;
         assert(param != NULL);
         if (!param->findElemId(strNorm)) {
             if (param->nUNKId < 0) {
@@ -287,6 +289,7 @@ public:
 
     // for which do no require merge
     void compute() override {
+        cout << "word:" << word << endl;
         if (xid >= 0) {
             param->E.value(xid, val());
         } else {
