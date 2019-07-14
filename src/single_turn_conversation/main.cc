@@ -403,9 +403,8 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
                         return model_params.lookup_table.getElemId(w);
                         });
                 int len = word_ids.size();
-                auto word_frequency_infos = getWordFrequencyInfo(response_sentences, word_counts);
                 auto keyword_nodes_and_ids = keywordNodesAndIds(decoder_components,
-                        word_frequency_infos, response_id, model_params);
+                        keyword_infos, response_id, model_params);
                 for (int i = 0; i < keyword_nodes_and_ids.first.size(); ++i) {
                     nodes.push_back(keyword_nodes_and_ids.first.at(i));
                     word_ids.push_back(keyword_nodes_and_ids.second.at(i));
@@ -629,71 +628,45 @@ int main(int argc, char *argv[]) {
     Alphabet alphabet;
     shared_ptr<Json::Value> root_ptr;
     unordered_map<string, int> word_counts;
-    if (default_config.program_mode == ProgramMode::TRAINING) {
-        auto wordStat = [&]() {
-            for (const ConversationPair &conversation_pair : train_conversation_pairs) {
-                const vector<string> &post_sentence = post_sentences.at(conversation_pair.post_id);
-                addWord(word_counts, post_sentence);
+    auto wordStat = [&]() {
+        for (const ConversationPair &conversation_pair : train_conversation_pairs) {
+            const vector<string> &post_sentence = post_sentences.at(conversation_pair.post_id);
+            addWord(word_counts, post_sentence);
 
-                const vector<string> &response_sentence = response_sentences.at(
-                        conversation_pair.response_id);
-                addWord(word_counts, response_sentence);
-            }
-
-            if (hyper_params.word_file != "" && !hyper_params.word_finetune) {
-                for (const PostAndResponses &dev : dev_post_and_responses){
-                    const vector<string>&post_sentence = post_sentences.at(dev.post_id);
-                    addWord(word_counts, post_sentence);
-
-                    for(int i=0; i<dev.response_ids.size(); i++){
-                        const vector<string>&resp_sentence = response_sentences.at(
-                                dev.response_ids.at(i));
-                        addWord(word_counts, resp_sentence);
-                    }
-                }
-
-                for (const PostAndResponses &test : test_post_and_responses){
-                    const vector<string>&post_sentence = post_sentences.at(test.post_id);
-                    addWord(word_counts, post_sentence);
-
-                    for(int i =0; i<test.response_ids.size(); i++){
-                        const vector<string>&resp_sentence =
-                            response_sentences.at(test.response_ids.at(i));
-                        addWord(word_counts, resp_sentence);
-                    }
-                }
-            }
-        };
-        wordStat();
-        if (default_config.split_unknown_words) {
-            unordered_set<string> word_set = knownWords(word_counts, hyper_params.word_cutoff);
-
-            auto post_ids_and_response_ids = PostAndResponseIds(post_and_responses_vector);
-            post_sentences = reprocessSentences(post_sentences, word_set,
-                    post_ids_and_response_ids.first);
-            response_sentences = reprocessSentences(response_sentences, word_set,
-                    post_ids_and_response_ids.second);
-            word_counts.clear();
-            wordStat();
+            const vector<string> &response_sentence = response_sentences.at(
+                    conversation_pair.response_id);
+            addWord(word_counts, response_sentence);
         }
 
-        word_counts[unknownkey] = 1000000000;
-        alphabet.init(word_counts, hyper_params.word_cutoff);
-        cout << boost::format("alphabet size:%1%") % alphabet.size() << endl;
-    } else if (default_config.split_unknown_words) {
-        root_ptr = loadModel(default_config.input_model_file);
-        Json::Value &root = *root_ptr;
-        vector<string> words = stringVectorFromJson(
-                root["model_params"]["lookup_table"]["word_ids"]["m_id_to_string"]);
-        unordered_set<string> word_set = knownWords(words);
-        auto &v = default_config.program_mode == ProgramMode::METRIC ? dev_post_and_responses :
-            test_post_and_responses;
-        auto post_ids_and_response_ids = PostAndResponseIds(v);
-        post_sentences = reprocessSentences(post_sentences, word_set,
-                post_ids_and_response_ids.first);
-        response_sentences = reprocessSentences(response_sentences, word_set,
-                post_ids_and_response_ids.second);
-    }
+        if (hyper_params.word_file != "" && !hyper_params.word_finetune) {
+            for (const PostAndResponses &dev : dev_post_and_responses){
+                const vector<string>&post_sentence = post_sentences.at(dev.post_id);
+                addWord(word_counts, post_sentence);
+
+                for(int i=0; i<dev.response_ids.size(); i++){
+                    const vector<string>&resp_sentence = response_sentences.at(
+                            dev.response_ids.at(i));
+                    addWord(word_counts, resp_sentence);
+                }
+            }
+
+            for (const PostAndResponses &test : test_post_and_responses){
+                const vector<string>&post_sentence = post_sentences.at(test.post_id);
+                addWord(word_counts, post_sentence);
+
+                for(int i =0; i<test.response_ids.size(); i++){
+                    const vector<string>&resp_sentence =
+                        response_sentences.at(test.response_ids.at(i));
+                    addWord(word_counts, resp_sentence);
+                }
+            }
+        }
+    };
+    wordStat();
+
+    word_counts[unknownkey] = 1000000000;
+    alphabet.init(word_counts, hyper_params.word_cutoff);
+    cout << boost::format("alphabet size:%1%") % alphabet.size() << endl;
 
     ModelParams model_params;
     int beam_size = hyper_params.beam_size;
@@ -729,6 +702,16 @@ int main(int argc, char *argv[]) {
             root_ptr = loadModel(default_config.input_model_file);
             loadModel(default_config, hyper_params, model_params, root_ptr.get(),
                     allocate_model_params);
+            word_counts = model_params.lookup_table.elems.m_string_to_id;
+        }
+    } else {
+        if (default_config.input_model_file == "") {
+            abort();
+        } else {
+            root_ptr = loadModel(default_config.input_model_file);
+            loadModel(default_config, hyper_params, model_params, root_ptr.get(),
+                    allocate_model_params);
+            word_counts = model_params.lookup_table.elems.m_string_to_id;
         }
     }
 
