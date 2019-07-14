@@ -261,6 +261,132 @@ vector<BeamSearchResult> mostProbableResults(
     return final_results;
 }
 
+vector<BeamSearchResult> mostProbableKeywords(
+        vector<DecoderComponents> &beam,
+        const vector<BeamSearchResult> &last_results,
+        int current_word,
+        int k,
+        Graph &graph,
+        ModelParams &model_params,
+        const HyperParams &hyper_params,
+        const DefaultConfig &default_config,
+        bool is_first,
+        const vector<string> &black_list,
+        set<int> &searched_word_ids) {
+    vector<Node *> nodes;
+    for (int i = 0; i < beam.size(); ++i) {
+        bool should_predict_keyword;
+        if (last_results.empty()) {
+            should_predict_keyword = true;
+        } else {
+            vector<WordIdAndProbability> path = last_results.at(i).getPath();
+            int size = path.size();
+            should_predict_keyword = path.at(size - 2).word_id == path.at(size - 1).word_id;
+        }
+        Node *node;
+        if (should_predict_keyword) {
+            DecoderComponents &components = beam.at(i);
+
+            LinearWordVectorNode *keyword_node = new LinearWordVectorNode;
+            keyword_node->init(hyper_params.word_dim);
+            keyword_node->setParam(model_params.lookup_table.E);
+            keyword_node->forward(graph, *components.decoder._hiddens.at(current_word));
+        }
+    }
+    for (const DecoderComponents &decoder_components : beam) {
+        nodes.push_back(decoder_components.wordvector_to_onehots.at(current_word - 1));
+    }
+
+    auto cmp = [](const BeamSearchResult &a, const BeamSearchResult &b) {
+        return a.finalScore() > b.finalScore();
+    };
+    priority_queue<BeamSearchResult, vector<BeamSearchResult>, decltype(cmp)> queue(cmp);
+    vector<BeamSearchResult> results;
+    for (int i = 0; i < (is_first ? 1 : nodes.size()); ++i) {
+        const Node &node = *nodes.at(i);
+        auto tuple = toExp(node);
+
+        for (int j = 0; j < nodes.at(i)->getDim(); ++j) {
+            if (is_first) {
+                if (searched_word_ids.find(j) != searched_word_ids.end()) {
+                    cout << boost::format("word id searched:%1% word:%2%\n") % j %
+                        model_params.lookup_table.elems.from_id(j);
+                    continue;
+                }
+            }
+            if (j == model_params.lookup_table.getElemId(::unknownkey)) {
+                continue;
+            }
+            dtype value = node.getVal().v[j] - get<1>(tuple).second;
+            dtype log_probability = value - log(get<2>(tuple));
+            dtype word_probability = exp(log_probability);
+            vector<WordIdAndProbability> word_ids;
+            std::array<int, 3> counts = {0, 0, 0};
+            dtype extra_score = 0.0f;
+            if (!last_results.empty()) {
+                log_probability += last_results.at(i).finalLogProbability();
+                word_ids = last_results.at(i).getPath();
+                counts = last_results.at(i).ngramCounts();
+                extra_score = last_results.at(i).getExtraScore();
+            }
+
+            word_ids.push_back(WordIdAndProbability(j, word_probability));
+
+            BeamSearchResult beam_search_result(beam.at(i), word_ids, log_probability);
+            beam_search_result.setNgramCounts(counts);
+            beam_search_result.setExtraScore(extra_score);
+            updateBeamSearchResultScore(beam_search_result, default_config.toNgramPenalty());
+
+            if (queue.size() < k) {
+                queue.push(beam_search_result);
+            } else if (queue.top().finalScore() < beam_search_result.finalScore()) {
+                queue.pop();
+                queue.push(beam_search_result);
+            }
+        }
+    }
+
+    while (!queue.empty()) {
+        auto &e = queue.top();
+        if (is_first) {
+            int size = e.getPath().size();
+            if (size != 1) {
+                cerr << boost::format("size is not 1:%1%\n") % size;
+                abort();
+            }
+            searched_word_ids.insert(e.getPath().at(0).word_id);
+        }
+        results.push_back(e);
+        queue.pop();
+    }
+
+    vector<BeamSearchResult> final_results;
+    int i = 0;
+    for (const BeamSearchResult &result : results) {
+        vector<int> ids = transferVector<int, WordIdAndProbability>(result.getPath(),
+                [](const WordIdAndProbability &in) ->int {return in.word_id;});
+        string sentence = ::getSentence(ids, model_params);
+        bool contain_black = false;
+        for (const string str : black_list) {
+            utf8_string utf8_str(str), utf8_sentece(sentence);
+            if (utf8_sentece.find(utf8_str) != string::npos) {
+                contain_black = true;
+                break;
+            }
+        }
+        if (contain_black) {
+            continue;
+        }
+        final_results.push_back(result);
+        cout << boost::format("mostProbableResults - i:%1% prob:%2% score:%3%") % i %
+            result.finalLogProbability() % result.finalScore() << endl;
+        printWordIds(result.getPath(), model_params.lookup_table);
+        ++i;
+    }
+
+    return final_results;
+}
+
 struct GraphBuilder {
     vector<Node *> encoder_lookups;
     DynamicLSTMBuilder left_to_right_encoder;
@@ -382,6 +508,39 @@ struct GraphBuilder {
         decoder_components.keyword_vector_to_onehots.push_back(keyword_vector_to_onehot);
     }
 
+    void forwardDecoderHiddenByOneStep(Graph &graph, DecoderComponents &decoder_components, int i,
+            const std::string *answer,
+            const HyperParams &hyper_params,
+            ModelParams &model_params) {
+        Node *last_input;
+        if (i > 0) {
+            LookupNode* before_dropout(new LookupNode);
+            before_dropout->init(hyper_params.word_dim);
+            before_dropout->setParam(model_params.lookup_table);
+            before_dropout->forward(graph, *answer);
+
+            DropoutNode* decoder_lookup(new DropoutNode(hyper_params.dropout, false));
+            decoder_lookup->init(hyper_params.word_dim);
+            decoder_lookup->forward(graph, *before_dropout);
+            decoder_components.decoder_lookups.push_back(decoder_lookup);
+            last_input = decoder_components.decoder_lookups.at(i - 1);
+        } else {
+            BucketNode *bucket = new BucketNode;
+            bucket->init(hyper_params.word_dim);
+            bucket->forward(graph);
+            last_input = bucket;
+        }
+
+        vector<Node *> encoder_hiddens = transferVector<Node *, DropoutNode*>(
+                left_to_right_encoder._hiddens, [](DropoutNode *dropout) {
+                return dropout;
+                });
+
+        decoder_components.forward(graph, hyper_params, model_params, *last_input, encoder_hiddens,
+                false);
+
+    }
+
     pair<vector<WordIdAndProbability>, dtype> forwardDecoderUsingBeamSearch(Graph &graph,
             const vector<DecoderComponents> &decoder_components_beam,
             int k,
@@ -412,6 +571,14 @@ struct GraphBuilder {
                 if (word_ids_result.size() >= k || i > default_config.cut_length) {
                     break;
                 }
+
+                for (int beam_i = 0; beam_i < beam.size(); ++beam_i) {
+                    DecoderComponents &decoder_components = beam.at(beam_i);
+                    forwardDecoderHiddenByOneStep(graph, decoder_components, i,
+                            i == 0 ? nullptr : &last_answers.at(beam_i), hyper_params,
+                            model_params);
+                }
+                graph.compute();
 
                 last_answers.clear();
                 if (i > 0) {
@@ -451,13 +618,6 @@ struct GraphBuilder {
                 if (beam.empty()) {
                     cout << boost::format("break for beam empty\n");
                     break;
-                }
-
-                for (int beam_i = 0; beam_i < beam.size(); ++beam_i) {
-                    DecoderComponents &decoder_components = beam.at(beam_i);
-//                    forwardDecoderByOneStep(graph, decoder_components, i,
-//                            i == 0 ? nullptr : &last_answers.at(beam_i), hyper_params,
-//                            model_params, is_training);
                 }
 
                 graph.compute();
