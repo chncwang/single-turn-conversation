@@ -11,7 +11,7 @@
 
 #include "N3LDG.h"
 
-dtype computePerplex(const std::vector<Node *> &nodes, const std::vector<int> &answers) {
+dtype computePerplex(const std::vector<Node *> &nodes, const std::vector<int> &answers, int len) {
     dtype log_sum = 0.0f;
 
     for (int i = 0; i < nodes.size(); ++i) {
@@ -23,7 +23,7 @@ dtype computePerplex(const std::vector<Node *> &nodes, const std::vector<int> &a
         log_sum += log(reciprocal_answer_prob);
     }
 
-    return exp(1.0f / nodes.size() * log_sum);
+    return exp(1.0f / len * log_sum);
 }
 
 #endif

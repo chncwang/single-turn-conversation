@@ -230,7 +230,7 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
     return hyper_params;
 }
 
-vector<int> toIds(const vector<string> &sentence, LookupTable &lookup_table) {
+vector<int> toIds(const vector<string> &sentence, const LookupTable &lookup_table) {
     vector<int> ids;
     for (const string &word : sentence) {
 	int xid = lookup_table.getElemId(word);
@@ -342,10 +342,33 @@ void loadModel(const DefaultConfig &default_config, HyperParams &hyper_params,
 #endif
 }
 
+pair<vector<Node *>, vector<int>> keywordNodesAndIds(const DecoderComponents &decoder_components,
+        const vector<WordFrequencyInfo> &word_frequency_infos,
+        int response_id,
+        const ModelParams &model_params) {
+    vector<Node *> keyword_result_nodes = toNodePointers<LinearWordVectorNode>(
+            decoder_components.keyword_vector_to_onehots);
+    vector<int> keyword_ids = toIds(
+            word_frequency_infos.at(response_id).keywords_behind,
+            model_params.lookup_table);
+    vector<Node *> non_null_nodes;
+    vector<int> chnanged_keyword_ids;
+    for (int j = 0; j < keyword_result_nodes.size(); ++j) {
+        if (keyword_result_nodes.at(j) != nullptr) {
+            non_null_nodes.push_back(keyword_result_nodes.at(j));
+            chnanged_keyword_ids.push_back(keyword_ids.at(j));
+        }
+    }
+
+    return {non_null_nodes, chnanged_keyword_ids};
+}
+
+
 float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         const vector<PostAndResponses> &post_and_responses_vector,
         const vector<vector<string>> &post_sentences,
         const vector<vector<string>> &response_sentences,
+        unordered_map<string, int> &word_counts,
         const vector<WordFrequencyInfo> &keyword_infos) {
     cout << "metricTestPosts begin" << endl;
     hyper_params.print();
@@ -379,7 +402,15 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
                         response_sentences.at(response_id), [&](const string &w) -> int {
                         return model_params.lookup_table.getElemId(w);
                         });
-                float perplex = computePerplex(nodes, word_ids);
+                int len = word_ids.size();
+                auto word_frequency_infos = getWordFrequencyInfo(response_sentences, word_counts);
+                auto keyword_nodes_and_ids = keywordNodesAndIds(decoder_components,
+                        word_frequency_infos, response_id, model_params);
+                for (int i = 0; i < keyword_nodes_and_ids.first.size(); ++i) {
+                    nodes.push_back(keyword_nodes_and_ids.first.at(i));
+                    word_ids.push_back(keyword_nodes_and_ids.second.at(i));
+                }
+                float perplex = computePerplex(nodes, word_ids, len);
                 avg_perplex += perplex;
             }
             avg_perplex /= response_ids.size();
@@ -744,7 +775,7 @@ int main(int argc, char *argv[]) {
             loadModel(default_config, hyper_params, model_params, root_ptr.get(),
                     allocate_model_params);
             float rep_perplex = metricTestPosts(hyper_params, model_params, dev_post_and_responses,
-                    post_sentences, response_sentences, word_frequency_infos);
+                    post_sentences, response_sentences, word_counts, word_frequency_infos);
             cout << format("model %1% rep_perplex is %2%") % model_file_path % rep_perplex << endl;
             if (max_rep_perplex < rep_perplex) {
                 max_rep_perplex = rep_perplex;
@@ -835,24 +866,13 @@ int main(int argc, char *argv[]) {
                             hyper_params.batch_size);
                     loss_sum += result.first;
                     analyze(result.second, word_ids, *metric);
-
-                    vector<Node *> keyword_result_nodes = toNodePointers(
-                            decoder_components_vector.at(i).keyword_vector_to_onehots);
-                    vector<int> keyword_ids = toIds(
-                            word_frequency_infos.at(response_id).keywords_behind,
-                            model_params.lookup_table);
-                    vector<Node *> non_null_nodes;
-                    vector<int> chnanged_keyword_ids;
-                    for (int j = 0; j < keyword_result_nodes.size(); ++j) {
-                        if (keyword_result_nodes.at(j) != nullptr) {
-                            non_null_nodes.push_back(keyword_result_nodes.at(j));
-                            chnanged_keyword_ids.push_back(keyword_ids.at(j));
-                        }
-                    }
-                    auto keyword_result = MaxLogProbabilityLoss(non_null_nodes,
-                        chnanged_keyword_ids, hyper_params.batch_size);
+                    auto keyword_nodes_and_ids = keywordNodesAndIds(
+                            decoder_components_vector.at(i), word_frequency_infos, response_id,
+                            model_params);
+                    auto keyword_result = MaxLogProbabilityLoss(keyword_nodes_and_ids.first,
+                        keyword_nodes_and_ids.second, hyper_params.batch_size);
                     loss_sum += keyword_result.first;
-                    analyze(keyword_result.second, chnanged_keyword_ids, *keyword_metric);
+                    analyze(keyword_result.second, keyword_nodes_and_ids.second, *keyword_metric);
 
                     static int count_for_print;
                     if (++count_for_print % 100 == 0) {
@@ -867,7 +887,7 @@ int main(int argc, char *argv[]) {
                         printWordIds(result.second, model_params.lookup_table);
 
                         cout << "golden keywords:" << endl;
-                        printWordIds(chnanged_keyword_ids, model_params.lookup_table);
+                        printWordIds(keyword_nodes_and_ids.second, model_params.lookup_table);
                         cout << "output:" << endl;
                         printWordIds(keyword_result.second, model_params.lookup_table);
                     }

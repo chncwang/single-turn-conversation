@@ -233,7 +233,7 @@ private:
 typedef Node* PNode;
 
 template<typename T>
-std::vector<Node*> toNodePointers(std::vector<T *> &vec) {
+std::vector<Node*> toNodePointers(const std::vector<T *> &vec) {
     std::vector<Node *> results;
     for (T *p : vec) {
         results.push_back(p);
