@@ -232,6 +232,7 @@ class LookupNode : public Node {
 public:
     LookupTable* param;
     int xid;
+    string word;
 
     LookupNode() : Node("lookup") {
         xid = -1;
@@ -250,6 +251,7 @@ public:
     //this should be leaf nodes
     void forward(Graph *cg, const string& strNorm) {
         assert(param != NULL);
+        word = strNorm;
         if (!param->findElemId(strNorm)) {
             if (param->nUNKId < 0) {
                 cerr << "nUNKId is negative:" << param->nUNKId << endl;

@@ -436,6 +436,8 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
     hyper_params.print();
     vector<CandidateAndReferences> candidate_and_references_vector;
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
+        cout << "post:" << endl;
+        print(post_sentences.at(post_and_responses.post_id));
         Graph graph;
         GraphBuilder graph_builder;
         graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id), hyper_params,
