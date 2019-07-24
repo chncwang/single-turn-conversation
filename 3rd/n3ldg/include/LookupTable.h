@@ -57,7 +57,7 @@ public:
             nVSize = elems.size();
             nUNKId = elems.from_string(unknownkey);
             initWeights(dim, fineTune);
-            inited = true
+            inited = true;
         }
     }
 
