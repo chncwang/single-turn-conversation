@@ -71,11 +71,6 @@ struct DecoderComponents {
                 i << endl;
             abort();
         }
-        if (i > 0) {
-            cout << decoder_lookups_before_dropout.at(i-1)->word << endl;
-        } else {
-            cout << "bucket" << endl;
-        }
         concat_node->forward(graph, concat_inputs);
 
         UniNode *keyword;

@@ -124,7 +124,7 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
     default_config.test_size = ini_reader.GetInteger(SECTION, "test_size", 0);
     default_config.device_id = ini_reader.GetInteger(SECTION, "device_id", 0);
     default_config.seed = ini_reader.GetInteger(SECTION, "seed", 0);
-    default_config.cut_length = ini_reader.GetInteger(SECTION, "black_list_file", 30);
+    default_config.cut_length = ini_reader.GetInteger(SECTION, "cut_length", 30);
     default_config.output_model_file_prefix = ini_reader.Get(SECTION, "output_model_file_prefix",
             "");
     default_config.input_model_file = ini_reader.Get(SECTION, "input_model_file", "");
@@ -249,6 +249,19 @@ vector<int> toIds(const vector<string> &sentence, const LookupTable &lookup_tabl
 
 void printWordIds(const vector<int> &word_ids, const LookupTable &lookup_table) {
     for (int word_id : word_ids) {
+        cout << lookup_table.elems.from_id(word_id) << " ";
+    }
+    cout << endl;
+}
+
+void printWordIdsWithKeywords(const vector<int> &word_ids, const LookupTable &lookup_table) {
+    for (int i = 0; i < word_ids.size(); i += 2) {
+        int word_id = word_ids.at(i);
+        cout << lookup_table.elems.from_id(word_id) << " ";
+    }
+    cout << endl;
+    for (int i = 1; i < word_ids.size(); i += 2) {
+        int word_id = word_ids.at(i);
         cout << lookup_table.elems.from_id(word_id) << " ";
     }
     cout << endl;
@@ -450,7 +463,7 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         cout << "post:" << endl;
         print(post_sentences.at(post_and_responses.post_id));
         cout << "response:" << endl;
-        printWordIds(word_ids_and_probability, model_params.lookup_table);
+        printWordIdsWithKeywords(word_ids_and_probability, model_params.lookup_table);
         dtype probability = pair.second;
         cout << format("probability:%1%") % probability << endl;
         if (word_ids_and_probability.empty()) {

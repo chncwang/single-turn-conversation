@@ -32,6 +32,7 @@ public:
     int nDim;
     int nVSize;
     int nUNKId;
+    bool inited = false;
 
     LookupTable() {
         nVSize = 0;
@@ -51,10 +52,13 @@ public:
 #endif
 
     void init(const Alphabet &alpha, int dim, bool fineTune = true) {
-        elems = alpha;
-        nVSize = elems.size();
-        nUNKId = elems.from_string(unknownkey);
-        initWeights(dim, fineTune);
+        if (!inited) {
+            elems = alpha;
+            nVSize = elems.size();
+            nUNKId = elems.from_string(unknownkey);
+            initWeights(dim, fineTune);
+            inited = true
+        }
     }
 
     //initialization by pre-trained embeddings
