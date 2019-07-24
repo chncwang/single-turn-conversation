@@ -160,10 +160,23 @@ std::vector<std::vector<std::string>> readSentences(const std::string &filename)
                 }
                 characters.push_back(w);
             } else {
-                for (int i = 0; i < word.length(); ++i) {
-                    characters.push_back(word.substr(i, 1).cpp_str());
-                }
+                characters.push_back(word.cpp_str());
             }
+//            if (isPureEnglish(word) && !isPureNumber(word)) {
+//                string w;
+//                for (int i = 0; i < word.length(); ++i) {
+//                    char c = word.at(i);
+//                    if (c >= 'A' && c <= 'Z') {
+//                        c += 'a' - 'A';
+//                    }
+//                    w += c;
+//                }
+//                characters.push_back(w);
+//            } else {
+//                for (int i = 0; i < word.length(); ++i) {
+//                    characters.push_back(word.substr(i, 1).cpp_str());
+//                }
+//            }
         }
 
         characters.push_back(STOP_SYMBOL);
