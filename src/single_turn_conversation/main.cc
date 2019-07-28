@@ -371,6 +371,10 @@ pair<vector<Node *>, vector<int>> keywordNodesAndIds(const DecoderComponents &de
         if (keyword_result_nodes.at(j) != nullptr) {
             non_null_nodes.push_back(keyword_result_nodes.at(j));
             chnanged_keyword_ids.push_back(keyword_ids.at(j));
+            if (keyword_ids.at(j) == model_params.lookup_table.elems.from_string(::unknownkey)) {
+                cerr << "unkownkey keyword found" << endl;
+                abort();
+            }
         }
     }
 
@@ -734,7 +738,8 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    auto word_frequency_infos = getWordFrequencyInfo(response_sentences, word_counts);
+    auto word_frequency_infos = getWordFrequencyInfo(response_sentences, word_counts,
+            hyper_params.word_cutoff);
     auto black_list = readBlackList(default_config.black_list_file);
 
     if (default_config.program_mode == ProgramMode::INTERACTING) {
