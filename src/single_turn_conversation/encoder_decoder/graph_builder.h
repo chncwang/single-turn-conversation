@@ -445,7 +445,7 @@ struct GraphBuilder {
             dropout_node->forward(graph, *input_lookup);
 
             BucketNode *bucket = new BucketNode();
-            bucket->init(hyper_params.hidden_dim);
+            bucket->init(2 * hyper_params.hidden_dim);
             bucket->forward(graph);
 
             ConcatNode *concat = new ConcatNode;

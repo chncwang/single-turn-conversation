@@ -21,6 +21,7 @@ struct DecoderComponents {
     std::vector<LinearWordVectorNode *> keyword_vector_to_onehots;
     DynamicLSTMBuilder decoder;
     vector<Node*> contexts;
+    vector<Node*> keyword_contexts;
 
     BucketNode *bucket(int dim, Graph &graph) {
         BucketNode *node(new BucketNode);
@@ -41,9 +42,18 @@ struct DecoderComponents {
         attention_builder->forward(graph, encoder_hiddens, *guide);
         contexts.push_back(attention_builder->_hidden);
 
+        shared_ptr<AttentionVBuilder> keyword_attention_builder(new AttentionVBuilder);
+        keyword_attention_builder->init(model_params.keyword_attention_parrams);
+        Node *keyword_guide = decoder.size() == 0 ?
+            static_cast<Node*>(bucket(hyper_params.hidden_dim,
+                        graph)) : static_cast<Node*>(decoder._hiddens.at(decoder.size() - 1));
+        keyword_attention_builder->forward(graph, encoder_hiddens, *keyword_guide);
+        keyword_contexts.push_back(keyword_attention_builder->_hidden);
+
         ConcatNode* concat = new ConcatNode;
-        concat->init(hyper_params.word_dim + hyper_params.hidden_dim);
-        vector<Node *> ins = {&input, attention_builder->_hidden};
+        concat->init(hyper_params.word_dim + 2 * hyper_params.hidden_dim);
+        vector<Node *> ins = {&input, attention_builder->_hidden,
+            keyword_attention_builder->_hidden};
         concat->forward(graph, ins);
 
         decoder.forward(graph, model_params.left_to_right_encoder_params, *concat,
@@ -76,16 +86,9 @@ struct DecoderComponents {
 
         UniNode *keyword;
         if (return_keyword) {
-            shared_ptr<AttentionVBuilder> attention_builder(new AttentionVBuilder);
-            attention_builder->init(model_params.keyword_attention_parrams);
-            Node *guide = decoder.size() == 0 ?
-                static_cast<Node*>(bucket(hyper_params.hidden_dim,
-                            graph)) : static_cast<Node*>(decoder._hiddens.at(decoder.size() - 1));
-            attention_builder->forward(graph, encoder_hiddens, *guide);
-
             vector<Node *> concat_inputs = {
                 decoder._hiddens.at(i),
-                attention_builder->_hidden
+                keyword_contexts.at(i)
             };
 
             ConcatNode *concat = new ConcatNode;
