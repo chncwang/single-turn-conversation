@@ -512,16 +512,12 @@ struct GraphBuilder {
         keyword_node->forward(graph, keyword);
         decoder_components.decoder_keyword_lookups.push_back(keyword_node);
 
-        vector<Node *> encoder_hiddens = transferVector<Node *, DropoutNode*>(
-                left_to_right_encoder._hiddens, [](DropoutNode *dropout) {
-                return dropout;
-                });
-
-        decoder_components.forward(graph, hyper_params, model_params, *last_input, encoder_hiddens,
+        decoder_components.forward(graph, hyper_params, model_params, *last_input,
+                left_to_right_encoder._hiddens,
                 is_training);
 
         auto nodes = decoder_components.decoderToWordVectors(graph, hyper_params,
-                model_params, i, should_predict_keyword);
+                model_params, left_to_right_encoder._hiddens, i, should_predict_keyword);
         Node *decoder_to_wordvector = nodes.result;
         decoder_components.decoder_to_wordvectors.push_back(decoder_to_wordvector);
 
@@ -585,19 +581,15 @@ struct GraphBuilder {
             last_input = bucket;
         }
 
-        vector<Node *> encoder_hiddens = transferVector<Node *, DropoutNode*>(
-                left_to_right_encoder._hiddens, [](DropoutNode *dropout) {
-                return dropout;
-                });
-
-        decoder_components.forward(graph, hyper_params, model_params, *last_input, encoder_hiddens,
-                false);
+        decoder_components.forward(graph, hyper_params, model_params, *last_input,
+                left_to_right_encoder._hiddens, false);
     }
 
     void forwardDecoderKeywordByOneStep(Graph &graph, DecoderComponents &decoder_components, int i,
             const std::string &keyword,
             const HyperParams &hyper_params,
-            ModelParams &model_params) {
+            ModelParams &model_params,
+            vector<Node*> &encoder_hiddens) {
         LookupNode *keyword_embedding = new LookupNode;
         keyword_embedding->init(hyper_params.word_dim);
         keyword_embedding->setParam(model_params.lookup_table);
@@ -609,7 +601,7 @@ struct GraphBuilder {
         }
         decoder_components.decoder_keyword_lookups.push_back(keyword_embedding);
         ResultAndKeywordVectors result =  decoder_components.decoderToWordVectors(graph,
-                hyper_params, model_params, i, false);
+                hyper_params, model_params, encoder_hiddens, i, false);
         Node *result_node = result.result;
 
         LinearWordVectorNode *one_hot_node = new LinearWordVectorNode;
@@ -692,7 +684,8 @@ struct GraphBuilder {
                 int beam_i = 0;
                 for (auto &decoder_components : beam) {
                     forwardDecoderKeywordByOneStep(graph, decoder_components, i,
-                            last_keywords.at(beam_i), hyper_params, model_params);
+                            last_keywords.at(beam_i), hyper_params, model_params,
+                            left_to_right_encoder._hiddens);
                     ++beam_i;
                 }
                 last_keywords.clear();

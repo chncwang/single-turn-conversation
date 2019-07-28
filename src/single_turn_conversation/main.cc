@@ -44,7 +44,8 @@ void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
     model_params.left_to_right_encoder_params.exportAdaParams(model_update);
     model_params.hidden_to_wordvector_params.exportAdaParams(model_update);
     model_params.lookup_table.exportAdaParams(model_update);
-    model_params.attention_parrams.exportAdaParams(model_update);
+    model_params.normal_attention_parrams.exportAdaParams(model_update);
+    model_params.keyword_attention_parrams.exportAdaParams(model_update);
 }
 
 void exportToGradChecker(ModelParams &model_params, CheckGrad &grad_checker) {
@@ -53,8 +54,8 @@ void exportToGradChecker(ModelParams &model_params, CheckGrad &grad_checker) {
     grad_checker.add(model_params.hidden_to_wordvector_params.b, "hidden_to_wordvector_params b");
     grad_checker.add(model_params.left_to_right_encoder_params.cell_hidden.W,
             "left to right encoder cell_hidden W");
-    grad_checker.add(model_params.attention_parrams.bi_atten.W1, "attention W1");
-    grad_checker.add(model_params.attention_parrams.bi_atten.W2, "attention W2");
+    grad_checker.add(model_params.normal_attention_parrams.bi_atten.W1, "attention W1");
+    grad_checker.add(model_params.normal_attention_parrams.bi_atten.W2, "attention W2");
 }
 
 void addWord(unordered_map<string, int> &word_counts, const string &word) {
@@ -704,10 +705,13 @@ int main(int argc, char *argv[]) {
         model_params.left_to_right_encoder_params.init(hyper_params.hidden_dim,
                 hyper_params.word_dim + hyper_params.hidden_dim);
         model_params.hidden_to_wordvector_params.init(hyper_params.word_dim,
-                2 * hyper_params.hidden_dim + 3 * hyper_params.word_dim, false);
+                2 * hyper_params.hidden_dim + 3 * hyper_params.word_dim, true);
         model_params.hidden_to_keyword_params.init(hyper_params.word_dim,
-                2 * hyper_params.hidden_dim + 2 * hyper_params.word_dim, false);
-        model_params.attention_parrams.init(hyper_params.hidden_dim, hyper_params.hidden_dim);
+                2 * hyper_params.hidden_dim, true);
+        model_params.normal_attention_parrams.init(hyper_params.hidden_dim,
+                hyper_params.hidden_dim);
+        model_params.keyword_attention_parrams.init(hyper_params.hidden_dim,
+                hyper_params.hidden_dim);
     };
 
     if (default_config.program_mode != ProgramMode::METRIC) {

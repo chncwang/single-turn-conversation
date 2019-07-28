@@ -34,7 +34,7 @@ struct DecoderComponents {
             vector<Node *> &encoder_hiddens,
             bool is_training) {
         shared_ptr<AttentionVBuilder> attention_builder(new AttentionVBuilder);
-        attention_builder->init(model_params.attention_parrams);
+        attention_builder->init(model_params.normal_attention_parrams);
         Node *guide = decoder.size() == 0 ?
             static_cast<Node*>(bucket(hyper_params.hidden_dim,
                         graph)) : static_cast<Node*>(decoder._hiddens.at(decoder.size() - 1));
@@ -54,6 +54,7 @@ struct DecoderComponents {
 
     ResultAndKeywordVectors decoderToWordVectors(Graph &graph, const HyperParams &hyper_params,
             ModelParams &model_params,
+            vector<Node *> &encoder_hiddens,
             int i,
             bool return_keyword) {
         ConcatNode *concat_node = new ConcatNode();
@@ -75,10 +76,26 @@ struct DecoderComponents {
 
         UniNode *keyword;
         if (return_keyword) {
+            shared_ptr<AttentionVBuilder> attention_builder(new AttentionVBuilder);
+            attention_builder->init(model_params.keyword_attention_parrams);
+            Node *guide = decoder.size() == 0 ?
+                static_cast<Node*>(bucket(hyper_params.hidden_dim,
+                            graph)) : static_cast<Node*>(decoder._hiddens.at(decoder.size() - 1));
+            attention_builder->forward(graph, encoder_hiddens, *guide);
+
+            vector<Node *> concat_inputs = {
+                decoder._hiddens.at(i),
+                attention_builder->_hidden
+            };
+
+            ConcatNode *concat = new ConcatNode;
+            concat->init(concat_inputs.at(0)->getDim() + concat_inputs.at(1)->getDim());
+            concat->forward(graph, concat_inputs);
+
             keyword = new UniNode;
             keyword->init(hyper_params.word_dim);
             keyword->setParam(model_params.hidden_to_keyword_params);
-            keyword->forward(graph, *concat_node);
+            keyword->forward(graph, *concat);
         } else {
             keyword = nullptr;
         }

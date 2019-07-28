@@ -16,6 +16,7 @@
 #include "PMultiOP.h"
 #include "PAddOP.h"
 #include "BucketOP.h"
+#include "UniOP.h"
 
 #include <memory>
 
@@ -131,7 +132,7 @@ struct DynamicLSTMBuilder {
 
     std::vector<TanhNode*> _halfhiddens;
     std::vector<PMultiNode*> _hiddens_before_dropout;
-    std::vector<DropoutNode*> _hiddens;
+    std::vector<Node*> _hiddens;
 
     int size() {
         return _hiddens.size();
@@ -284,7 +285,7 @@ struct DynamicLSTMBuilder {
         _halfhiddens.at(len)->forward(graph, *_cells.at(len));
         _hiddens_before_dropout.at(len)->forward(graph, *_halfhiddens.at(len),
                 *_outputgates.at(len));
-        _hiddens.at(len)->forward(graph, *_hiddens_before_dropout.at(len));
+        ((DropoutNode*)_hiddens.at(len))->forward(graph, *_hiddens_before_dropout.at(len));
     }
 };
 
