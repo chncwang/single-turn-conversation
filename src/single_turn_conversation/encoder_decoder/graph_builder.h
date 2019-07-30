@@ -299,19 +299,16 @@ vector<BeamSearchResult> mostProbableKeywords(
             DecoderComponents &components = beam.at(ii);
 
             ConcatNode *concat_node = new ConcatNode();
-            int context_dim = components.contexts.at(0)->getDim();
-            concat_node->init(context_dim + hyper_params.hidden_dim + 2 * hyper_params.word_dim);
+            int context_dim = components.keyword_contexts.at(0)->getDim();
+            concat_node->init(context_dim + hyper_params.hidden_dim);
             if (components.decoder_lookups.size() != word_pos) {
                 cerr << boost::format("size:%1% word_pos:%2%") % components.decoder_lookups.size()
                     % word_pos << endl;
                 abort();
             }
             vector<Node *> concat_inputs = {
-                components.contexts.at(word_pos), components.decoder._hiddens.at(word_pos),
-                word_pos == 0 ? components.bucket(hyper_params.word_dim, graph) :
-                    static_cast<Node*>(components.decoder_lookups.at(word_pos - 1)),
-                word_pos == 0 ? components.bucket(hyper_params.word_dim, graph) :
-                    static_cast<Node*>(components.decoder_keyword_lookups.at(word_pos - 1))
+                components.decoder._hiddens.at(word_pos),
+                components.keyword_contexts.at(word_pos)
             };
             concat_node->forward(graph, concat_inputs);
 
@@ -420,13 +417,18 @@ vector<BeamSearchResult> mostProbableKeywords(
 }
 
 struct GraphBuilder {
-    vector<Node *> encoder_lookups;
     DynamicLSTMBuilder left_to_right_encoder;
 
-    void forward(Graph &graph, const vector<string> &sentence,
+    void forward(Graph &graph, const vector<string> &sentence, const vector<string> &keywords,
             const HyperParams &hyper_params,
             ModelParams &model_params,
             bool is_training) {
+        if (sentence.size() != keywords.size()) {
+            cerr << boost::format("stence size:%1% keyword size:%2%") % sentence.size() %
+                keywords.size() << endl;
+            abort();
+        }
+
         BucketNode *hidden_bucket = new BucketNode;
         hidden_bucket->init(hyper_params.hidden_dim);
         hidden_bucket->forward(graph);
@@ -434,11 +436,11 @@ struct GraphBuilder {
         word_bucket->init(hyper_params.word_dim);
         word_bucket->forward(graph);
 
-        for (const string &word : sentence) {
+        for (int i = 0; i < sentence.size(); ++i) {
             LookupNode* input_lookup(new LookupNode);
             input_lookup->init(hyper_params.word_dim);
             input_lookup->setParam(model_params.lookup_table);
-            input_lookup->forward(graph, word);
+            input_lookup->forward(graph, sentence.at(i));
 
             DropoutNode* dropout_node(new DropoutNode(hyper_params.dropout, is_training));
             dropout_node->init(hyper_params.word_dim);
@@ -448,16 +450,17 @@ struct GraphBuilder {
             bucket->init(2 * hyper_params.hidden_dim);
             bucket->forward(graph);
 
+            LookupNode *keyword_lookup = new LookupNode;
+            keyword_lookup->init(hyper_params.word_dim);
+            keyword_lookup->setParam(model_params.lookup_table);
+            keyword_lookup->forward(graph, keywords.at(i));
+
             ConcatNode *concat = new ConcatNode;
-            concat->init(dropout_node->getDim() + bucket->getDim());
-            concat->forward(graph, {dropout_node, bucket});
+            concat->init(dropout_node->getDim() * 2 + bucket->getDim());
+            concat->forward(graph, {dropout_node, keyword_lookup, bucket});
 
-            encoder_lookups.push_back(concat);
-        }
-
-        for (Node* node : encoder_lookups) {
-            left_to_right_encoder.forward(graph, model_params.left_to_right_encoder_params, *node,
-                    *hidden_bucket, *hidden_bucket, hyper_params.dropout, is_training);
+            left_to_right_encoder.forward(graph, model_params.left_to_right_encoder_params,
+                    *concat, *hidden_bucket, *hidden_bucket, hyper_params.dropout, is_training);
         }
     }
 
@@ -482,7 +485,7 @@ struct GraphBuilder {
             const HyperParams &hyper_params,
             ModelParams &model_params,
             bool is_training) {
-        Node *last_input;
+        Node *last_input, *last_keyword;
         if (i > 0) {
             LookupNode* before_dropout(new LookupNode);
             before_dropout->init(hyper_params.word_dim);
@@ -498,12 +501,21 @@ struct GraphBuilder {
                     decoder_components.decoder_lookups.size() % i << endl;
                 abort();
             }
-            last_input = decoder_components.decoder_lookups.at(i - 1);
+            last_input = decoder_components.decoder_lookups.back();
+
+            int size = decoder_components.decoder_keyword_lookups.size();
+            if (i != size) {
+                cerr << boost::format("i is not equal to keyword lookup size i:%1% size:%2%") % i %
+                    size << endl;
+                abort();
+            }
+            last_keyword = decoder_components.decoder_keyword_lookups.back();
         } else {
             BucketNode *bucket = new BucketNode;
             bucket->init(hyper_params.word_dim);
             bucket->forward(graph);
             last_input = bucket;
+            last_keyword = bucket;
         }
 
         LookupNode *keyword_node(new LookupNode);
@@ -512,9 +524,8 @@ struct GraphBuilder {
         keyword_node->forward(graph, keyword);
         decoder_components.decoder_keyword_lookups.push_back(keyword_node);
 
-        decoder_components.forward(graph, hyper_params, model_params, *last_input,
-                left_to_right_encoder._hiddens,
-                is_training);
+        decoder_components.forward(graph, hyper_params, model_params, *last_input, *last_keyword,
+                left_to_right_encoder._hiddens, is_training);
 
         auto nodes = decoder_components.decoderToWordVectors(graph, hyper_params,
                 model_params, left_to_right_encoder._hiddens, i, should_predict_keyword);
@@ -556,7 +567,7 @@ struct GraphBuilder {
             const std::string *answer,
             const HyperParams &hyper_params,
             ModelParams &model_params) {
-        Node *last_input;
+        Node *last_input, * last_keyword;
         if (i > 0) {
             LookupNode* before_dropout(new LookupNode);
             before_dropout->init(hyper_params.word_dim);
@@ -573,15 +584,23 @@ struct GraphBuilder {
                     decoder_components.decoder_lookups.size() % i << endl;
                 abort();
             }
-            last_input = decoder_components.decoder_lookups.at(i - 1);
+            last_input = decoder_components.decoder_lookups.back();
+
+            if (decoder_components.decoder_keyword_lookups.size() != i) {
+                cerr << boost::format("keyword lookup size :%1% i:%2%") %
+                    decoder_components.decoder_keyword_lookups.size() % i << endl;
+                abort();
+            }
+            last_keyword = decoder_components.decoder_keyword_lookups.back();
         } else {
             BucketNode *bucket = new BucketNode;
             bucket->init(hyper_params.word_dim);
             bucket->forward(graph);
             last_input = bucket;
+            last_keyword = bucket;
         }
 
-        decoder_components.forward(graph, hyper_params, model_params, *last_input,
+        decoder_components.forward(graph, hyper_params, model_params, *last_input, *last_keyword,
                 left_to_right_encoder._hiddens, false);
     }
 

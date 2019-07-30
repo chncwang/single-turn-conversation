@@ -385,6 +385,7 @@ pair<vector<Node *>, vector<int>> keywordNodesAndIds(const DecoderComponents &de
 float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         const vector<PostAndResponses> &post_and_responses_vector,
         const vector<vector<string>> &post_sentences,
+        const vector<WordFrequencyInfo> &post_frequencies,
         const vector<vector<string>> &response_sentences,
         unordered_map<string, int> &word_counts,
         const vector<WordFrequencyInfo> &keyword_infos) {
@@ -398,6 +399,7 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
         auto f = [&]() {
             cout << "post:" << endl;
             print(post_sentences.at(post_and_responses.post_id));
+            print(post_frequencies.at(post_and_responses.post_id).keywords_behind);
 
             const vector<int> &response_ids = post_and_responses.response_ids;
             float avg_perplex = 0.0f;
@@ -408,6 +410,7 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
                 Graph graph;
                 GraphBuilder graph_builder;
                 graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id),
+                        post_frequencies.at(post_and_responses.post_id).keywords_behind,
                         hyper_params, model_params, false);
                 DecoderComponents decoder_components;
                 graph_builder.forwardDecoder(graph, decoder_components,
@@ -448,6 +451,7 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         DefaultConfig &default_config,
         const vector<PostAndResponses> &post_and_responses_vector,
         const vector<vector<string>> &post_sentences,
+        const vector<WordFrequencyInfo> &post_frequencies,
         const vector<vector<string>> &response_sentences,
         const vector<string> &black_list) {
     cout << "decodeTestPosts begin" << endl;
@@ -458,8 +462,9 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         print(post_sentences.at(post_and_responses.post_id));
         Graph graph;
         GraphBuilder graph_builder;
-        graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id), hyper_params,
-                model_params, false);
+        graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id),
+                post_frequencies.at(post_and_responses.post_id).keywords_behind,
+                hyper_params, model_params, false);
         vector<DecoderComponents> decoder_components_vector;
         decoder_components_vector.resize(hyper_params.beam_size);
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
@@ -522,9 +527,12 @@ void interact(const DefaultConfig &default_config, const HyperParams &hyper_para
             words = reprocessSentence(words, word_counts, word_cutoff);
         }
 
+        auto frequency = getWordFrequencyInfo(words, word_counts, hyper_params.word_cutoff);
+
         Graph graph;
         GraphBuilder graph_builder;
-        graph_builder.forward(graph, words, hyper_params, model_params, false);
+        graph_builder.forward(graph, words, frequency.keywords_behind, hyper_params, model_params,
+                false);
         vector<DecoderComponents> decoder_components_vector;
         decoder_components_vector.resize(hyper_params.beam_size);
         cout << format("decodeTestPosts - beam_size:%1% decoder_components_vector.size:%2%") %
@@ -707,7 +715,7 @@ int main(int argc, char *argv[]) {
             }
         }
         model_params.left_to_right_encoder_params.init(hyper_params.hidden_dim,
-                hyper_params.word_dim + 2 * hyper_params.hidden_dim);
+                2 * hyper_params.word_dim + 2 * hyper_params.hidden_dim);
         model_params.hidden_to_wordvector_params.init(hyper_params.word_dim,
                 2 * hyper_params.hidden_dim + 3 * hyper_params.word_dim, true);
         model_params.hidden_to_keyword_params.init(hyper_params.word_dim,
@@ -740,6 +748,8 @@ int main(int argc, char *argv[]) {
 
     auto word_frequency_infos = getWordFrequencyInfo(response_sentences, word_counts,
             hyper_params.word_cutoff);
+    auto post_frequencies = getWordFrequencyInfo(post_sentences, word_counts,
+            hyper_params.word_cutoff);
     auto black_list = readBlackList(default_config.black_list_file);
 
     if (default_config.program_mode == ProgramMode::INTERACTING) {
@@ -749,7 +759,7 @@ int main(int argc, char *argv[]) {
     } else if (default_config.program_mode == ProgramMode::DECODING) {
         hyper_params.beam_size = beam_size;
         decodeTestPosts(hyper_params, model_params, default_config, test_post_and_responses,
-                post_sentences, response_sentences, black_list);
+                post_sentences, post_frequencies, response_sentences, black_list);
     } else if (default_config.program_mode == ProgramMode::METRIC) {
         path dir_path(default_config.input_model_dir);
         if (!is_directory(dir_path)) {
@@ -782,7 +792,8 @@ int main(int argc, char *argv[]) {
             loadModel(default_config, hyper_params, model_params, root_ptr.get(),
                     allocate_model_params);
             float rep_perplex = metricTestPosts(hyper_params, model_params, dev_post_and_responses,
-                    post_sentences, response_sentences, word_counts, word_frequency_infos);
+                    post_sentences, post_frequencies, response_sentences, word_counts,
+                    word_frequency_infos);
             cout << format("model %1% rep_perplex is %2%") % model_file_path % rep_perplex << endl;
             if (max_rep_perplex < rep_perplex) {
                 max_rep_perplex = rep_perplex;
@@ -849,7 +860,8 @@ int main(int argc, char *argv[]) {
                     int post_id = train_conversation_pairs.at(instance_index).post_id;
                     conversation_pair_in_batch.push_back(train_conversation_pairs.at(
                                 instance_index));
-                    graph_builder->forward(graph, post_sentences.at(post_id), hyper_params,
+                    graph_builder->forward(graph, post_sentences.at(post_id),
+                            post_frequencies.at(post_id).keywords_behind, hyper_params,
                             model_params, true);
                     int response_id = train_conversation_pairs.at(instance_index).response_id;
                     DecoderComponents decoder_components;
@@ -882,11 +894,12 @@ int main(int argc, char *argv[]) {
                     analyze(keyword_result.second, keyword_nodes_and_ids.second, *keyword_metric);
 
                     static int count_for_print;
-                    if (++count_for_print % 100 == 0) {
-                        count_for_print = 0;
+                    if (++count_for_print % 100 == 1) {
                         int post_id = train_conversation_pairs.at(instance_index).post_id;
                         cout << "post:" << post_id << endl;
                         print(post_sentences.at(post_id));
+                        cout << "post keywords:" << post_id << endl;
+                        print(post_frequencies.at(post_id).keywords_behind);
 
                         cout << "golden answer:" << endl;
                         printWordIds(word_ids, model_params.lookup_table);
@@ -913,6 +926,7 @@ int main(int argc, char *argv[]) {
                         Graph graph;
 
                         graph_builder.forward(graph, post_sentences.at(conversation_pair.post_id),
+                                post_frequencies.at(conversation_pair.post_id).keywords_behind,
                                 hyper_params, model_params, true);
 
                         DecoderComponents decoder_components;

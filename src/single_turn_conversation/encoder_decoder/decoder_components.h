@@ -32,6 +32,7 @@ struct DecoderComponents {
 
     void forward(Graph &graph, const HyperParams &hyper_params, ModelParams &model_params,
             Node &input,
+            Node &keyword_input,
             vector<Node *> &encoder_hiddens,
             bool is_training) {
         shared_ptr<AttentionVBuilder> attention_builder(new AttentionVBuilder);
@@ -51,8 +52,8 @@ struct DecoderComponents {
         keyword_contexts.push_back(keyword_attention_builder->_hidden);
 
         ConcatNode* concat = new ConcatNode;
-        concat->init(hyper_params.word_dim + 2 * hyper_params.hidden_dim);
-        vector<Node *> ins = {&input, attention_builder->_hidden,
+        concat->init(2 * hyper_params.word_dim + 2 * hyper_params.hidden_dim);
+        vector<Node *> ins = {&input, &keyword_input, attention_builder->_hidden,
             keyword_attention_builder->_hidden};
         concat->forward(graph, ins);
 

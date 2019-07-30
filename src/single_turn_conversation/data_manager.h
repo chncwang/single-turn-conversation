@@ -311,6 +311,36 @@ struct WordFrequencyInfo {
     vector<string> keywords_behind;
 };
 
+WordFrequencyInfo getWordFrequencyInfo(const vector<string> &sentence,
+        const unordered_map<string, int> &word_counts, int cutoff) {
+    WordFrequencyInfo word_frequency_info;
+    for (const string &word : sentence) {
+        int frequency;
+        auto it = word_counts.find(word);
+        if (it == word_counts.end()) {
+            frequency = word_counts.at(unknownkey);
+        } else if (it->second <= cutoff) {
+            frequency = word_counts.at(unknownkey);
+        } else {
+            frequency = it->second;
+        }
+        word_frequency_info.word_frequencies.push_back(frequency);
+    }
+
+    auto &word_frequencies = word_frequency_info.word_frequencies;
+    for (int i = 0; i < word_frequencies.size(); ++i) {
+        auto it = std::min_element(word_frequencies.begin() + i, word_frequencies.end());
+        string word = sentence.at(it - word_frequencies.begin());
+        if (word == ::unknownkey) {
+            cerr << word_counts.at(::unknownkey) << endl;
+            abort();
+        }
+        word_frequency_info.keywords_behind.push_back(word);
+    }
+
+    return word_frequency_info;
+}
+
 vector<WordFrequencyInfo> getWordFrequencyInfo(const vector<vector<string>> &sentences,
         const unordered_map<string, int> &word_counts, int cutoff) {
     vector<WordFrequencyInfo> result;
