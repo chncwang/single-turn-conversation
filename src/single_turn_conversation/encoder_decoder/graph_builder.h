@@ -56,14 +56,14 @@ public:
         set<int> unique_keywords;
         int i = 0;
         for (const auto &p : path_) {
-//            if (i % 2 == 1) {
+            if (i % 2 == 1) {
                 unique_words.insert(p.word_id);
 //            } else {
 //                unique_keywords.insert(p.word_id);
-//            }
+            }
             ++i;
         }
-        return (final_log_probability + extra_score_) / (unique_words.size() +
+        return (final_log_probability + extra_score_) / (1 + unique_words.size() +
                 unique_keywords.size());
     }
 
@@ -208,6 +208,8 @@ vector<BeamSearchResult> mostProbableResults(
         const Node &node = *nodes.at(i);
         auto tuple = toExp(node);
 
+        float max_log_prob = -1e20;
+        BeamSearchResult beam_search_result;
         for (int j = 0; j < nodes.at(i)->getDim(); ++j) {
             if (j == model_params.lookup_table.getElemId(::unknownkey)) {
                 continue;
@@ -216,28 +218,21 @@ vector<BeamSearchResult> mostProbableResults(
             dtype log_probability = value - log(get<2>(tuple));
             dtype word_probability = exp(log_probability);
             vector<WordIdAndProbability> word_ids;
-            std::array<int, 3> counts = {0, 0, 0};
-            dtype extra_score = 0.0f;
             if (!last_results.empty()) {
                 log_probability += last_results.at(i).finalLogProbability();
                 word_ids = last_results.at(i).getPath();
-                counts = last_results.at(i).ngramCounts();
-                extra_score = last_results.at(i).getExtraScore();
             }
-
             word_ids.push_back(WordIdAndProbability(j, word_probability));
-
-            BeamSearchResult beam_search_result(beam.at(i), word_ids, log_probability);
-            beam_search_result.setNgramCounts(counts);
-            beam_search_result.setExtraScore(extra_score);
-            updateBeamSearchResultScore(beam_search_result, default_config.toNgramPenalty());
-
-            if (queue.size() < k) {
-                queue.push(beam_search_result);
-            } else if (queue.top().finalScore() < beam_search_result.finalScore()) {
-                queue.pop();
-                queue.push(beam_search_result);
+            if (log_probability > max_log_prob) {
+                max_log_prob = log_probability;
+                beam_search_result =  BeamSearchResult(beam.at(i), word_ids, log_probability);
             }
+        }
+        if (queue.size() < k) {
+            queue.push(beam_search_result);
+        } else if (queue.top().finalScore() < beam_search_result.finalScore()) {
+            queue.pop();
+            queue.push(beam_search_result);
         }
     }
 
@@ -755,6 +750,7 @@ struct GraphBuilder {
             abort();
         }
 
+        cout << endl<< "final search results:" << endl;
         for (const auto &pair : word_ids_result) {
             const vector<WordIdAndProbability> ids = pair.first;
             cout << boost::format("beam result:%1%") % exp(pair.second) << endl;
