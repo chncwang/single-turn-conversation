@@ -126,6 +126,7 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
     default_config.device_id = ini_reader.GetInteger(SECTION, "device_id", 0);
     default_config.seed = ini_reader.GetInteger(SECTION, "seed", 0);
     default_config.cut_length = ini_reader.GetInteger(SECTION, "cut_length", 30);
+    default_config.keyword_bound = ini_reader.GetInteger(SECTION, "keyword_bound", 30);
     default_config.output_model_file_prefix = ini_reader.Get(SECTION, "output_model_file_prefix",
             "");
     default_config.input_model_file = ini_reader.Get(SECTION, "input_model_file", "");
@@ -449,6 +450,7 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
 
 void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         DefaultConfig &default_config,
+        const unordered_map<string, int> word_counts,
         const vector<PostAndResponses> &post_and_responses_vector,
         const vector<vector<string>> &post_sentences,
         const vector<WordFrequencyInfo> &post_frequencies,
@@ -468,7 +470,8 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         vector<DecoderComponents> decoder_components_vector;
         decoder_components_vector.resize(hyper_params.beam_size);
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
-                hyper_params.beam_size, hyper_params, model_params, default_config, black_list);
+                word_counts, hyper_params.beam_size, hyper_params, model_params, default_config,
+                black_list);
         const vector<WordIdAndProbability> &word_ids_and_probability = pair.first;
         cout << "post:" << endl;
         print(post_sentences.at(post_and_responses.post_id));
@@ -538,7 +541,8 @@ void interact(const DefaultConfig &default_config, const HyperParams &hyper_para
         cout << format("decodeTestPosts - beam_size:%1% decoder_components_vector.size:%2%") %
             hyper_params.beam_size % decoder_components_vector.size() << endl;
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
-                hyper_params.beam_size, hyper_params, model_params, default_config, black_list);
+                word_counts, hyper_params.beam_size, hyper_params, model_params, default_config,
+                black_list);
         const vector<WordIdAndProbability> &word_ids = pair.first;
         cout << "post:" << endl;
         cout << post << endl;
@@ -758,8 +762,9 @@ int main(int argc, char *argv[]) {
                 hyper_params.word_cutoff, black_list);
     } else if (default_config.program_mode == ProgramMode::DECODING) {
         hyper_params.beam_size = beam_size;
-        decodeTestPosts(hyper_params, model_params, default_config, test_post_and_responses,
-                post_sentences, post_frequencies, response_sentences, black_list);
+        decodeTestPosts(hyper_params, model_params, default_config, word_counts,
+                test_post_and_responses, post_sentences, post_frequencies, response_sentences,
+                black_list);
     } else if (default_config.program_mode == ProgramMode::METRIC) {
         path dir_path(default_config.input_model_dir);
         if (!is_directory(dir_path)) {

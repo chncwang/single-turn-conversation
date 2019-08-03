@@ -34,6 +34,7 @@ struct DefaultConfig {
     int hold_batch_size;
     int seed;
     int cut_length;
+    int keyword_bound;
     std::string output_model_file_prefix;
     std::string input_model_file;
     std::string input_model_dir;
@@ -64,6 +65,7 @@ struct DefaultConfig {
             << "hold_batch_size:" << hold_batch_size << std::endl
             << "seed:" << seed << std::endl
             << "cut_length:" << cut_length << std::endl
+            << "keyword_bound:" << keyword_bound << std::endl
             << "output_model_file_prefix" << output_model_file_prefix << std::endl
             << "input_model_file:" << input_model_file << std::endl
             << "input_model_dir:" << input_model_dir << std::endl

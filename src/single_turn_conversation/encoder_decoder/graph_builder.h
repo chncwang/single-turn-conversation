@@ -2,6 +2,7 @@
 #define SINGLE_TURN_CONVERSATION_SRC_ENCODER_DECODER_GRAPH_BUILDER_H
 
 #include <cmath>
+#include <unordered_map>
 #include <vector>
 #include <array>
 #include <set>
@@ -272,11 +273,13 @@ vector<BeamSearchResult> mostProbableResults(
 vector<BeamSearchResult> mostProbableKeywords(
         vector<DecoderComponents> &beam,
         const vector<BeamSearchResult> &last_results,
+        const unordered_map<string ,int> word_counts,
         int word_pos,
         int k,
         Graph &graph,
         ModelParams &model_params,
         const HyperParams &hyper_params,
+        const DefaultConfig &default_config,
         bool is_first,
         set<int> &searched_ids) {
     vector<Node *> nodes;
@@ -357,6 +360,10 @@ vector<BeamSearchResult> mostProbableKeywords(
                     }
                 }
                 if (j == model_params.lookup_table.getElemId(::unknownkey)) {
+                    continue;
+                }
+                const string &word = model_params.lookup_table.elems.from_id(j);
+                if (word_pos == 0 && word_counts.at(word) > default_config.keyword_bound) {
                     continue;
                 }
                 dtype value = node.getVal().v[j] - get<1>(tuple).second;
@@ -627,6 +634,7 @@ struct GraphBuilder {
 
     pair<vector<WordIdAndProbability>, dtype> forwardDecoderUsingBeamSearch(Graph &graph,
             const vector<DecoderComponents> &decoder_components_beam,
+            const unordered_map<string, int> &word_counts,
             int k,
             const HyperParams &hyper_params,
             ModelParams &model_params,
@@ -670,8 +678,9 @@ struct GraphBuilder {
                 cout << "forwardDecoderHiddenByOneStep:" << endl;
                 graph.compute();
 
-                most_probable_results = mostProbableKeywords(beam, most_probable_results, i, k,
-                        graph, model_params, hyper_params, i == 0, searched_ids);
+                most_probable_results = mostProbableKeywords(beam, most_probable_results,
+                        word_counts, i, k, graph, model_params, hyper_params, default_config,
+                        i == 0, searched_ids);
                 for (int beam_i = 0; beam_i < beam.size(); ++beam_i) {
                     DecoderComponents &decoder_components = beam.at(beam_i);
                     int keyword_id = most_probable_results.at(beam_i).getPath().back().word_id;
