@@ -273,7 +273,7 @@ vector<BeamSearchResult> mostProbableResults(
 vector<BeamSearchResult> mostProbableKeywords(
         vector<DecoderComponents> &beam,
         const vector<BeamSearchResult> &last_results,
-        const unordered_map<string ,int> word_counts,
+        const unordered_map<string ,float> word_idf_table,
         int word_pos,
         int k,
         Graph &graph,
@@ -363,7 +363,7 @@ vector<BeamSearchResult> mostProbableKeywords(
                     continue;
                 }
                 const string &word = model_params.lookup_table.elems.from_id(j);
-                if (word_pos == 0 && word_counts.at(word) > default_config.keyword_bound) {
+                if (word_pos == 0 && word_idf_table.at(word) <= default_config.keyword_bound) {
                     continue;
                 }
                 dtype value = node.getVal().v[j] - get<1>(tuple).second;
@@ -634,7 +634,7 @@ struct GraphBuilder {
 
     pair<vector<WordIdAndProbability>, dtype> forwardDecoderUsingBeamSearch(Graph &graph,
             const vector<DecoderComponents> &decoder_components_beam,
-            const unordered_map<string, int> &word_counts,
+            const unordered_map<string, float> &word_idf_table,
             int k,
             const HyperParams &hyper_params,
             ModelParams &model_params,
@@ -679,7 +679,7 @@ struct GraphBuilder {
                 graph.compute();
 
                 most_probable_results = mostProbableKeywords(beam, most_probable_results,
-                        word_counts, i, k, graph, model_params, hyper_params, default_config,
+                        word_idf_table, i, k, graph, model_params, hyper_params, default_config,
                         i == 0, searched_ids);
                 for (int beam_i = 0; beam_i < beam.size(); ++beam_i) {
                     DecoderComponents &decoder_components = beam.at(beam_i);

@@ -306,91 +306,60 @@ void reprocessSentences(const vector<PostAndResponses> bundles,
     }
 }
 
-struct WordFrequencyInfo {
-    vector<int> word_frequencies;
+struct WordIdfInfo {
+    vector<float> word_idfs;
     vector<string> keywords_behind;
 };
 
-WordFrequencyInfo getWordFrequencyInfo(const vector<string> &sentence,
-        const unordered_map<string, int> &word_counts, int cutoff) {
-    WordFrequencyInfo word_frequency_info;
+void getWordIdfInfo(WordIdfInfo &word_frequency_info, const vector<string> &sentence,
+        const unordered_map<string, float> &word_idfs,
+        const unordered_map<string, int> word_counts,
+        int cutoff) {
+    word_frequency_info.word_idfs.reserve(sentence.size());
+    word_frequency_info.keywords_behind.reserve(sentence.size());
+
     for (const string &word : sentence) {
-        int frequency;
+        float idf;
         auto it = word_counts.find(word);
         if (it == word_counts.end()) {
-            frequency = word_counts.at(unknownkey);
+            idf = 0.999f;
         } else if (it->second <= cutoff) {
-            frequency = word_counts.at(unknownkey);
+            idf = 0.999f;
         } else {
-            frequency = it->second;
+            auto it = word_idfs.find(word);
+            idf = it->second;
         }
-        word_frequency_info.word_frequencies.push_back(frequency);
+//        word_frequency_info.word_idfs.push_back(idf);
     }
 
-    auto &word_frequencies = word_frequency_info.word_frequencies;
+    auto &word_frequencies = word_frequency_info.word_idfs;
     for (int i = 0; i < word_frequencies.size(); ++i) {
-        auto it = std::min_element(word_frequencies.begin() + i, word_frequencies.end());
+        auto it = std::max_element(word_frequencies.begin() + i, word_frequencies.end());
         string word = sentence.at(it - word_frequencies.begin());
         if (word == ::unknownkey) {
             cerr << word_counts.at(::unknownkey) << endl;
             abort();
         }
-        word_frequency_info.keywords_behind.push_back(word);
+//        word_frequency_info.keywords_behind.push_back(word);
     }
-
-    return word_frequency_info;
 }
 
-vector<WordFrequencyInfo> getWordFrequencyInfo(const vector<vector<string>> &sentences,
-        const unordered_map<string, int> &word_counts, int cutoff) {
-    vector<WordFrequencyInfo> result;
+vector<WordIdfInfo> getWordIdfInfo(const vector<vector<string>> &sentences,
+        const unordered_map<string, float> &idf_table,
+        const unordered_map<string, int> word_counts,
+        int cutoff) {
+    vector<WordIdfInfo> result;
+    result.reserve(sentences.size());
 
+    cout << "getWordInfo begin size:" << sentences.size() << endl;
     int i = 0;
     for (const auto &sentence : sentences) {
-        WordFrequencyInfo word_frequency_info;
-        for (const string &word : sentence) {
-            int frequency;
-            auto it = word_counts.find(word);
-            if (it == word_counts.end()) {
-                frequency = word_counts.at(unknownkey);
-            } else if (it->second <= cutoff) {
-                frequency = word_counts.at(unknownkey);
-            } else {
-                frequency = it->second;
-            }
-            word_frequency_info.word_frequencies.push_back(frequency);
-        }
-
-        auto &word_frequencies = word_frequency_info.word_frequencies;
-        for (int i = 0; i < word_frequencies.size(); ++i) {
-            auto it = std::min_element(word_frequencies.begin() + i, word_frequencies.end());
-            string word = sentence.at(it - word_frequencies.begin());
-            if (word == ::unknownkey) {
-                cerr << word_counts.at(::unknownkey) << endl;
-                abort();
-            }
-            word_frequency_info.keywords_behind.push_back(word);
-        }
-
-        if (i++ % 10000 == 0) {
-            for (const string &word : sentence) {
-                cout << word << " ";
-            }
-            cout << endl;
-
-            for (int frequency : word_frequencies) {
-                cout << frequency << " ";
-            }
-            cout << endl;
-
-            for (const string &word : word_frequency_info.keywords_behind) {
-                cout << word << " ";
-            }
-            cout << endl;
-        }
-
-        result.push_back(word_frequency_info);
+        cout << i++ << endl;
+        WordIdfInfo word_idf_info;
+        getWordIdfInfo(word_idf_info, sentence, idf_table, word_counts, cutoff);
+        result.push_back(move(word_idf_info));
     }
+    cout << endl;
     return result;
 }
 

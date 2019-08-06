@@ -34,7 +34,7 @@ struct DefaultConfig {
     int hold_batch_size;
     int seed;
     int cut_length;
-    int keyword_bound;
+    float keyword_bound;
     std::string output_model_file_prefix;
     std::string input_model_file;
     std::string input_model_dir;
