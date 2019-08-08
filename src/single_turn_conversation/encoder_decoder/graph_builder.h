@@ -715,11 +715,7 @@ struct GraphBuilder {
                 vector<BeamSearchResult> stop_removed_results;
                 int j = 0;
                 for (BeamSearchResult &beam_search_result : most_probable_results) {
-                    //                        cout << boost::format("1gram:%1% len:%2%") %
-                    //                            beam_search_result.ngramCounts().at(0) %
-                    //                            beam_search_result.getPath().size() << endl;
-                    const vector<WordIdAndProbability> &word_ids =
-                        beam_search_result.getPath();
+                    const vector<WordIdAndProbability> &word_ids = beam_search_result.getPath();
 
                     int last_word_id = word_ids.at(word_ids.size() - 1).word_id;
                     const string &word = model_params.lookup_table.elems.from_id(
