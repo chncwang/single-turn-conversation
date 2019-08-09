@@ -25,7 +25,7 @@ struct DecoderComponents {
             Node &input,
             vector<Node *> &encoder_hiddens,
             bool is_training) {
-        shared_ptr<AttentionVBuilder> attention_builder(new AttentionVBuilder);
+        shared_ptr<DotAttentionBuilder> attention_builder(new DotAttentionBuilder);
         attention_builder->init(model_params.attention_parrams);
         Node *guide = decoder.size() == 0 ?
             static_cast<Node*>(bucket(hyper_params.hidden_dim,

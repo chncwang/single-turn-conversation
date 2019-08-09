@@ -14,7 +14,7 @@ struct ModelParams : public N3LDGSerializable
     LookupTable lookup_table;
     UniParams hidden_to_wordvector_params;
     LSTM1Params left_to_right_encoder_params;
-    AttentionVParams attention_parrams;
+    DotAttentionParams attention_parrams;
 
     Json::Value toJson() const override {
         Json::Value json;
