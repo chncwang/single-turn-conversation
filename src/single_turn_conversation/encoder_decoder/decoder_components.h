@@ -35,7 +35,7 @@ struct DecoderComponents {
             Node &keyword_input,
             vector<Node *> &encoder_hiddens,
             bool is_training) {
-        shared_ptr<AttentionVBuilder> attention_builder(new AttentionVBuilder);
+        shared_ptr<DotAttentionBuilder> attention_builder(new DotAttentionBuilder);
         attention_builder->init(model_params.normal_attention_parrams);
         Node *guide = decoder.size() == 0 ?
             static_cast<Node*>(bucket(hyper_params.hidden_dim,
@@ -43,7 +43,7 @@ struct DecoderComponents {
         attention_builder->forward(graph, encoder_hiddens, *guide);
         contexts.push_back(attention_builder->_hidden);
 
-        shared_ptr<AttentionVBuilder> keyword_attention_builder(new AttentionVBuilder);
+        shared_ptr<DotAttentionBuilder> keyword_attention_builder(new DotAttentionBuilder);
         keyword_attention_builder->init(model_params.keyword_attention_parrams);
         Node *keyword_guide = decoder.size() == 0 ?
             static_cast<Node*>(bucket(hyper_params.hidden_dim,

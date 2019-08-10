@@ -311,12 +311,13 @@ struct WordIdfInfo {
     vector<string> keywords_behind;
 };
 
-void getWordIdfInfo(WordIdfInfo &word_frequency_info, const vector<string> &sentence,
+WordIdfInfo getWordIdfInfo(const vector<string> &sentence,
         const unordered_map<string, float> &word_idfs,
         const unordered_map<string, int> word_counts,
         int cutoff) {
-    word_frequency_info.word_idfs.reserve(sentence.size());
-    word_frequency_info.keywords_behind.reserve(sentence.size());
+    WordIdfInfo word_idf_info;
+    word_idf_info.word_idfs.reserve(sentence.size());
+    word_idf_info.keywords_behind.reserve(sentence.size());
 
     for (const string &word : sentence) {
         float idf;
@@ -329,10 +330,10 @@ void getWordIdfInfo(WordIdfInfo &word_frequency_info, const vector<string> &sent
             auto it = word_idfs.find(word);
             idf = it->second;
         }
-//        word_frequency_info.word_idfs.push_back(idf);
+        word_idf_info.word_idfs.push_back(idf);
     }
 
-    auto &word_frequencies = word_frequency_info.word_idfs;
+    auto &word_frequencies = word_idf_info.word_idfs;
     for (int i = 0; i < word_frequencies.size(); ++i) {
         auto it = std::max_element(word_frequencies.begin() + i, word_frequencies.end());
         string word = sentence.at(it - word_frequencies.begin());
@@ -340,27 +341,9 @@ void getWordIdfInfo(WordIdfInfo &word_frequency_info, const vector<string> &sent
             cerr << word_counts.at(::unknownkey) << endl;
             abort();
         }
-//        word_frequency_info.keywords_behind.push_back(word);
+        word_idf_info.keywords_behind.push_back(word);
     }
-}
-
-vector<WordIdfInfo> getWordIdfInfo(const vector<vector<string>> &sentences,
-        const unordered_map<string, float> &idf_table,
-        const unordered_map<string, int> word_counts,
-        int cutoff) {
-    vector<WordIdfInfo> result;
-    result.reserve(sentences.size());
-
-    cout << "getWordInfo begin size:" << sentences.size() << endl;
-    int i = 0;
-    for (const auto &sentence : sentences) {
-        cout << i++ << endl;
-        WordIdfInfo word_idf_info;
-        getWordIdfInfo(word_idf_info, sentence, idf_table, word_counts, cutoff);
-        result.push_back(move(word_idf_info));
-    }
-    cout << endl;
-    return result;
+    return word_idf_info;
 }
 
 std::vector<std::string> readBlackList(const std::string &filename) {

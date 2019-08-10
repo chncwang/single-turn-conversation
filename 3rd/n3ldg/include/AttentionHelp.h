@@ -43,6 +43,8 @@ public:
         for (int i = 0; i < nSize; i++) {
             if (x.at(i)->val().dim != getDim() || a.at(i)->val().dim != 1) {
                 std::cerr << "input matrixes are not matched" << std::endl;
+                std::cerr << boost::format("x dim:%1% self dim:%2%") % x.at(i)->val().dim %
+                    getDim() << endl;
                 abort();
             }
             ins.push_back(x.at(i));
