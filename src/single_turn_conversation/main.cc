@@ -58,6 +58,39 @@ void exportToGradChecker(ModelParams &model_params, CheckGrad &grad_checker) {
     grad_checker.add(model_params.normal_attention_parrams.bi_atten.W2, "attention W2");
 }
 
+unordered_map<string, float> calculateIdf(const vector<vector<string>> sentences) {
+    cout << "sentences size:" << sentences.size() << endl;
+    unordered_map<string, int> doc_counts;
+    int i = 0;
+    for (const vector<string> &sentence : sentences) {
+        if (i++ % 10000 == 0) {
+            cout << i << " ";
+        }
+        set<string> words;
+        for (const string &word : sentence) {
+            words.insert(word);
+        }
+
+        for (const string &word : words) {
+            auto it = doc_counts.find(word);
+            if (it == doc_counts.end()) {
+                doc_counts.insert(make_pair(word, 1));
+            } else {
+                ++doc_counts.at(word);
+            }
+        }
+    }
+    cout << endl;
+
+    unordered_map<string, float> result;
+    for (const auto &it : doc_counts) {
+        float idf = log(sentences.size() / static_cast<float>(it.second));
+        result.insert(make_pair(it.first, idf));
+    }
+
+    return result;
+}
+
 void addWord(unordered_map<string, int> &word_counts, const string &word) {
     auto it = word_counts.find(word);
     if (it == word_counts.end()) {
@@ -126,6 +159,7 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
     default_config.device_id = ini_reader.GetInteger(SECTION, "device_id", 0);
     default_config.seed = ini_reader.GetInteger(SECTION, "seed", 0);
     default_config.cut_length = ini_reader.GetInteger(SECTION, "cut_length", 30);
+    default_config.keyword_bound = ini_reader.GetReal(SECTION, "keyword_bound", 30);
     default_config.output_model_file_prefix = ini_reader.Get(SECTION, "output_model_file_prefix",
             "");
     default_config.input_model_file = ini_reader.Get(SECTION, "input_model_file", "");
@@ -231,10 +265,15 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
     return hyper_params;
 }
 
-vector<int> toIds(const vector<string> &sentence, const LookupTable &lookup_table) {
+vector<int> toIds(const vector<string> &sentence, const LookupTable &lookup_table,
+        bool permit_unkown = true) {
     vector<int> ids;
     for (const string &word : sentence) {
 	int xid = lookup_table.getElemId(word);
+        if (!permit_unkown && xid == lookup_table.elems.from_string(::unknownkey)) {
+            cerr << "toIds error: unknown word " << word << endl;
+            abort();
+        }
         if (xid >= lookup_table.nVSize) {
             cerr << "xid:" << xid << " word:" << word << endl;
             for (const string &w :sentence) {
@@ -357,14 +396,11 @@ void loadModel(const DefaultConfig &default_config, HyperParams &hyper_params,
 }
 
 pair<vector<Node *>, vector<int>> keywordNodesAndIds(const DecoderComponents &decoder_components,
-        const vector<WordFrequencyInfo> &word_frequency_infos,
-        int response_id,
+        const WordIdfInfo &idf_info,
         const ModelParams &model_params) {
     vector<Node *> keyword_result_nodes = toNodePointers<LinearWordVectorNode>(
             decoder_components.keyword_vector_to_onehots);
-    vector<int> keyword_ids = toIds(
-            word_frequency_infos.at(response_id).keywords_behind,
-            model_params.lookup_table);
+    vector<int> keyword_ids = toIds(idf_info.keywords_behind, model_params.lookup_table, false);
     vector<Node *> non_null_nodes;
     vector<int> chnanged_keyword_ids;
     for (int j = 0; j < keyword_result_nodes.size(); ++j) {
@@ -385,10 +421,9 @@ pair<vector<Node *>, vector<int>> keywordNodesAndIds(const DecoderComponents &de
 float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         const vector<PostAndResponses> &post_and_responses_vector,
         const vector<vector<string>> &post_sentences,
-        const vector<WordFrequencyInfo> &post_frequencies,
         const vector<vector<string>> &response_sentences,
-        unordered_map<string, int> &word_counts,
-        const vector<WordFrequencyInfo> &keyword_infos) {
+        const unordered_map<string, float> &word_idf_table,
+        const unordered_map<string, int> &word_counts) {
     cout << "metricTestPosts begin" << endl;
     hyper_params.print();
     float rep_perplex(0.0f);
@@ -398,24 +433,31 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
         auto f = [&]() {
             cout << "post:" << endl;
-            print(post_sentences.at(post_and_responses.post_id));
-            print(post_frequencies.at(post_and_responses.post_id).keywords_behind);
+            auto post = post_sentences.at(post_and_responses.post_id);
+            print(post);
+            WordIdfInfo post_idf_info = getWordIdfInfo(post, word_idf_table, word_counts,
+                    hyper_params.word_cutoff);
+            print(post_idf_info.keywords_behind);
 
             const vector<int> &response_ids = post_and_responses.response_ids;
             float avg_perplex = 0.0f;
             cout << "response size:" << response_ids.size() << endl;
             for (int response_id : response_ids) {
-                //            cout << "response:" << endl;
-                //            print(response_sentences.at(response_id));
+                cout << "response:" << endl;
+                auto response = response_sentences.at(response_id);
+                print(response);
+                WordIdfInfo idf_info = getWordIdfInfo(response, word_idf_table, word_counts,
+                        hyper_params.word_cutoff);
+                print(idf_info.keywords_behind);
                 Graph graph;
                 GraphBuilder graph_builder;
                 graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id),
-                        post_frequencies.at(post_and_responses.post_id).keywords_behind,
+                        post_idf_info.keywords_behind,
                         hyper_params, model_params, false);
                 DecoderComponents decoder_components;
                 graph_builder.forwardDecoder(graph, decoder_components,
                         response_sentences.at(response_id),
-                        keyword_infos.at(response_id).keywords_behind,
+                        idf_info.keywords_behind,
                         hyper_params, model_params, false);
                 graph.compute();
                 vector<Node*> nodes = toNodePointers(decoder_components.wordvector_to_onehots);
@@ -423,14 +465,13 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
                         response_sentences.at(response_id), [&](const string &w) -> int {
                         return model_params.lookup_table.getElemId(w);
                         });
-                int len = word_ids.size();
-                auto keyword_nodes_and_ids = keywordNodesAndIds(decoder_components,
-                        keyword_infos, response_id, model_params);
+                auto keyword_nodes_and_ids = keywordNodesAndIds(decoder_components, idf_info,
+                        model_params);
                 for (int i = 0; i < keyword_nodes_and_ids.first.size(); ++i) {
                     nodes.push_back(keyword_nodes_and_ids.first.at(i));
                     word_ids.push_back(keyword_nodes_and_ids.second.at(i));
                 }
-                float perplex = computePerplex(nodes, word_ids, len);
+                float perplex = computePerplex(nodes, word_ids);
                 avg_perplex += perplex;
             }
             avg_perplex /= response_ids.size();
@@ -449,9 +490,10 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
 
 void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         DefaultConfig &default_config,
+        const unordered_map<string, float> &word_idf_table,
+        const unordered_map<string, int> &word_count_table,
         const vector<PostAndResponses> &post_and_responses_vector,
         const vector<vector<string>> &post_sentences,
-        const vector<WordFrequencyInfo> &post_frequencies,
         const vector<vector<string>> &response_sentences,
         const vector<string> &black_list) {
     cout << "decodeTestPosts begin" << endl;
@@ -459,16 +501,19 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
     vector<CandidateAndReferences> candidate_and_references_vector;
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
         cout << "post:" << endl;
-        print(post_sentences.at(post_and_responses.post_id));
+        auto post_sentence = post_sentences.at(post_and_responses.post_id);
+        print(post_sentence);
+        auto idf = getWordIdfInfo(post_sentence, word_idf_table, word_count_table,
+                hyper_params.word_cutoff);
         Graph graph;
         GraphBuilder graph_builder;
         graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id),
-                post_frequencies.at(post_and_responses.post_id).keywords_behind,
-                hyper_params, model_params, false);
+                idf.keywords_behind, hyper_params, model_params, false);
         vector<DecoderComponents> decoder_components_vector;
         decoder_components_vector.resize(hyper_params.beam_size);
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
-                hyper_params.beam_size, hyper_params, model_params, default_config, black_list);
+                word_idf_table, hyper_params.beam_size, hyper_params, model_params, default_config,
+                black_list);
         const vector<WordIdAndProbability> &word_ids_and_probability = pair.first;
         cout << "post:" << endl;
         print(post_sentences.at(post_and_responses.post_id));
@@ -509,6 +554,7 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
 
 void interact(const DefaultConfig &default_config, const HyperParams &hyper_params,
         ModelParams &model_params,
+        unordered_map<string, float> &word_idfs,
         unordered_map<string, int> &word_counts,
         int word_cutoff,
         const vector<string> black_list) {
@@ -526,19 +572,19 @@ void interact(const DefaultConfig &default_config, const HyperParams &hyper_para
         if (default_config.split_unknown_words) {
             words = reprocessSentence(words, word_counts, word_cutoff);
         }
-
-        auto frequency = getWordFrequencyInfo(words, word_counts, hyper_params.word_cutoff);
+        auto idf = getWordIdfInfo(words, word_idfs, word_counts, hyper_params.word_cutoff);
 
         Graph graph;
         GraphBuilder graph_builder;
-        graph_builder.forward(graph, words, frequency.keywords_behind, hyper_params, model_params,
+        graph_builder.forward(graph, words, idf.keywords_behind, hyper_params, model_params,
                 false);
         vector<DecoderComponents> decoder_components_vector;
         decoder_components_vector.resize(hyper_params.beam_size);
         cout << format("decodeTestPosts - beam_size:%1% decoder_components_vector.size:%2%") %
             hyper_params.beam_size % decoder_components_vector.size() << endl;
         auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
-                hyper_params.beam_size, hyper_params, model_params, default_config, black_list);
+                word_idfs, hyper_params.beam_size, hyper_params, model_params, default_config,
+                black_list);
         const vector<WordIdAndProbability> &word_ids = pair.first;
         cout << "post:" << endl;
         cout << post << endl;
@@ -729,6 +775,7 @@ int main(int argc, char *argv[]) {
     if (default_config.program_mode != ProgramMode::METRIC) {
         if (default_config.input_model_file == "") {
             allocate_model_params(default_config, hyper_params, model_params, &alphabet);
+            cout << "complete allocate" << endl;
         } else {
             root_ptr = loadModel(default_config.input_model_file);
             loadModel(default_config, hyper_params, model_params, root_ptr.get(),
@@ -746,20 +793,30 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    auto word_frequency_infos = getWordFrequencyInfo(response_sentences, word_counts,
-            hyper_params.word_cutoff);
-    auto post_frequencies = getWordFrequencyInfo(post_sentences, word_counts,
-            hyper_params.word_cutoff);
+    vector<vector<string>> all_sentences;
+    cout << "merging sentences..." << endl;
+    for (auto &s : post_sentences) {
+        all_sentences.push_back(s);
+    }
+    for (auto &s : response_sentences) {
+        all_sentences.push_back(s);
+    }
+    cout << "merged" << endl;
+    cout << "calculating idf" << endl;
+    auto all_idf = calculateIdf(all_sentences);
+    cout << "idf calculated" << endl;
+
+    cout << "word info got" << endl;
     auto black_list = readBlackList(default_config.black_list_file);
 
     if (default_config.program_mode == ProgramMode::INTERACTING) {
         hyper_params.beam_size = beam_size;
-        interact(default_config, hyper_params, model_params, word_counts,
+        interact(default_config, hyper_params, model_params, all_idf, word_counts,
                 hyper_params.word_cutoff, black_list);
     } else if (default_config.program_mode == ProgramMode::DECODING) {
         hyper_params.beam_size = beam_size;
-        decodeTestPosts(hyper_params, model_params, default_config, test_post_and_responses,
-                post_sentences, post_frequencies, response_sentences, black_list);
+        decodeTestPosts(hyper_params, model_params, default_config, all_idf, word_counts,
+                test_post_and_responses, post_sentences, response_sentences, black_list);
     } else if (default_config.program_mode == ProgramMode::METRIC) {
         path dir_path(default_config.input_model_dir);
         if (!is_directory(dir_path)) {
@@ -792,8 +849,7 @@ int main(int argc, char *argv[]) {
             loadModel(default_config, hyper_params, model_params, root_ptr.get(),
                     allocate_model_params);
             float rep_perplex = metricTestPosts(hyper_params, model_params, dev_post_and_responses,
-                    post_sentences, post_frequencies, response_sentences, word_counts,
-                    word_frequency_infos);
+                    post_sentences, response_sentences, all_idf, word_counts);
             cout << format("model %1% rep_perplex is %2%") % model_file_path % rep_perplex << endl;
             if (max_rep_perplex < rep_perplex) {
                 max_rep_perplex = rep_perplex;
@@ -860,15 +916,18 @@ int main(int argc, char *argv[]) {
                     int post_id = train_conversation_pairs.at(instance_index).post_id;
                     conversation_pair_in_batch.push_back(train_conversation_pairs.at(
                                 instance_index));
-                    graph_builder->forward(graph, post_sentences.at(post_id),
-                            post_frequencies.at(post_id).keywords_behind, hyper_params,
-                            model_params, true);
-                    int response_id = train_conversation_pairs.at(instance_index).response_id;
-                    DecoderComponents decoder_components;
-                    graph_builder->forwardDecoder(graph, decoder_components,
-                            response_sentences.at(response_id),
-                            word_frequency_infos.at(response_id).keywords_behind,
+                    auto post_sentence = post_sentences.at(post_id);
+                    WordIdfInfo post_idf = getWordIdfInfo(post_sentence, all_idf, word_counts,
+                            hyper_params.word_cutoff);
+                    graph_builder->forward(graph, post_sentence, post_idf.keywords_behind,
                             hyper_params, model_params, true);
+                    int response_id = train_conversation_pairs.at(instance_index).response_id;
+                    auto response_sentence = response_sentences.at(response_id);
+                    WordIdfInfo idf_info = getWordIdfInfo(response_sentence, all_idf, word_counts,
+                            hyper_params.word_cutoff);
+                    DecoderComponents decoder_components;
+                    graph_builder->forwardDecoder(graph, decoder_components, response_sentence,
+                            idf_info.keywords_behind, hyper_params, model_params, true);
                     decoder_components_vector.push_back(decoder_components);
                 }
 
@@ -877,17 +936,18 @@ int main(int argc, char *argv[]) {
                 for (int i = 0; i < hyper_params.batch_size; ++i) {
                     int instance_index = getSentenceIndex(i);
                     int response_id = train_conversation_pairs.at(instance_index).response_id;
-                    vector<int> word_ids = toIds(response_sentences.at(response_id),
-                            model_params.lookup_table);
+                    auto response_sentence = response_sentences.at(response_id);
+                    vector<int> word_ids = toIds(response_sentence, model_params.lookup_table);
                     vector<Node*> result_nodes =
                         toNodePointers(decoder_components_vector.at(i).wordvector_to_onehots);
                     auto result = MaxLogProbabilityLoss(result_nodes, word_ids,
                             hyper_params.batch_size);
                     loss_sum += result.first;
                     analyze(result.second, word_ids, *metric);
+                    WordIdfInfo response_idf = getWordIdfInfo(response_sentence, all_idf,
+                            word_counts, hyper_params.word_cutoff);
                     auto keyword_nodes_and_ids = keywordNodesAndIds(
-                            decoder_components_vector.at(i), word_frequency_infos, response_id,
-                            model_params);
+                            decoder_components_vector.at(i), response_idf, model_params);
                     auto keyword_result = MaxLogProbabilityLoss(keyword_nodes_and_ids.first,
                         keyword_nodes_and_ids.second, hyper_params.batch_size);
                     loss_sum += keyword_result.first;
@@ -898,8 +958,6 @@ int main(int argc, char *argv[]) {
                         int post_id = train_conversation_pairs.at(instance_index).post_id;
                         cout << "post:" << post_id << endl;
                         print(post_sentences.at(post_id));
-                        cout << "post keywords:" << post_id << endl;
-                        print(post_frequencies.at(post_id).keywords_behind);
 
                         cout << "golden answer:" << endl;
                         printWordIds(word_ids, model_params.lookup_table);
@@ -919,36 +977,6 @@ int main(int argc, char *argv[]) {
                 keyword_metric->print();
 
                 graph.backward();
-
-                if (default_config.check_grad) {
-                    auto loss_function = [&](const ConversationPair &conversation_pair) -> dtype {
-                        GraphBuilder graph_builder;
-                        Graph graph;
-
-                        graph_builder.forward(graph, post_sentences.at(conversation_pair.post_id),
-                                post_frequencies.at(conversation_pair.post_id).keywords_behind,
-                                hyper_params, model_params, true);
-
-                        DecoderComponents decoder_components;
-                        graph_builder.forwardDecoder(graph, decoder_components,
-                                response_sentences.at(conversation_pair.response_id),
-                                word_frequency_infos.at(
-                                    conversation_pair.response_id).keywords_behind,
-                                hyper_params, model_params, true);
-
-                        graph.compute();
-
-                        vector<int> word_ids = toIds(response_sentences.at(
-                                    conversation_pair.response_id), model_params.lookup_table);
-                        vector<Node*> result_nodes = toNodePointers(
-                                decoder_components.wordvector_to_onehots);
-                        return MaxLogProbabilityLoss(result_nodes, word_ids, 1).first;
-                    };
-                    cout << format("checking grad - conversation_pair size:%1%") %
-                        conversation_pair_in_batch.size() << endl;
-                    grad_checker.check<ConversationPair>(loss_function, conversation_pair_in_batch,
-                            "");
-                }
 
                 if (hyper_params.optimizer == Optimizer::ADAM) {
                     model_update.updateAdam(10.0f);

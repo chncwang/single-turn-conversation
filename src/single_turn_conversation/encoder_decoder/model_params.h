@@ -15,8 +15,8 @@ struct ModelParams : public N3LDGSerializable
     UniParams hidden_to_wordvector_params;
     UniParams hidden_to_keyword_params;
     LSTM1Params left_to_right_encoder_params;
-    AttentionVParams normal_attention_parrams;
-    AttentionVParams keyword_attention_parrams;
+    DotAttentionParams normal_attention_parrams;
+    DotAttentionParams keyword_attention_parrams;
 
     Json::Value toJson() const override {
         Json::Value json;
