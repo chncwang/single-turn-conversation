@@ -323,9 +323,9 @@ WordIdfInfo getWordIdfInfo(const vector<string> &sentence,
         float idf;
         auto it = word_counts.find(word);
         if (it == word_counts.end()) {
-            idf = 0.999f;
+            idf = -1;
         } else if (it->second <= cutoff) {
-            idf = 0.999f;
+            idf = -1;
         } else {
             auto it = word_idfs.find(word);
             idf = it->second;
