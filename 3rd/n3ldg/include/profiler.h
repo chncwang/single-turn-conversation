@@ -7,7 +7,8 @@
 #include <utility>
 #include <iostream>
 #include <stack>
-
+#include <vector>
+#include <algorithm>
 
 namespace n3ldg_cuda {
 
@@ -27,8 +28,7 @@ struct Event {
 };
 
 struct Elapsed {
-    typedef
-        std::chrono::time_point<std::chrono::high_resolution_clock> Timestamp;
+    typedef std::chrono::time_point<std::chrono::high_resolution_clock> Timestamp;
     Timestamp begin;
     Timestamp end;
     std::string name;
@@ -42,11 +42,17 @@ enum ProfilerMode {
 class Profiler {
 public:
     static Profiler &Ins() {
-        static Profiler *p = NULL;
-        if (p == NULL) {
-            p = new Profiler;
+        if (p_ == nullptr) {
+            p_ = new Profiler;
         }
-        return *p;
+        return *p_;
+    }
+
+    static void Rest() {
+        if (p_ != nullptr) {
+            delete p_;
+        }
+        Ins();
     }
 
     void BeginEvent(const std::string &name) {
@@ -96,7 +102,9 @@ public:
             std::cout << running_events_.top().name << std::endl;
             running_events_.pop();
         }
-        assert(running_events_.empty());
+        if (running_events_.empty()) {
+            abort();
+        }
         std::vector<Event> events;
         for (auto &it : event_map_) {
             Event &event = it.second;
@@ -123,9 +131,10 @@ public:
 
 private:
     Profiler() = default;
+    static Profiler *p_;
     std::map<std::string, Event> event_map_;
     std::stack<Elapsed> running_events_;
-    Event *root_ = NULL;
+    Event *root_ = nullptr;
     bool enabled_ = false;
 };
 

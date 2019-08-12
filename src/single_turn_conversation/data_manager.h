@@ -311,39 +311,56 @@ struct WordIdfInfo {
     vector<string> keywords_behind;
 };
 
-WordIdfInfo getWordIdfInfo(const vector<string> &sentence,
+const WordIdfInfo& getWordIdfInfo(const vector<string> &sentence, int id,
+        unordered_map<int, WordIdfInfo> &all_table,
         const unordered_map<string, float> &word_idfs,
         const unordered_map<string, int> word_counts,
         int cutoff) {
-    WordIdfInfo word_idf_info;
-    word_idf_info.word_idfs.reserve(sentence.size());
-    word_idf_info.keywords_behind.reserve(sentence.size());
+    auto it = all_table.find(id);
+    if (it == all_table.end()) {
+        WordIdfInfo word_idf_info;
+        word_idf_info.word_idfs.reserve(sentence.size());
+        word_idf_info.keywords_behind.reserve(sentence.size());
 
-    for (const string &word : sentence) {
-        float idf;
-        auto it = word_counts.find(word);
-        if (it == word_counts.end()) {
-            idf = -1;
-        } else if (it->second <= cutoff) {
-            idf = -1;
-        } else {
-            auto it = word_idfs.find(word);
-            idf = it->second;
+        for (const string &word : sentence) {
+            float idf;
+            auto it = word_counts.find(word);
+            if (it == word_counts.end()) {
+                idf = -1;
+            } else if (it->second <= cutoff) {
+                idf = -1;
+            } else {
+                auto it = word_idfs.find(word);
+                idf = it->second;
+            }
+            word_idf_info.word_idfs.push_back(idf);
         }
-        word_idf_info.word_idfs.push_back(idf);
-    }
 
-    auto &word_frequencies = word_idf_info.word_idfs;
-    for (int i = 0; i < word_frequencies.size(); ++i) {
-        auto it = std::max_element(word_frequencies.begin() + i, word_frequencies.end());
-        string word = sentence.at(it - word_frequencies.begin());
-        if (word == ::unknownkey) {
-            cerr << word_counts.at(::unknownkey) << endl;
-            abort();
+        auto &word_frequencies = word_idf_info.word_idfs;
+        for (int i = 0; i < word_frequencies.size(); ++i) {
+            auto it = std::max_element(word_frequencies.begin() + i, word_frequencies.end());
+            string word = sentence.at(it - word_frequencies.begin());
+            if (word == ::unknownkey) {
+                cerr << word_counts.at(::unknownkey) << endl;
+                abort();
+            }
+            word_idf_info.keywords_behind.push_back(word);
         }
-        word_idf_info.keywords_behind.push_back(word);
+
+        all_table.insert(make_pair(id, move(word_idf_info)));
+        return all_table.at(id);
+    } else {
+        return it->second;
     }
-    return word_idf_info;
+}
+
+const WordIdfInfo& getWordIdfInfo(const vector<string> &sentence, bool is_post, int id,
+        const unordered_map<string, float> &word_idfs,
+        const unordered_map<string, int> word_counts,
+        int cutoff) {
+    static unordered_map<int, WordIdfInfo> post_table, response_table;
+    unordered_map<int, WordIdfInfo> &table = is_post ? post_table : response_table;
+    return getWordIdfInfo(sentence, id, table, word_idfs, word_counts, cutoff);
 }
 
 std::vector<std::string> readBlackList(const std::string &filename) {

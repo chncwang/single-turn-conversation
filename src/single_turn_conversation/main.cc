@@ -439,8 +439,8 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
             cout << "post:" << endl;
             auto post = post_sentences.at(post_and_responses.post_id);
             print(post);
-            WordIdfInfo post_idf_info = getWordIdfInfo(post, word_idf_table, word_counts,
-                    hyper_params.word_cutoff);
+            WordIdfInfo post_idf_info = getWordIdfInfo(post, true, post_and_responses.post_id,
+                    word_idf_table, word_counts, hyper_params.word_cutoff);
             print(post_idf_info.keywords_behind);
 
             const vector<int> &response_ids = post_and_responses.response_ids;
@@ -450,8 +450,8 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
                 cout << "response:" << endl;
                 auto response = response_sentences.at(response_id);
                 print(response);
-                WordIdfInfo idf_info = getWordIdfInfo(response, word_idf_table, word_counts,
-                        hyper_params.word_cutoff);
+                WordIdfInfo idf_info = getWordIdfInfo(response, false, response_id, word_idf_table,
+                        word_counts, hyper_params.word_cutoff);
                 print(idf_info.keywords_behind);
                 Graph graph;
                 GraphBuilder graph_builder;
@@ -507,8 +507,8 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         cout << "post:" << endl;
         auto post_sentence = post_sentences.at(post_and_responses.post_id);
         print(post_sentence);
-        auto idf = getWordIdfInfo(post_sentence, word_idf_table, word_count_table,
-                hyper_params.word_cutoff);
+        auto idf = getWordIdfInfo(post_sentence, true, post_and_responses.post_id,
+                word_idf_table, word_count_table, hyper_params.word_cutoff);
         Graph graph;
         GraphBuilder graph_builder;
         graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id),
@@ -563,6 +563,7 @@ void interact(const DefaultConfig &default_config, const HyperParams &hyper_para
         int word_cutoff,
         const vector<string> black_list) {
     hyper_params.print();
+    int i = 0;
     while (true) {
         string post;
         getline(cin >> ws, post);
@@ -576,8 +577,8 @@ void interact(const DefaultConfig &default_config, const HyperParams &hyper_para
         if (default_config.split_unknown_words) {
             words = reprocessSentence(words, word_counts, word_cutoff);
         }
-        auto idf = getWordIdfInfo(words, word_idfs, word_counts, hyper_params.word_cutoff);
-
+        auto idf = getWordIdfInfo(words, true, i++, word_idfs, word_counts,
+                hyper_params.word_cutoff);
         Graph graph;
         GraphBuilder graph_builder;
         graph_builder.forward(graph, words, idf.keywords_behind, hyper_params, model_params,
@@ -921,14 +922,15 @@ int main(int argc, char *argv[]) {
                     conversation_pair_in_batch.push_back(train_conversation_pairs.at(
                                 instance_index));
                     auto post_sentence = post_sentences.at(post_id);
-                    WordIdfInfo post_idf = getWordIdfInfo(post_sentence, all_idf, word_counts,
+                    WordIdfInfo post_idf = getWordIdfInfo(post_sentence, true, post_id, all_idf,
+                            word_counts,
                             hyper_params.word_cutoff);
                     graph_builder->forward(graph, post_sentence, post_idf.keywords_behind,
                             hyper_params, model_params, true);
                     int response_id = train_conversation_pairs.at(instance_index).response_id;
                     auto response_sentence = response_sentences.at(response_id);
-                    WordIdfInfo idf_info = getWordIdfInfo(response_sentence, all_idf, word_counts,
-                            hyper_params.word_cutoff);
+                    WordIdfInfo idf_info = getWordIdfInfo(response_sentence, false, response_id,
+                            all_idf, word_counts, hyper_params.word_cutoff);
                     DecoderComponents decoder_components;
                     graph_builder->forwardDecoder(graph, decoder_components, response_sentence,
                             idf_info.keywords_behind, hyper_params, model_params, true);
@@ -948,8 +950,8 @@ int main(int argc, char *argv[]) {
                             hyper_params.batch_size);
                     loss_sum += result.first;
                     analyze(result.second, word_ids, *metric);
-                    WordIdfInfo response_idf = getWordIdfInfo(response_sentence, all_idf,
-                            word_counts, hyper_params.word_cutoff);
+                    WordIdfInfo response_idf = getWordIdfInfo(response_sentence, false,
+                            response_id, all_idf, word_counts, hyper_params.word_cutoff);
                     auto keyword_nodes_and_ids = keywordNodesAndIds(
                             decoder_components_vector.at(i), response_idf, model_params);
                     auto keyword_result = MaxLogProbabilityLoss(keyword_nodes_and_ids.first,
