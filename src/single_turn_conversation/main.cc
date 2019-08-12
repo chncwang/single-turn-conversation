@@ -904,7 +904,7 @@ int main(int argc, char *argv[]) {
 
             unique_ptr<Metric> metric = unique_ptr<Metric>(new Metric);
             unique_ptr<Metric> keyword_metric = unique_ptr<Metric>(new Metric);
-            for (int batch_i = 0; batch_i < batch_count; ++batch_i) {
+            for (int batch_i = 0; batch_i < 10; ++batch_i) {
                 cout << format("batch_i:%1% iteration:%2%") % batch_i % iteration << endl;
                 Graph graph;
                 vector<shared_ptr<GraphBuilder>> graph_builders;
@@ -921,14 +921,18 @@ int main(int argc, char *argv[]) {
                     conversation_pair_in_batch.push_back(train_conversation_pairs.at(
                                 instance_index));
                     auto post_sentence = post_sentences.at(post_id);
+                    profiler.BeginEvent("getWordIdfInfo");
                     WordIdfInfo post_idf = getWordIdfInfo(post_sentence, all_idf, word_counts,
                             hyper_params.word_cutoff);
+                    profiler.EndEvent();
                     graph_builder->forward(graph, post_sentence, post_idf.keywords_behind,
                             hyper_params, model_params, true);
                     int response_id = train_conversation_pairs.at(instance_index).response_id;
                     auto response_sentence = response_sentences.at(response_id);
+                    profiler.BeginEvent("getWordIdfInfo");
                     WordIdfInfo idf_info = getWordIdfInfo(response_sentence, all_idf, word_counts,
                             hyper_params.word_cutoff);
+                    profiler.EndEvent();
                     DecoderComponents decoder_components;
                     graph_builder->forwardDecoder(graph, decoder_components, response_sentence,
                             idf_info.keywords_behind, hyper_params, model_params, true);
@@ -944,16 +948,20 @@ int main(int argc, char *argv[]) {
                     vector<int> word_ids = toIds(response_sentence, model_params.lookup_table);
                     vector<Node*> result_nodes =
                         toNodePointers(decoder_components_vector.at(i).wordvector_to_onehots);
+                    profiler.BeginEvent("loss");
                     auto result = MaxLogProbabilityLoss(result_nodes, word_ids,
                             hyper_params.batch_size);
+                    profiler.EndCudaEvent();
                     loss_sum += result.first;
                     analyze(result.second, word_ids, *metric);
                     WordIdfInfo response_idf = getWordIdfInfo(response_sentence, all_idf,
                             word_counts, hyper_params.word_cutoff);
                     auto keyword_nodes_and_ids = keywordNodesAndIds(
                             decoder_components_vector.at(i), response_idf, model_params);
+                    profiler.BeginEvent("loss");
                     auto keyword_result = MaxLogProbabilityLoss(keyword_nodes_and_ids.first,
                         keyword_nodes_and_ids.second, hyper_params.batch_size);
+                    profiler.EndCudaEvent();
                     loss_sum += keyword_result.first;
                     analyze(keyword_result.second, keyword_nodes_and_ids.second, *keyword_metric);
 
@@ -974,6 +982,7 @@ int main(int argc, char *argv[]) {
                         printWordIds(keyword_result.second, model_params.lookup_table);
                     }
                 }
+
                 cout << "loss:" << loss_sum << endl;
                 cout << "normal:" << endl;
                 metric->print();
@@ -1001,7 +1010,7 @@ int main(int argc, char *argv[]) {
                 ++iteration;
             }
 
-            cout << "loss_sum:" << loss_sum << " last_loss_sum:" << endl;
+            cout << "loss_sum:" << loss_sum << " last_loss_sum:" << last_loss_sum << endl;
             if (loss_sum > last_loss_sum) {
                 if (epoch == 0) {
                     cerr << "loss is larger than last epoch but epoch is 0" << endl;
@@ -1020,12 +1029,13 @@ int main(int argc, char *argv[]) {
                     hyper_params.learning_rate_decay + hyper_params.min_learning_rate;
                 hyper_params.learning_rate = model_update._alpha;
                 cout << "learning_rate now:" << hyper_params.learning_rate << endl;
-                last_saved_model = saveModel(hyper_params, model_params,
-                        default_config.output_model_file_prefix, epoch);
+//                last_saved_model = saveModel(hyper_params, model_params,
+//                        default_config.output_model_file_prefix, epoch);
             }
 
             last_loss_sum = loss_sum;
             loss_sum = 0;
+            break;
         }
         profiler.EndCudaEvent();
         profiler.Print();

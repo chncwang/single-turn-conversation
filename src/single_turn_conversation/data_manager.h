@@ -309,9 +309,12 @@ void reprocessSentences(const vector<PostAndResponses> bundles,
 struct WordIdfInfo {
     vector<float> word_idfs;
     vector<string> keywords_behind;
+    WordIdfInfo() = default;
+    WordIdfInfo(const WordIdfInfo&) = delete;
+    WordIdfInfo(WordIdfInfo&&) = default;
 };
 
-WordIdfInfo getWordIdfInfo(const vector<string> &sentence,
+inline WordIdfInfo getWordIdfInfo(const vector<string> &sentence,
         const unordered_map<string, float> &word_idfs,
         const unordered_map<string, int> word_counts,
         int cutoff) {
