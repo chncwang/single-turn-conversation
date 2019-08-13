@@ -439,7 +439,7 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
             cout << "post:" << endl;
             auto post = post_sentences.at(post_and_responses.post_id);
             print(post);
-            WordIdfInfo post_idf_info = getWordIdfInfo(post, word_idf_table, word_counts,
+            const WordIdfInfo &post_idf_info = getWordIdfInfo(post, word_idf_table, word_counts,
                     hyper_params.word_cutoff);
             print(post_idf_info.keywords_behind);
 
@@ -450,7 +450,7 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
                 cout << "response:" << endl;
                 auto response = response_sentences.at(response_id);
                 print(response);
-                WordIdfInfo idf_info = getWordIdfInfo(response, word_idf_table, word_counts,
+                const WordIdfInfo &idf_info = getWordIdfInfo(response, word_idf_table, word_counts,
                         hyper_params.word_cutoff);
                 print(idf_info.keywords_behind);
                 Graph graph;
@@ -507,7 +507,7 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         cout << "post:" << endl;
         auto post_sentence = post_sentences.at(post_and_responses.post_id);
         print(post_sentence);
-        auto idf = getWordIdfInfo(post_sentence, word_idf_table, word_count_table,
+        const auto &idf = getWordIdfInfo(post_sentence, word_idf_table, word_count_table,
                 hyper_params.word_cutoff);
         Graph graph;
         GraphBuilder graph_builder;
@@ -574,10 +574,9 @@ void interact(const DefaultConfig &default_config, const HyperParams &hyper_para
         words.push_back(STOP_SYMBOL);
 
         if (default_config.split_unknown_words) {
-            words = reprocessSentence(words, word_counts, word_cutoff);
+//            words = reprocessSentence(words, word_counts, word_cutoff);
         }
-        auto idf = getWordIdfInfo(words, word_idfs, word_counts, hyper_params.word_cutoff);
-
+        const auto &idf = getWordIdfInfo(words, word_idfs, word_counts, hyper_params.word_cutoff);
         Graph graph;
         GraphBuilder graph_builder;
         graph_builder.forward(graph, words, idf.keywords_behind, hyper_params, model_params,
@@ -809,6 +808,31 @@ int main(int argc, char *argv[]) {
     cout << "calculating idf" << endl;
     auto all_idf = calculateIdf(all_sentences);
     cout << "idf calculated" << endl;
+    cout << "posts:" << post_sentences.size() << endl;
+    for (auto &sentence : post_sentences) {
+        auto info = getWordIdfInfo(sentence, all_idf, word_counts, hyper_params.word_cutoff);
+        for (auto &str : info.keywords_behind) {
+            cout << str << " ";
+        }
+        cout << endl;
+        for (auto &f : info.word_idfs) {
+            cout << f << " ";
+        }
+        cout << endl;
+    }
+    cout << "responses:" << response_sentences.size() << endl;
+    for (auto &sentence : response_sentences) {
+        auto info = getWordIdfInfo(sentence, all_idf, word_counts, hyper_params.word_cutoff);
+        for (auto &str : info.keywords_behind) {
+            cout << str << " ";
+        }
+        cout << endl;
+        for (auto &f : info.word_idfs) {
+            cout << f << " ";
+        }
+        cout << endl;
+    }
+    exit(0);
 
     cout << "word info got" << endl;
     auto black_list = readBlackList(default_config.black_list_file);
@@ -875,10 +899,6 @@ int main(int argc, char *argv[]) {
         dtype last_loss_sum = 1e10f;
         dtype loss_sum = 0.0f;
 
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.SetEnabled(true);
-        profiler.BeginEvent("total");
-
         int iteration = 0;
         string last_saved_model;
 
@@ -904,8 +924,13 @@ int main(int argc, char *argv[]) {
 
             unique_ptr<Metric> metric = unique_ptr<Metric>(new Metric);
             unique_ptr<Metric> keyword_metric = unique_ptr<Metric>(new Metric);
-            for (int batch_i = 0; batch_i < 10; ++batch_i) {
-                cout << format("batch_i:%1% iteration:%2%") % batch_i % iteration << endl;
+            n3ldg_cuda::Profiler::Reset();
+            n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+            profiler.SetEnabled(true);
+            profiler.BeginEvent("total");
+
+            for (int batch_i = 0; batch_i < batch_count; ++batch_i) {
+                cout << "batch_i:" << batch_i << " iteration:" << iteration << endl;
                 Graph graph;
                 vector<shared_ptr<GraphBuilder>> graph_builders;
                 vector<DecoderComponents> decoder_components_vector;
@@ -922,16 +947,16 @@ int main(int argc, char *argv[]) {
                                 instance_index));
                     auto post_sentence = post_sentences.at(post_id);
                     profiler.BeginEvent("getWordIdfInfo");
-                    WordIdfInfo post_idf = getWordIdfInfo(post_sentence, all_idf, word_counts,
-                            hyper_params.word_cutoff);
+                    const WordIdfInfo& post_idf = getWordIdfInfo(post_sentence, all_idf,
+                            word_counts, hyper_params.word_cutoff);
                     profiler.EndEvent();
                     graph_builder->forward(graph, post_sentence, post_idf.keywords_behind,
                             hyper_params, model_params, true);
                     int response_id = train_conversation_pairs.at(instance_index).response_id;
                     auto response_sentence = response_sentences.at(response_id);
                     profiler.BeginEvent("getWordIdfInfo");
-                    WordIdfInfo idf_info = getWordIdfInfo(response_sentence, all_idf, word_counts,
-                            hyper_params.word_cutoff);
+                    const WordIdfInfo &idf_info = getWordIdfInfo(response_sentence, all_idf,
+                            word_counts, hyper_params.word_cutoff);
                     profiler.EndEvent();
                     DecoderComponents decoder_components;
                     graph_builder->forwardDecoder(graph, decoder_components, response_sentence,
@@ -954,7 +979,7 @@ int main(int argc, char *argv[]) {
                     profiler.EndCudaEvent();
                     loss_sum += result.first;
                     analyze(result.second, word_ids, *metric);
-                    WordIdfInfo response_idf = getWordIdfInfo(response_sentence, all_idf,
+                    const WordIdfInfo &response_idf = getWordIdfInfo(response_sentence, all_idf,
                             word_counts, hyper_params.word_cutoff);
                     auto keyword_nodes_and_ids = keywordNodesAndIds(
                             decoder_components_vector.at(i), response_idf, model_params);
@@ -1035,10 +1060,9 @@ int main(int argc, char *argv[]) {
 
             last_loss_sum = loss_sum;
             loss_sum = 0;
-            break;
+            profiler.EndCudaEvent();
+            profiler.Print();
         }
-        profiler.EndCudaEvent();
-        profiler.Print();
     } else {
         abort();
     }
