@@ -309,6 +309,36 @@ WordIdfInfo getWordIdfInfo(const vector<string> &sentence,
     return word_idf_info;
 }
 
+vector<WordIdfInfo> readWordIdfInfoList(const string &filename) {
+    std::string line;
+    std::ifstream ifs(filename);
+    std::vector<WordIdfInfo> results;
+
+    while (std::getline(ifs, line)) {
+        WordIdfInfo word_idf_info;
+        boost::split(word_idf_info.keywords_behind, line, boost::is_any_of(" "));
+        if (!std::getline(ifs, line)) {
+            cerr << filename << " error" << endl;
+            abort();
+        }
+
+        vector<string> words;
+        boost::split(words, line, boost::is_any_of(" "));
+        for (const string &word : words) {
+            try {
+                word_idf_info.word_idfs.push_back(stof(word));
+            } catch (const std::exception &e) {
+                cerr << word << endl;
+                throw e;
+            }
+        }
+
+        results.push_back(move(word_idf_info));
+    }
+
+    return results;
+}
+
 std::vector<std::string> readBlackList(const std::string &filename) {
     std::string line;
     std::ifstream ifs(filename);

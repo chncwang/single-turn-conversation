@@ -21,6 +21,8 @@ struct DefaultConfig {
     std::string pair_file;
     std::string post_file;
     std::string response_file;
+    std::string post_idf_file;
+    std::string response_idf_file;
     ProgramMode program_mode;
     bool check_grad;
     bool one_response;
@@ -52,6 +54,8 @@ struct DefaultConfig {
         std::cout << "pair_file:" << pair_file << std::endl
             << "post_file:" << post_file << std::endl
             << "response_file:" << response_file << std::endl
+            << "post_idf_file:" << post_idf_file << std::endl
+            << "response_idf_file:" << response_idf_file << std::endl
             << "program_mode:" << program_mode << std::endl
             << "check_grad:" << check_grad << std::endl
             << "one_response:" << one_response << std::endl

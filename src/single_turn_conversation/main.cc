@@ -131,6 +131,18 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
         abort();
     }
 
+    default_config.post_idf_file = ini_reader.Get(SECTION, "post_idf_file", "");
+    if (default_config.post_idf_file.empty()) {
+        cerr << "post idf file empty" << endl;
+        abort();
+    }
+
+    default_config.response_idf_file = ini_reader.Get(SECTION, "response_idf_file", "");
+    if (default_config.response_idf_file.empty()) {
+        cerr << "response idf file empty" << endl;
+        abort();
+    }
+
     string program_mode_str = ini_reader.Get(SECTION, "program_mode", "");
     ProgramMode program_mode;
     if (program_mode_str == "interacting") {
@@ -426,8 +438,8 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
         const vector<PostAndResponses> &post_and_responses_vector,
         const vector<vector<string>> &post_sentences,
         const vector<vector<string>> &response_sentences,
-        const unordered_map<string, float> &word_idf_table,
-        const unordered_map<string, int> &word_counts) {
+        const vector<WordIdfInfo> &post_idf_info_list,
+        const vector<WordIdfInfo> &response_idf_info_list) {
     cout << "metricTestPosts begin" << endl;
     hyper_params.print();
     float rep_perplex(0.0f);
@@ -439,8 +451,7 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
             cout << "post:" << endl;
             auto post = post_sentences.at(post_and_responses.post_id);
             print(post);
-            const WordIdfInfo &post_idf_info = getWordIdfInfo(post, word_idf_table, word_counts,
-                    hyper_params.word_cutoff);
+            const WordIdfInfo &post_idf_info = post_idf_info_list.at(post_and_responses.post_id);
             print(post_idf_info.keywords_behind);
 
             const vector<int> &response_ids = post_and_responses.response_ids;
@@ -450,8 +461,7 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
                 cout << "response:" << endl;
                 auto response = response_sentences.at(response_id);
                 print(response);
-                const WordIdfInfo &idf_info = getWordIdfInfo(response, word_idf_table, word_counts,
-                        hyper_params.word_cutoff);
+                const WordIdfInfo &idf_info = response_idf_info_list.at(response_id);
                 print(idf_info.keywords_behind);
                 Graph graph;
                 GraphBuilder graph_builder;
@@ -494,8 +504,9 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
 
 void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         DefaultConfig &default_config,
-        const unordered_map<string, float> &word_idf_table,
-        const unordered_map<string, int> &word_count_table,
+        const unordered_map<string, float> & word_idf_table,
+        const vector<WordIdfInfo> &post_idf_info_list,
+        const vector<WordIdfInfo> &response_idf_info_list,
         const vector<PostAndResponses> &post_and_responses_vector,
         const vector<vector<string>> &post_sentences,
         const vector<vector<string>> &response_sentences,
@@ -507,8 +518,7 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         cout << "post:" << endl;
         auto post_sentence = post_sentences.at(post_and_responses.post_id);
         print(post_sentence);
-        const auto &idf = getWordIdfInfo(post_sentence, word_idf_table, word_count_table,
-                hyper_params.word_cutoff);
+        const auto &idf = post_idf_info_list.at(post_and_responses.post_id);
         Graph graph;
         GraphBuilder graph_builder;
         graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id),
@@ -562,40 +572,6 @@ void interact(const DefaultConfig &default_config, const HyperParams &hyper_para
         unordered_map<string, int> &word_counts,
         int word_cutoff,
         const vector<string> black_list) {
-    hyper_params.print();
-    while (true) {
-        string post;
-        getline(cin >> ws, post);
-        utf8_string utf8_post(post);
-        vector<string> words;
-        for (int i = 0; i < utf8_post.length(); ++i) {
-            words.push_back(utf8_post.substr(i, 1).cpp_str());
-        }
-        words.push_back(STOP_SYMBOL);
-
-        if (default_config.split_unknown_words) {
-//            words = reprocessSentence(words, word_counts, word_cutoff);
-        }
-        const auto &idf = getWordIdfInfo(words, word_idfs, word_counts, hyper_params.word_cutoff);
-        Graph graph;
-        GraphBuilder graph_builder;
-        graph_builder.forward(graph, words, idf.keywords_behind, hyper_params, model_params,
-                false);
-        vector<DecoderComponents> decoder_components_vector;
-        decoder_components_vector.resize(hyper_params.beam_size);
-        cout << format("decodeTestPosts - beam_size:%1% decoder_components_vector.size:%2%") %
-            hyper_params.beam_size % decoder_components_vector.size() << endl;
-        auto pair = graph_builder.forwardDecoderUsingBeamSearch(graph, decoder_components_vector,
-                word_idfs, hyper_params.beam_size, hyper_params, model_params, default_config,
-                black_list);
-        const vector<WordIdAndProbability> &word_ids = pair.first;
-        cout << "post:" << endl;
-        cout << post << endl;
-        cout << "response:" << endl;
-        printWordIds(word_ids, model_params.lookup_table);
-        dtype probability = pair.second;
-        cout << format("probability:%1%") % probability << endl;
-    }
 }
 
 pair<unordered_set<int>, unordered_set<int>> PostAndResponseIds(
@@ -808,34 +784,15 @@ int main(int argc, char *argv[]) {
     cout << "calculating idf" << endl;
     auto all_idf = calculateIdf(all_sentences);
     cout << "idf calculated" << endl;
-    cout << "posts:" << post_sentences.size() << endl;
-    for (auto &sentence : post_sentences) {
-        auto info = getWordIdfInfo(sentence, all_idf, word_counts, hyper_params.word_cutoff);
-        for (auto &str : info.keywords_behind) {
-            cout << str << " ";
-        }
-        cout << endl;
-        for (auto &f : info.word_idfs) {
-            cout << f << " ";
-        }
-        cout << endl;
-    }
-    cout << "responses:" << response_sentences.size() << endl;
-    for (auto &sentence : response_sentences) {
-        auto info = getWordIdfInfo(sentence, all_idf, word_counts, hyper_params.word_cutoff);
-        for (auto &str : info.keywords_behind) {
-            cout << str << " ";
-        }
-        cout << endl;
-        for (auto &f : info.word_idfs) {
-            cout << f << " ";
-        }
-        cout << endl;
-    }
-    exit(0);
-
-    cout << "word info got" << endl;
     auto black_list = readBlackList(default_config.black_list_file);
+
+    cout << "reading post idf info ..." << endl;
+    vector<WordIdfInfo> post_idf_info_list = readWordIdfInfoList(default_config.post_idf_file);
+    cout << "completed" << endl;
+    cout << "reading response idf info ..." << endl;
+    vector<WordIdfInfo> response_idf_info_list = readWordIdfInfoList(
+            default_config.response_idf_file);
+    cout << "completed" << endl;
 
     if (default_config.program_mode == ProgramMode::INTERACTING) {
         hyper_params.beam_size = beam_size;
@@ -843,8 +800,9 @@ int main(int argc, char *argv[]) {
                 hyper_params.word_cutoff, black_list);
     } else if (default_config.program_mode == ProgramMode::DECODING) {
         hyper_params.beam_size = beam_size;
-        decodeTestPosts(hyper_params, model_params, default_config, all_idf, word_counts,
-                test_post_and_responses, post_sentences, response_sentences, black_list);
+        decodeTestPosts(hyper_params, model_params, default_config, all_idf, post_idf_info_list,
+                response_idf_info_list, test_post_and_responses, post_sentences,
+                response_sentences, black_list);
     } else if (default_config.program_mode == ProgramMode::METRIC) {
         path dir_path(default_config.input_model_dir);
         if (!is_directory(dir_path)) {
@@ -877,7 +835,8 @@ int main(int argc, char *argv[]) {
             loadModel(default_config, hyper_params, model_params, root_ptr.get(),
                     allocate_model_params);
             float rep_perplex = metricTestPosts(hyper_params, model_params, dev_post_and_responses,
-                    post_sentences, response_sentences, all_idf, word_counts);
+                    post_sentences, response_sentences, post_idf_info_list,
+                    response_idf_info_list);
             cout << format("model %1% rep_perplex is %2%") % model_file_path % rep_perplex << endl;
             if (max_rep_perplex < rep_perplex) {
                 max_rep_perplex = rep_perplex;
@@ -946,18 +905,12 @@ int main(int argc, char *argv[]) {
                     conversation_pair_in_batch.push_back(train_conversation_pairs.at(
                                 instance_index));
                     auto post_sentence = post_sentences.at(post_id);
-                    profiler.BeginEvent("getWordIdfInfo");
-                    const WordIdfInfo& post_idf = getWordIdfInfo(post_sentence, all_idf,
-                            word_counts, hyper_params.word_cutoff);
-                    profiler.EndEvent();
+                    const WordIdfInfo& post_idf = post_idf_info_list.at(post_id);
                     graph_builder->forward(graph, post_sentence, post_idf.keywords_behind,
                             hyper_params, model_params, true);
                     int response_id = train_conversation_pairs.at(instance_index).response_id;
                     auto response_sentence = response_sentences.at(response_id);
-                    profiler.BeginEvent("getWordIdfInfo");
-                    const WordIdfInfo &idf_info = getWordIdfInfo(response_sentence, all_idf,
-                            word_counts, hyper_params.word_cutoff);
-                    profiler.EndEvent();
+                    const WordIdfInfo &idf_info = response_idf_info_list.at(response_id);
                     DecoderComponents decoder_components;
                     graph_builder->forwardDecoder(graph, decoder_components, response_sentence,
                             idf_info.keywords_behind, hyper_params, model_params, true);
@@ -979,8 +932,7 @@ int main(int argc, char *argv[]) {
                     profiler.EndCudaEvent();
                     loss_sum += result.first;
                     analyze(result.second, word_ids, *metric);
-                    const WordIdfInfo &response_idf = getWordIdfInfo(response_sentence, all_idf,
-                            word_counts, hyper_params.word_cutoff);
+                    const WordIdfInfo &response_idf = response_idf_info_list.at(response_id);
                     auto keyword_nodes_and_ids = keywordNodesAndIds(
                             decoder_components_vector.at(i), response_idf, model_params);
                     profiler.BeginEvent("loss");
