@@ -58,6 +58,26 @@ void exportToGradChecker(ModelParams &model_params, CheckGrad &grad_checker) {
     grad_checker.add(model_params.normal_attention_parrams.bi_atten.W2, "attention W2");
 }
 
+vector<string> getAllWordsByIdfAscendingly(const unordered_map<string, float> &idf_table,
+        const unordered_map<string, int> &word_count_table,
+        int word_cutoff) {
+    vector<string> result;
+    for (auto &it : word_count_table) {
+        if (it.second > word_cutoff && it.first != unknownkey) {
+            result.push_back(it.first);
+        }
+    }
+
+    auto cmp = [&idf_table](const string &a, const string &b) -> bool {
+        return idf_table.at(a) < idf_table.at(b);
+    };
+
+    sort(result.begin(), result.end(), cmp);
+    result.push_back(unknownkey);
+
+    return result;
+}
+
 unordered_map<string, float> calculateIdf(const vector<vector<string>> sentences) {
     cout << "sentences size:" << sentences.size() << endl;
     unordered_map<string, int> doc_counts;
@@ -784,6 +804,15 @@ int main(int argc, char *argv[]) {
     cout << "calculating idf" << endl;
     auto all_idf = calculateIdf(all_sentences);
     cout << "idf calculated" << endl;
+
+    vector<string> all_word_list = getAllWordsByIdfAscendingly(all_idf, word_counts,
+            hyper_params.word_cutoff);
+    for (int i = 0; i < 100; ++i) {
+        cout << all_word_list.at(i) << " ";
+    }
+    cout << all_word_list.back() << endl;
+    exit(0);
+
     auto black_list = readBlackList(default_config.black_list_file);
 
     cout << "reading post idf info ..." << endl;
