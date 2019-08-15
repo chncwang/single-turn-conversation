@@ -58,6 +58,19 @@ void exportToGradChecker(ModelParams &model_params, CheckGrad &grad_checker) {
     grad_checker.add(model_params.normal_attention_parrams.bi_atten.W2, "attention W2");
 }
 
+vector<string> getAllWordsByIdfAscendingly(const unordered_map<string, float> &idf_table,
+        const unordered_map<string, int> &word_count_table,
+        int word_cutoff) {
+    vector<string> result;
+    for (auto &it : word_count_table) {
+        if (it.second > word_cutoff && it.first != unknownkey) {
+            result.push_back(it.first);
+        }
+    }
+
+    return result;
+}
+
 unordered_map<string, float> calculateIdf(const vector<vector<string>> sentences) {
     cout << "sentences size:" << sentences.size() << endl;
     unordered_map<string, int> doc_counts;
