@@ -796,6 +796,38 @@ int main(int argc, char *argv[]) {
     cout << "idf calculated" << endl;
     auto black_list = readBlackList(default_config.black_list_file);
 
+//    cout << "post:" << endl;
+//    for (auto &s : post_sentences) {
+//        WordIdfInfo info = getWordIdfInfo(s, all_idf, word_counts, hyper_params.word_cutoff);
+//        print(info.keywords_behind);
+//        bool first = true;
+//        for (float f : info.word_idfs) {
+//            if (first) {
+//                first = false;
+//            } else {
+//                cout << " ";
+//            }
+//            cout << f;
+//        }
+//        cout << endl;
+//    }
+//    cout << "response:" << endl;
+//    for (auto &s : response_sentences) {
+//        WordIdfInfo info = getWordIdfInfo(s, all_idf, word_counts, hyper_params.word_cutoff);
+//        print(info.keywords_behind);
+//        bool first = true;
+//        for (float f : info.word_idfs) {
+//            if (first) {
+//                first = false;
+//            } else {
+//                cout << " ";
+//            }
+//            cout << f;
+//        }
+//        cout << endl;
+//    }
+//    exit(0);
+
     cout << "reading post idf info ..." << endl;
     vector<WordIdfInfo> post_idf_info_list = readWordIdfInfoList(default_config.post_idf_file);
     cout << "completed" << endl;
