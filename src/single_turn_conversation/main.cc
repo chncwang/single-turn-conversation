@@ -736,9 +736,29 @@ int main(int argc, char *argv[]) {
         }
     };
     wordStat();
-
     word_counts[unknownkey] = 1000000000;
-    alphabet.init(word_counts, hyper_params.word_cutoff);
+
+    vector<vector<string>> all_sentences;
+    cout << "merging sentences..." << endl;
+    for (auto &s : post_sentences) {
+        all_sentences.push_back(s);
+    }
+    for (auto &s : response_sentences) {
+        all_sentences.push_back(s);
+    }
+    cout << "merged" << endl;
+    cout << "calculating idf" << endl;
+    auto all_idf = calculateIdf(all_sentences);
+    cout << "idf calculated" << endl;
+
+    vector<string> all_word_list = getAllWordsByIdfAscendingly(all_idf, word_counts,
+            hyper_params.word_cutoff);
+    for (int i = 0; i < 40000; ++i) {
+        cout << all_word_list.at(i) << " ";
+    }
+    cout << all_word_list.back() << endl;
+
+    alphabet.init(all_word_list);
     cout << boost::format("alphabet size:%1%") % alphabet.size() << endl;
 
     ModelParams model_params;
@@ -791,27 +811,6 @@ int main(int argc, char *argv[]) {
             word_counts = model_params.lookup_table.elems.m_string_to_id;
         }
     }
-
-    vector<vector<string>> all_sentences;
-    cout << "merging sentences..." << endl;
-    for (auto &s : post_sentences) {
-        all_sentences.push_back(s);
-    }
-    for (auto &s : response_sentences) {
-        all_sentences.push_back(s);
-    }
-    cout << "merged" << endl;
-    cout << "calculating idf" << endl;
-    auto all_idf = calculateIdf(all_sentences);
-    cout << "idf calculated" << endl;
-
-    vector<string> all_word_list = getAllWordsByIdfAscendingly(all_idf, word_counts,
-            hyper_params.word_cutoff);
-    for (int i = 0; i < 100; ++i) {
-        cout << all_word_list.at(i) << " ";
-    }
-    cout << all_word_list.back() << endl;
-    exit(0);
 
     auto black_list = readBlackList(default_config.black_list_file);
 
