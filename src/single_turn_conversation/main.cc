@@ -1049,3 +1049,14 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+
+//int main() {
+//    vector<float> vec = {0, 1, 2, 3, 4, 5};
+//    Mat matrix(vec.data(), 2, 3);
+//    cout << matrix << endl;
+
+//    Mat matrix2 (matrix.data() + 2, 2, 1);
+//    cout << matrix2 << endl;
+
+//    return 0;
+//}
