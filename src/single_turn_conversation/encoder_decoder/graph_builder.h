@@ -339,13 +339,8 @@ struct GraphBuilder {
             last_input = bucket;
         }
 
-        vector<Node *> encoder_hiddens = transferVector<Node *, DropoutNode*>(
-                left_to_right_encoder._hiddens, [](DropoutNode *dropout) {
-                return dropout;
-                });
-
         decoder_components.forward(graph, hyper_params, model_params, *last_input,
-                encoder_hiddens, is_training);
+                left_to_right_encoder._hiddens, is_training);
 
         Node *decoder_to_wordvector = decoder_components.decoderToWordVectors(graph, hyper_params,
                 model_params, i);
