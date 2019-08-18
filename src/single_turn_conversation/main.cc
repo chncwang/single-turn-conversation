@@ -624,439 +624,446 @@ unordered_set<string> knownWords(const vector<string> &words) {
     return word_set;
 }
 
-int main(int argc, char *argv[]) {
-    cout << "dtype size:" << sizeof(dtype) << endl;
+//int main(int argc, char *argv[]) {
+//    cout << "dtype size:" << sizeof(dtype) << endl;
 
-    Options options("single-turn-conversation", "single turn conversation");
-    options.add_options()
-        ("config", "config file name", cxxopts::value<string>());
-    auto args = options.parse(argc, argv);
+//    Options options("single-turn-conversation", "single turn conversation");
+//    options.add_options()
+//        ("config", "config file name", cxxopts::value<string>());
+//    auto args = options.parse(argc, argv);
 
-    string configfilename = args["config"].as<string>();
-    INIReader ini_reader(configfilename);
-    if (ini_reader.ParseError() < 0) {
-        cerr << "parse ini failed" << endl;
-        abort();
-    }
+//    string configfilename = args["config"].as<string>();
+//    INIReader ini_reader(configfilename);
+//    if (ini_reader.ParseError() < 0) {
+//        cerr << "parse ini failed" << endl;
+//        abort();
+//    }
 
-    DefaultConfig &default_config = GetDefaultConfig();
-    default_config = parseDefaultConfig(ini_reader);
-    cout << "default_config:" << endl;
-    default_config.print();
+//    DefaultConfig &default_config = GetDefaultConfig();
+//    default_config = parseDefaultConfig(ini_reader);
+//    cout << "default_config:" << endl;
+//    default_config.print();
 
-#if USE_GPU
-    n3ldg_cuda::InitCuda(default_config.device_id, default_config.memory_in_gb);
-#endif
+//#if USE_GPU
+//    n3ldg_cuda::InitCuda(default_config.device_id, default_config.memory_in_gb);
+//#endif
 
-    HyperParams hyper_params = parseHyperParams(ini_reader);
-    cout << "hyper_params:" << endl;
-    hyper_params.print();
+//    HyperParams hyper_params = parseHyperParams(ini_reader);
+//    cout << "hyper_params:" << endl;
+//    hyper_params.print();
 
-    vector<PostAndResponses> post_and_responses_vector = readPostAndResponsesVector(
-            default_config.pair_file);
-    cout << "post_and_responses_vector size:" << post_and_responses_vector.size() << endl;
+//    vector<PostAndResponses> post_and_responses_vector = readPostAndResponsesVector(
+//            default_config.pair_file);
+//    cout << "post_and_responses_vector size:" << post_and_responses_vector.size() << endl;
 
-    default_random_engine engine(default_config.seed);
-    shuffle(begin(post_and_responses_vector), end(post_and_responses_vector),
-            engine);
-    vector<PostAndResponses> dev_post_and_responses, test_post_and_responses,
-        train_post_and_responses;
-    vector<ConversationPair> train_conversation_pairs;
-    int i = 0;
-    for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
-        auto add_to_train = [&]() {
-            if (default_config.program_mode == ProgramMode::TRAINING) {
-                train_post_and_responses.push_back(post_and_responses);
-                vector<ConversationPair> conversation_pairs =
-                    toConversationPairs(post_and_responses);
-                for (ConversationPair &conversation_pair : conversation_pairs) {
-                    train_conversation_pairs.push_back(move(conversation_pair));
-                }
-            }
-        };
-        if (i < default_config.dev_size) {
-            dev_post_and_responses.push_back(post_and_responses);
-            if (default_config.learn_test) {
-                add_to_train();
-            }
-        } else if (i < default_config.dev_size + default_config.test_size) {
-            test_post_and_responses.push_back(post_and_responses);
-            if (default_config.learn_test) {
-                add_to_train();
-            }
-        } else {
-            if (default_config.program_mode == ProgramMode::TRAINING) {
-                add_to_train();
-            }
-        }
-        ++i;
-    }
+//    default_random_engine engine(default_config.seed);
+//    shuffle(begin(post_and_responses_vector), end(post_and_responses_vector),
+//            engine);
+//    vector<PostAndResponses> dev_post_and_responses, test_post_and_responses,
+//        train_post_and_responses;
+//    vector<ConversationPair> train_conversation_pairs;
+//    int i = 0;
+//    for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
+//        auto add_to_train = [&]() {
+//            if (default_config.program_mode == ProgramMode::TRAINING) {
+//                train_post_and_responses.push_back(post_and_responses);
+//                vector<ConversationPair> conversation_pairs =
+//                    toConversationPairs(post_and_responses);
+//                for (ConversationPair &conversation_pair : conversation_pairs) {
+//                    train_conversation_pairs.push_back(move(conversation_pair));
+//                }
+//            }
+//        };
+//        if (i < default_config.dev_size) {
+//            dev_post_and_responses.push_back(post_and_responses);
+//            if (default_config.learn_test) {
+//                add_to_train();
+//            }
+//        } else if (i < default_config.dev_size + default_config.test_size) {
+//            test_post_and_responses.push_back(post_and_responses);
+//            if (default_config.learn_test) {
+//                add_to_train();
+//            }
+//        } else {
+//            if (default_config.program_mode == ProgramMode::TRAINING) {
+//                add_to_train();
+//            }
+//        }
+//        ++i;
+//    }
 
-    cout << "train size:" << train_conversation_pairs.size() << " dev size:" <<
-        dev_post_and_responses.size() << " test size:" << test_post_and_responses.size() << endl;
+//    cout << "train size:" << train_conversation_pairs.size() << " dev size:" <<
+//        dev_post_and_responses.size() << " test size:" << test_post_and_responses.size() << endl;
 
-    vector<vector<string>> post_sentences = readSentences(default_config.post_file);
-    vector<vector<string>> response_sentences = readSentences(default_config.response_file);
+//    vector<vector<string>> post_sentences = readSentences(default_config.post_file);
+//    vector<vector<string>> response_sentences = readSentences(default_config.response_file);
 
-    Alphabet alphabet;
-    shared_ptr<Json::Value> root_ptr;
-    unordered_map<string, int> word_counts;
-    auto wordStat = [&]() {
-        for (const ConversationPair &conversation_pair : train_conversation_pairs) {
-            const vector<string> &post_sentence = post_sentences.at(conversation_pair.post_id);
-            addWord(word_counts, post_sentence);
+//    Alphabet alphabet;
+//    shared_ptr<Json::Value> root_ptr;
+//    unordered_map<string, int> word_counts;
+//    auto wordStat = [&]() {
+//        for (const ConversationPair &conversation_pair : train_conversation_pairs) {
+//            const vector<string> &post_sentence = post_sentences.at(conversation_pair.post_id);
+//            addWord(word_counts, post_sentence);
 
-            const vector<string> &response_sentence = response_sentences.at(
-                    conversation_pair.response_id);
-            addWord(word_counts, response_sentence);
-        }
+//            const vector<string> &response_sentence = response_sentences.at(
+//                    conversation_pair.response_id);
+//            addWord(word_counts, response_sentence);
+//        }
 
-        if (hyper_params.word_file != "" && !hyper_params.word_finetune) {
-            for (const PostAndResponses &dev : dev_post_and_responses){
-                const vector<string>&post_sentence = post_sentences.at(dev.post_id);
-                addWord(word_counts, post_sentence);
+//        if (hyper_params.word_file != "" && !hyper_params.word_finetune) {
+//            for (const PostAndResponses &dev : dev_post_and_responses){
+//                const vector<string>&post_sentence = post_sentences.at(dev.post_id);
+//                addWord(word_counts, post_sentence);
 
-                for(int i=0; i<dev.response_ids.size(); i++){
-                    const vector<string>&resp_sentence = response_sentences.at(
-                            dev.response_ids.at(i));
-                    addWord(word_counts, resp_sentence);
-                }
-            }
+//                for(int i=0; i<dev.response_ids.size(); i++){
+//                    const vector<string>&resp_sentence = response_sentences.at(
+//                            dev.response_ids.at(i));
+//                    addWord(word_counts, resp_sentence);
+//                }
+//            }
 
-            for (const PostAndResponses &test : test_post_and_responses){
-                const vector<string>&post_sentence = post_sentences.at(test.post_id);
-                addWord(word_counts, post_sentence);
+//            for (const PostAndResponses &test : test_post_and_responses){
+//                const vector<string>&post_sentence = post_sentences.at(test.post_id);
+//                addWord(word_counts, post_sentence);
 
-                for(int i =0; i<test.response_ids.size(); i++){
-                    const vector<string>&resp_sentence =
-                        response_sentences.at(test.response_ids.at(i));
-                    addWord(word_counts, resp_sentence);
-                }
-            }
-        }
-    };
-    wordStat();
-    word_counts[unknownkey] = 1000000000;
+//                for(int i =0; i<test.response_ids.size(); i++){
+//                    const vector<string>&resp_sentence =
+//                        response_sentences.at(test.response_ids.at(i));
+//                    addWord(word_counts, resp_sentence);
+//                }
+//            }
+//        }
+//    };
+//    wordStat();
+//    word_counts[unknownkey] = 1000000000;
 
-    vector<vector<string>> all_sentences;
-    cout << "merging sentences..." << endl;
-    for (auto &s : post_sentences) {
-        all_sentences.push_back(s);
-    }
-    for (auto &s : response_sentences) {
-        all_sentences.push_back(s);
-    }
-    cout << "merged" << endl;
-    cout << "calculating idf" << endl;
-    auto all_idf = calculateIdf(all_sentences);
-    cout << "idf calculated" << endl;
+//    vector<vector<string>> all_sentences;
+//    cout << "merging sentences..." << endl;
+//    for (auto &s : post_sentences) {
+//        all_sentences.push_back(s);
+//    }
+//    for (auto &s : response_sentences) {
+//        all_sentences.push_back(s);
+//    }
+//    cout << "merged" << endl;
+//    cout << "calculating idf" << endl;
+//    auto all_idf = calculateIdf(all_sentences);
+//    cout << "idf calculated" << endl;
 
-    vector<string> all_word_list = getAllWordsByIdfAscendingly(all_idf, word_counts,
-            hyper_params.word_cutoff);
-    for (int i = 0; i < 40000; ++i) {
-        cout << all_word_list.at(i) << " ";
-    }
-    cout << all_word_list.back() << endl;
+//    vector<string> all_word_list = getAllWordsByIdfAscendingly(all_idf, word_counts,
+//            hyper_params.word_cutoff);
+//    for (int i = 0; i < 40000; ++i) {
+//        cout << all_word_list.at(i) << " ";
+//    }
+//    cout << all_word_list.back() << endl;
 
-    alphabet.init(all_word_list);
-    cout << boost::format("alphabet size:%1%") % alphabet.size() << endl;
+//    alphabet.init(all_word_list);
+//    cout << boost::format("alphabet size:%1%") % alphabet.size() << endl;
 
-    ModelParams model_params;
-    int beam_size = hyper_params.beam_size;
+//    ModelParams model_params;
+//    int beam_size = hyper_params.beam_size;
 
-    auto allocate_model_params = [](const DefaultConfig &default_config,
-            const HyperParams &hyper_params,
-            ModelParams &model_params,
-            const Alphabet *alphabet) {
-        cout << format("allocate word_file:%1%\n") % hyper_params.word_file;
-        if (alphabet != nullptr) {
-            if(hyper_params.word_file != "" &&
-                    default_config.program_mode == ProgramMode::TRAINING &&
-                    default_config.input_model_file == "") {
-                model_params.lookup_table.init(*alphabet, hyper_params.word_file,
-                        hyper_params.word_finetune);
-            } else {
-                model_params.lookup_table.init(*alphabet, hyper_params.word_dim, true);
-            }
-        }
-        model_params.left_to_right_encoder_params.init(hyper_params.hidden_dim,
-                2 * hyper_params.word_dim + 2 * hyper_params.hidden_dim);
-        model_params.hidden_to_wordvector_params.init(hyper_params.word_dim,
-                2 * hyper_params.hidden_dim + 3 * hyper_params.word_dim, true);
-        model_params.hidden_to_keyword_params.init(hyper_params.word_dim,
-                2 * hyper_params.hidden_dim, true);
-        model_params.normal_attention_parrams.init(hyper_params.hidden_dim,
-                hyper_params.hidden_dim);
-        model_params.keyword_attention_parrams.init(hyper_params.hidden_dim,
-                hyper_params.hidden_dim);
-    };
+//    auto allocate_model_params = [](const DefaultConfig &default_config,
+//            const HyperParams &hyper_params,
+//            ModelParams &model_params,
+//            const Alphabet *alphabet) {
+//        cout << format("allocate word_file:%1%\n") % hyper_params.word_file;
+//        if (alphabet != nullptr) {
+//            if(hyper_params.word_file != "" &&
+//                    default_config.program_mode == ProgramMode::TRAINING &&
+//                    default_config.input_model_file == "") {
+//                model_params.lookup_table.init(*alphabet, hyper_params.word_file,
+//                        hyper_params.word_finetune);
+//            } else {
+//                model_params.lookup_table.init(*alphabet, hyper_params.word_dim, true);
+//            }
+//        }
+//        model_params.left_to_right_encoder_params.init(hyper_params.hidden_dim,
+//                2 * hyper_params.word_dim + 2 * hyper_params.hidden_dim);
+//        model_params.hidden_to_wordvector_params.init(hyper_params.word_dim,
+//                2 * hyper_params.hidden_dim + 3 * hyper_params.word_dim, true);
+//        model_params.hidden_to_keyword_params.init(hyper_params.word_dim,
+//                2 * hyper_params.hidden_dim, true);
+//        model_params.normal_attention_parrams.init(hyper_params.hidden_dim,
+//                hyper_params.hidden_dim);
+//        model_params.keyword_attention_parrams.init(hyper_params.hidden_dim,
+//                hyper_params.hidden_dim);
+//    };
 
-    if (default_config.program_mode != ProgramMode::METRIC) {
-        if (default_config.input_model_file == "") {
-            allocate_model_params(default_config, hyper_params, model_params, &alphabet);
-            cout << "complete allocate" << endl;
-        } else {
-            root_ptr = loadModel(default_config.input_model_file);
-            loadModel(default_config, hyper_params, model_params, root_ptr.get(),
-                    allocate_model_params);
-            word_counts = model_params.lookup_table.elems.m_string_to_id;
-        }
-    } else {
-        if (default_config.input_model_file == "") {
-            abort();
-        } else {
-            root_ptr = loadModel(default_config.input_model_file);
-            loadModel(default_config, hyper_params, model_params, root_ptr.get(),
-                    allocate_model_params);
-            word_counts = model_params.lookup_table.elems.m_string_to_id;
-        }
-    }
+//    if (default_config.program_mode != ProgramMode::METRIC) {
+//        if (default_config.input_model_file == "") {
+//            allocate_model_params(default_config, hyper_params, model_params, &alphabet);
+//            cout << "complete allocate" << endl;
+//        } else {
+//            root_ptr = loadModel(default_config.input_model_file);
+//            loadModel(default_config, hyper_params, model_params, root_ptr.get(),
+//                    allocate_model_params);
+//            word_counts = model_params.lookup_table.elems.m_string_to_id;
+//        }
+//    } else {
+//        if (default_config.input_model_file == "") {
+//            abort();
+//        } else {
+//            root_ptr = loadModel(default_config.input_model_file);
+//            loadModel(default_config, hyper_params, model_params, root_ptr.get(),
+//                    allocate_model_params);
+//            word_counts = model_params.lookup_table.elems.m_string_to_id;
+//        }
+//    }
 
-    auto black_list = readBlackList(default_config.black_list_file);
+//    auto black_list = readBlackList(default_config.black_list_file);
 
-    cout << "reading post idf info ..." << endl;
-    vector<WordIdfInfo> post_idf_info_list = readWordIdfInfoList(default_config.post_idf_file);
-    cout << "completed" << endl;
-    cout << "reading response idf info ..." << endl;
-    vector<WordIdfInfo> response_idf_info_list = readWordIdfInfoList(
-            default_config.response_idf_file);
-    cout << "completed" << endl;
+//    cout << "reading post idf info ..." << endl;
+//    vector<WordIdfInfo> post_idf_info_list = readWordIdfInfoList(default_config.post_idf_file);
+//    cout << "completed" << endl;
+//    cout << "reading response idf info ..." << endl;
+//    vector<WordIdfInfo> response_idf_info_list = readWordIdfInfoList(
+//            default_config.response_idf_file);
+//    cout << "completed" << endl;
 
-    if (default_config.program_mode == ProgramMode::INTERACTING) {
-        hyper_params.beam_size = beam_size;
-        interact(default_config, hyper_params, model_params, all_idf, word_counts,
-                hyper_params.word_cutoff, black_list);
-    } else if (default_config.program_mode == ProgramMode::DECODING) {
-        hyper_params.beam_size = beam_size;
-        decodeTestPosts(hyper_params, model_params, default_config, all_idf, post_idf_info_list,
-                response_idf_info_list, test_post_and_responses, post_sentences,
-                response_sentences, black_list);
-    } else if (default_config.program_mode == ProgramMode::METRIC) {
-        path dir_path(default_config.input_model_dir);
-        if (!is_directory(dir_path)) {
-            cerr << format("%1% is not dir path") % default_config.input_model_dir << endl;
-            abort();
-        }
+//    if (default_config.program_mode == ProgramMode::INTERACTING) {
+//        hyper_params.beam_size = beam_size;
+//        interact(default_config, hyper_params, model_params, all_idf, word_counts,
+//                hyper_params.word_cutoff, black_list);
+//    } else if (default_config.program_mode == ProgramMode::DECODING) {
+//        hyper_params.beam_size = beam_size;
+//        decodeTestPosts(hyper_params, model_params, default_config, all_idf, post_idf_info_list,
+//                response_idf_info_list, test_post_and_responses, post_sentences,
+//                response_sentences, black_list);
+//    } else if (default_config.program_mode == ProgramMode::METRIC) {
+//        path dir_path(default_config.input_model_dir);
+//        if (!is_directory(dir_path)) {
+//            cerr << format("%1% is not dir path") % default_config.input_model_dir << endl;
+//            abort();
+//        }
 
-        vector<string> ordered_file_paths;
-        for(auto& entry : boost::make_iterator_range(directory_iterator(dir_path), {})) {
-            string basic_name = entry.path().filename().string();
-            cout << format("basic_name:%1%") % basic_name << endl;
-            if (basic_name.find("model") != 0) {
-                continue;
-            }
+//        vector<string> ordered_file_paths;
+//        for(auto& entry : boost::make_iterator_range(directory_iterator(dir_path), {})) {
+//            string basic_name = entry.path().filename().string();
+//            cout << format("basic_name:%1%") % basic_name << endl;
+//            if (basic_name.find("model") != 0) {
+//                continue;
+//            }
 
-            string model_file_path = entry.path().string();
-            ordered_file_paths.push_back(model_file_path);
-        }
-        std::sort(ordered_file_paths.begin(), ordered_file_paths.end(),
-                [](const string &a, const string &b)->bool {
-                using boost::filesystem::last_write_time;
-                return last_write_time(a) < last_write_time(b);
-                });
+//            string model_file_path = entry.path().string();
+//            ordered_file_paths.push_back(model_file_path);
+//        }
+//        std::sort(ordered_file_paths.begin(), ordered_file_paths.end(),
+//                [](const string &a, const string &b)->bool {
+//                using boost::filesystem::last_write_time;
+//                return last_write_time(a) < last_write_time(b);
+//                });
 
-        float max_rep_perplex = 0.0f;
-        for(const string &model_file_path : ordered_file_paths) {
-            cout << format("model_file_path:%1%") % model_file_path << endl;
-            ModelParams model_params;
-            shared_ptr<Json::Value> root_ptr = loadModel(model_file_path);
-            loadModel(default_config, hyper_params, model_params, root_ptr.get(),
-                    allocate_model_params);
-            float rep_perplex = metricTestPosts(hyper_params, model_params, dev_post_and_responses,
-                    post_sentences, response_sentences, post_idf_info_list,
-                    response_idf_info_list);
-            cout << format("model %1% rep_perplex is %2%") % model_file_path % rep_perplex << endl;
-            if (max_rep_perplex < rep_perplex) {
-                max_rep_perplex = rep_perplex;
-                cout << format("best model now is %1%, and rep_perplex is %2%") % model_file_path %
-                    rep_perplex << endl;
-            }
-        }
-    } else if (default_config.program_mode == ProgramMode::TRAINING) {
-        ModelUpdate model_update;
-        model_update._alpha = hyper_params.learning_rate;
-        model_update._reg = hyper_params.l2_reg;
-        exportToOptimizer(model_params, model_update);
+//        float max_rep_perplex = 0.0f;
+//        for(const string &model_file_path : ordered_file_paths) {
+//            cout << format("model_file_path:%1%") % model_file_path << endl;
+//            ModelParams model_params;
+//            shared_ptr<Json::Value> root_ptr = loadModel(model_file_path);
+//            loadModel(default_config, hyper_params, model_params, root_ptr.get(),
+//                    allocate_model_params);
+//            float rep_perplex = metricTestPosts(hyper_params, model_params, dev_post_and_responses,
+//                    post_sentences, response_sentences, post_idf_info_list,
+//                    response_idf_info_list);
+//            cout << format("model %1% rep_perplex is %2%") % model_file_path % rep_perplex << endl;
+//            if (max_rep_perplex < rep_perplex) {
+//                max_rep_perplex = rep_perplex;
+//                cout << format("best model now is %1%, and rep_perplex is %2%") % model_file_path %
+//                    rep_perplex << endl;
+//            }
+//        }
+//    } else if (default_config.program_mode == ProgramMode::TRAINING) {
+//        ModelUpdate model_update;
+//        model_update._alpha = hyper_params.learning_rate;
+//        model_update._reg = hyper_params.l2_reg;
+//        exportToOptimizer(model_params, model_update);
 
-        CheckGrad grad_checker;
-        if (default_config.check_grad) {
-            exportToGradChecker(model_params, grad_checker);
-        }
+//        CheckGrad grad_checker;
+//        if (default_config.check_grad) {
+//            exportToGradChecker(model_params, grad_checker);
+//        }
 
-        dtype last_loss_sum = 1e10f;
-        dtype loss_sum = 0.0f;
+//        dtype last_loss_sum = 1e10f;
+//        dtype loss_sum = 0.0f;
 
-        int iteration = 0;
-        string last_saved_model;
+//        int iteration = 0;
+//        string last_saved_model;
 
-        for (int epoch = 0; ; ++epoch) {
-            cout << "epoch:" << epoch << endl;
-            auto cmp = [&] (const ConversationPair &a, const ConversationPair &b)->bool {
-                auto len = [&] (const ConversationPair &pair)->int {
-                    return post_sentences.at(pair.post_id).size() +
-                        response_sentences.at(pair.response_id).size();
-                };
-                return len(a) < len(b);
-            };
-            sort(begin(train_conversation_pairs), end(train_conversation_pairs), cmp);
-            int valid_len = train_conversation_pairs.size() / hyper_params.batch_size *
-                hyper_params.batch_size;
-            int batch_count = valid_len / hyper_params.batch_size;
-            cout << boost::format("valid_len:%1% batch_count:%2%") % valid_len % batch_count <<
-                endl;
-            for (int i = 0; i < hyper_params.batch_size; ++i) {
-                auto begin_pos = begin(train_conversation_pairs) + i * batch_count;
-                shuffle(begin_pos, begin_pos + batch_count, engine);
-            }
+//        for (int epoch = 0; ; ++epoch) {
+//            cout << "epoch:" << epoch << endl;
+//            auto cmp = [&] (const ConversationPair &a, const ConversationPair &b)->bool {
+//                auto len = [&] (const ConversationPair &pair)->int {
+//                    return post_sentences.at(pair.post_id).size() +
+//                        response_sentences.at(pair.response_id).size();
+//                };
+//                return len(a) < len(b);
+//            };
+//            sort(begin(train_conversation_pairs), end(train_conversation_pairs), cmp);
+//            int valid_len = train_conversation_pairs.size() / hyper_params.batch_size *
+//                hyper_params.batch_size;
+//            int batch_count = valid_len / hyper_params.batch_size;
+//            cout << boost::format("valid_len:%1% batch_count:%2%") % valid_len % batch_count <<
+//                endl;
+//            for (int i = 0; i < hyper_params.batch_size; ++i) {
+//                auto begin_pos = begin(train_conversation_pairs) + i * batch_count;
+//                shuffle(begin_pos, begin_pos + batch_count, engine);
+//            }
 
-            unique_ptr<Metric> metric = unique_ptr<Metric>(new Metric);
-            unique_ptr<Metric> keyword_metric = unique_ptr<Metric>(new Metric);
-            n3ldg_cuda::Profiler::Reset();
-            n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-            profiler.SetEnabled(true);
-            profiler.BeginEvent("total");
+//            unique_ptr<Metric> metric = unique_ptr<Metric>(new Metric);
+//            unique_ptr<Metric> keyword_metric = unique_ptr<Metric>(new Metric);
+//            n3ldg_cuda::Profiler::Reset();
+//            n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+//            profiler.SetEnabled(true);
+//            profiler.BeginEvent("total");
 
-            for (int batch_i = 0; batch_i < batch_count; ++batch_i) {
-                cout << "batch_i:" << batch_i << " iteration:" << iteration << endl;
-                Graph graph;
-                vector<shared_ptr<GraphBuilder>> graph_builders;
-                vector<DecoderComponents> decoder_components_vector;
-                vector<ConversationPair> conversation_pair_in_batch;
-                auto getSentenceIndex = [batch_i, batch_count](int i) {
-                    return i * batch_count + batch_i;
-                };
-                for (int i = 0; i < hyper_params.batch_size; ++i) {
-                    shared_ptr<GraphBuilder> graph_builder(new GraphBuilder);
-                    graph_builders.push_back(graph_builder);
-                    int instance_index = getSentenceIndex(i);
-                    int post_id = train_conversation_pairs.at(instance_index).post_id;
-                    conversation_pair_in_batch.push_back(train_conversation_pairs.at(
-                                instance_index));
-                    auto post_sentence = post_sentences.at(post_id);
-                    const WordIdfInfo& post_idf = post_idf_info_list.at(post_id);
-                    graph_builder->forward(graph, post_sentence, post_idf.keywords_behind,
-                            hyper_params, model_params, true);
-                    int response_id = train_conversation_pairs.at(instance_index).response_id;
-                    auto response_sentence = response_sentences.at(response_id);
-                    const WordIdfInfo &idf_info = response_idf_info_list.at(response_id);
-                    DecoderComponents decoder_components;
-                    graph_builder->forwardDecoder(graph, decoder_components, response_sentence,
-                            idf_info.keywords_behind, hyper_params, model_params, true);
-                    decoder_components_vector.push_back(decoder_components);
-                }
+//            for (int batch_i = 0; batch_i < batch_count; ++batch_i) {
+//                cout << "batch_i:" << batch_i << " iteration:" << iteration << endl;
+//                Graph graph;
+//                vector<shared_ptr<GraphBuilder>> graph_builders;
+//                vector<DecoderComponents> decoder_components_vector;
+//                vector<ConversationPair> conversation_pair_in_batch;
+//                auto getSentenceIndex = [batch_i, batch_count](int i) {
+//                    return i * batch_count + batch_i;
+//                };
+//                for (int i = 0; i < hyper_params.batch_size; ++i) {
+//                    shared_ptr<GraphBuilder> graph_builder(new GraphBuilder);
+//                    graph_builders.push_back(graph_builder);
+//                    int instance_index = getSentenceIndex(i);
+//                    int post_id = train_conversation_pairs.at(instance_index).post_id;
+//                    conversation_pair_in_batch.push_back(train_conversation_pairs.at(
+//                                instance_index));
+//                    auto post_sentence = post_sentences.at(post_id);
+//                    const WordIdfInfo& post_idf = post_idf_info_list.at(post_id);
+//                    graph_builder->forward(graph, post_sentence, post_idf.keywords_behind,
+//                            hyper_params, model_params, true);
+//                    int response_id = train_conversation_pairs.at(instance_index).response_id;
+//                    auto response_sentence = response_sentences.at(response_id);
+//                    const WordIdfInfo &idf_info = response_idf_info_list.at(response_id);
+//                    DecoderComponents decoder_components;
+//                    graph_builder->forwardDecoder(graph, decoder_components, response_sentence,
+//                            idf_info.keywords_behind, hyper_params, model_params, true);
+//                    decoder_components_vector.push_back(decoder_components);
+//                }
 
-                graph.compute();
+//                graph.compute();
 
-                for (int i = 0; i < hyper_params.batch_size; ++i) {
-                    int instance_index = getSentenceIndex(i);
-                    int response_id = train_conversation_pairs.at(instance_index).response_id;
-                    auto response_sentence = response_sentences.at(response_id);
-                    vector<int> word_ids = toIds(response_sentence, model_params.lookup_table);
-                    vector<Node*> result_nodes =
-                        toNodePointers(decoder_components_vector.at(i).wordvector_to_onehots);
-                    profiler.BeginEvent("loss");
-                    auto result = MaxLogProbabilityLoss(result_nodes, word_ids,
-                            hyper_params.batch_size);
-                    profiler.EndCudaEvent();
-                    loss_sum += result.first;
-                    analyze(result.second, word_ids, *metric);
-                    const WordIdfInfo &response_idf = response_idf_info_list.at(response_id);
-                    auto keyword_nodes_and_ids = keywordNodesAndIds(
-                            decoder_components_vector.at(i), response_idf, model_params);
-                    profiler.BeginEvent("loss");
-                    auto keyword_result = MaxLogProbabilityLoss(keyword_nodes_and_ids.first,
-                        keyword_nodes_and_ids.second, hyper_params.batch_size);
-                    profiler.EndCudaEvent();
-                    loss_sum += keyword_result.first;
-                    analyze(keyword_result.second, keyword_nodes_and_ids.second, *keyword_metric);
+//                for (int i = 0; i < hyper_params.batch_size; ++i) {
+//                    int instance_index = getSentenceIndex(i);
+//                    int response_id = train_conversation_pairs.at(instance_index).response_id;
+//                    auto response_sentence = response_sentences.at(response_id);
+//                    vector<int> word_ids = toIds(response_sentence, model_params.lookup_table);
+//                    vector<Node*> result_nodes =
+//                        toNodePointers(decoder_components_vector.at(i).wordvector_to_onehots);
+//                    profiler.BeginEvent("loss");
+//                    auto result = MaxLogProbabilityLoss(result_nodes, word_ids,
+//                            hyper_params.batch_size);
+//                    profiler.EndCudaEvent();
+//                    loss_sum += result.first;
+//                    analyze(result.second, word_ids, *metric);
+//                    const WordIdfInfo &response_idf = response_idf_info_list.at(response_id);
+//                    auto keyword_nodes_and_ids = keywordNodesAndIds(
+//                            decoder_components_vector.at(i), response_idf, model_params);
+//                    profiler.BeginEvent("loss");
+//                    auto keyword_result = MaxLogProbabilityLoss(keyword_nodes_and_ids.first,
+//                        keyword_nodes_and_ids.second, hyper_params.batch_size);
+//                    profiler.EndCudaEvent();
+//                    loss_sum += keyword_result.first;
+//                    analyze(keyword_result.second, keyword_nodes_and_ids.second, *keyword_metric);
 
-                    static int count_for_print;
-                    if (++count_for_print % 100 == 1) {
-                        int post_id = train_conversation_pairs.at(instance_index).post_id;
-                        cout << "post:" << post_id << endl;
-                        print(post_sentences.at(post_id));
+//                    static int count_for_print;
+//                    if (++count_for_print % 100 == 1) {
+//                        int post_id = train_conversation_pairs.at(instance_index).post_id;
+//                        cout << "post:" << post_id << endl;
+//                        print(post_sentences.at(post_id));
 
-                        cout << "golden answer:" << endl;
-                        printWordIds(word_ids, model_params.lookup_table);
-                        cout << "output:" << endl;
-                        printWordIds(result.second, model_params.lookup_table);
+//                        cout << "golden answer:" << endl;
+//                        printWordIds(word_ids, model_params.lookup_table);
+//                        cout << "output:" << endl;
+//                        printWordIds(result.second, model_params.lookup_table);
 
-                        cout << "golden keywords:" << endl;
-                        printWordIds(keyword_nodes_and_ids.second, model_params.lookup_table);
-                        cout << "output:" << endl;
-                        printWordIds(keyword_result.second, model_params.lookup_table);
-                    }
-                }
+//                        cout << "golden keywords:" << endl;
+//                        printWordIds(keyword_nodes_and_ids.second, model_params.lookup_table);
+//                        cout << "output:" << endl;
+//                        printWordIds(keyword_result.second, model_params.lookup_table);
+//                    }
+//                }
 
-                cout << "loss:" << loss_sum << endl;
-                cout << "normal:" << endl;
-                metric->print();
-                cout << "keyword:" << endl;
-                keyword_metric->print();
+//                cout << "loss:" << loss_sum << endl;
+//                cout << "normal:" << endl;
+//                metric->print();
+//                cout << "keyword:" << endl;
+//                keyword_metric->print();
 
-                graph.backward();
+//                graph.backward();
 
-                if (hyper_params.optimizer == Optimizer::ADAM) {
-                    model_update.updateAdam(10.0f);
-                } else if (hyper_params.optimizer == Optimizer::ADAGRAD) {
-                    model_update.update(10.0f);
-                } else if (hyper_params.optimizer == Optimizer::ADAMW) {
-                    model_update.updateAdamW(10.0f);
-                } else {
-                    cerr << "no optimzer set" << endl;
-                    abort();
-                }
+//                if (hyper_params.optimizer == Optimizer::ADAM) {
+//                    model_update.updateAdam(10.0f);
+//                } else if (hyper_params.optimizer == Optimizer::ADAGRAD) {
+//                    model_update.update(10.0f);
+//                } else if (hyper_params.optimizer == Optimizer::ADAMW) {
+//                    model_update.updateAdamW(10.0f);
+//                } else {
+//                    cerr << "no optimzer set" << endl;
+//                    abort();
+//                }
 
-                if (default_config.save_model_per_batch) {
-                    saveModel(hyper_params, model_params, default_config.output_model_file_prefix,
-                            epoch);
-                }
+//                if (default_config.save_model_per_batch) {
+//                    saveModel(hyper_params, model_params, default_config.output_model_file_prefix,
+//                            epoch);
+//                }
 
-                ++iteration;
-            }
+//                ++iteration;
+//            }
 
-            cout << "loss_sum:" << loss_sum << " last_loss_sum:" << last_loss_sum << endl;
-            if (loss_sum > last_loss_sum) {
-                if (epoch == 0) {
-                    cerr << "loss is larger than last epoch but epoch is 0" << endl;
-                    abort();
-                }
-                model_update._alpha *= 0.1f;
-                hyper_params.learning_rate = model_update._alpha;
-                cout << "learning_rate decay:" << model_update._alpha << endl;
-                std::shared_ptr<Json::Value> root = loadModel(last_saved_model);
-                model_params.fromJson((*root)["model_params"]);
-#if USE_GPU
-                model_params.copyFromHostToDevice();
-#endif
-            } else {
-                model_update._alpha = (model_update._alpha - hyper_params.min_learning_rate) *
-                    hyper_params.learning_rate_decay + hyper_params.min_learning_rate;
-                hyper_params.learning_rate = model_update._alpha;
-                cout << "learning_rate now:" << hyper_params.learning_rate << endl;
-                last_saved_model = saveModel(hyper_params, model_params,
-                        default_config.output_model_file_prefix, epoch);
-            }
+//            cout << "loss_sum:" << loss_sum << " last_loss_sum:" << last_loss_sum << endl;
+//            if (loss_sum > last_loss_sum) {
+//                if (epoch == 0) {
+//                    cerr << "loss is larger than last epoch but epoch is 0" << endl;
+//                    abort();
+//                }
+//                model_update._alpha *= 0.1f;
+//                hyper_params.learning_rate = model_update._alpha;
+//                cout << "learning_rate decay:" << model_update._alpha << endl;
+//                std::shared_ptr<Json::Value> root = loadModel(last_saved_model);
+//                model_params.fromJson((*root)["model_params"]);
+//#if USE_GPU
+//                model_params.copyFromHostToDevice();
+//#endif
+//            } else {
+//                model_update._alpha = (model_update._alpha - hyper_params.min_learning_rate) *
+//                    hyper_params.learning_rate_decay + hyper_params.min_learning_rate;
+//                hyper_params.learning_rate = model_update._alpha;
+//                cout << "learning_rate now:" << hyper_params.learning_rate << endl;
+//                last_saved_model = saveModel(hyper_params, model_params,
+//                        default_config.output_model_file_prefix, epoch);
+//            }
 
-            last_loss_sum = loss_sum;
-            loss_sum = 0;
-            profiler.EndCudaEvent();
-            profiler.Print();
-        }
-    } else {
-        abort();
-    }
+//            last_loss_sum = loss_sum;
+//            loss_sum = 0;
+//            profiler.EndCudaEvent();
+//            profiler.Print();
+//        }
+//    } else {
+//        abort();
+//    }
 
-    return 0;
-}
+//    return 0;
+//}
 
-//int main() {
-//    vector<float> vec = {0, 1, 2, 3, 4, 5};
-//    Mat matrix(vec.data(), 2, 3);
-//    cout << matrix << endl;
+int main() {
+    vector<float> vec = {0, 1, 2, 3, 4, 5, 6, 7};
+    Mat matrix(vec.data(), 2, 4);
+    cout << matrix << endl;
+
+    MatrixXd result(2, 8);
+    result.setZero();
+
+    result.block(0, 2, 2, 4).set
+
+    cout << result << endl;
 
 //    Mat matrix2 (matrix.data() + 2, 2, 1);
 //    cout << matrix2 << endl;
 
-//    return 0;
-//}
+    return 0;
+}
