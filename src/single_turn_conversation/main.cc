@@ -776,14 +776,6 @@ int main(int argc, char *argv[]) {
         for (int epoch = 0; ; ++epoch) {
             cout << "epoch:" << epoch << endl;
 
-            if (epoch == 0) {
-                if (iteration < hyper_params.warm_up_iterations) {
-                    model_update._alpha = hyper_params.warm_up_learning_rate;
-                } else {
-                    model_update._alpha = hyper_params.learning_rate;
-                }
-            }
-
             auto cmp = [&] (const ConversationPair &a, const ConversationPair &b)->bool {
                 auto len = [&] (const ConversationPair &pair)->int {
                     return post_sentences.at(pair.post_id).size() +
@@ -805,6 +797,15 @@ int main(int argc, char *argv[]) {
             unique_ptr<Metric> metric = unique_ptr<Metric>(new Metric);
             for (int batch_i = 0; batch_i < batch_count; ++batch_i) {
                 cout << format("batch_i:%1% iteration:%2%") % batch_i % iteration << endl;
+                if (epoch == 0) {
+                    if (iteration < hyper_params.warm_up_iterations) {
+                        model_update._alpha = hyper_params.warm_up_learning_rate;
+                    } else {
+                        model_update._alpha = hyper_params.learning_rate;
+                        cout << "warm up finished, learning rate now:" <<
+                            hyper_params.learning_rate << endl;
+                    }
+                }
                 Graph graph;
                 vector<shared_ptr<GraphBuilder>> graph_builders;
                 vector<DecoderComponents> decoder_components_vector;
