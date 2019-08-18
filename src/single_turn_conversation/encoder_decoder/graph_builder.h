@@ -12,6 +12,7 @@
 #include <queue>
 #include <algorithm>
 #include <boost/format.hpp>
+#include "single_turn_conversation/def.h"
 #include "N3LDG.h"
 #include "tinyutf8.h"
 #include "model_params.h"
