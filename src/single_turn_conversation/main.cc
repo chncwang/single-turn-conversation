@@ -598,6 +598,16 @@ int main(int argc, char *argv[]) {
     vector<vector<string>> post_sentences = readSentences(default_config.post_file);
     vector<vector<string>> response_sentences = readSentences(default_config.response_file);
 
+    cout << "dev:" << endl;
+    for (auto &p : dev_post_and_responses) {
+        print(post_sentences.at(p.post_id));
+    }
+
+    cout << "test:" << endl;
+    for (auto &p : test_post_and_responses) {
+        print(post_sentences.at(p.post_id));
+    }
+
     Alphabet alphabet;
     shared_ptr<Json::Value> root_ptr;
     unordered_map<string, int> word_counts;
