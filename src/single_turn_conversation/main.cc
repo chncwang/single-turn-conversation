@@ -43,6 +43,7 @@ using boost::filesystem::directory_iterator;
 void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
     model_params.left_to_right_encoder_params.exportAdaParams(model_update);
     model_params.hidden_to_wordvector_params.exportAdaParams(model_update);
+    model_params.hidden_to_keyword_params.exportAdaParams(model_update);
     model_params.lookup_table.exportAdaParams(model_update);
     model_params.normal_attention_parrams.exportAdaParams(model_update);
     model_params.keyword_attention_parrams.exportAdaParams(model_update);
@@ -51,7 +52,7 @@ void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
 void exportToGradChecker(ModelParams &model_params, CheckGrad &grad_checker) {
     grad_checker.add(model_params.lookup_table.E, "lookup_table");
     grad_checker.add(model_params.hidden_to_wordvector_params.W, "hidden_to_wordvector_params W");
-    grad_checker.add(model_params.hidden_to_wordvector_params.b, "hidden_to_wordvector_params b");
+    grad_checker.add(model_params.hidden_to_keyword_params.W, "hidden_to_keyword_params W");
     grad_checker.add(model_params.left_to_right_encoder_params.cell_hidden.W,
             "left to right encoder cell_hidden W");
     grad_checker.add(model_params.normal_attention_parrams.bi_atten.W1, "attention W1");
@@ -754,7 +755,8 @@ int main(int argc, char *argv[]) {
     vector<string> all_word_list = getAllWordsByIdfAscendingly(all_idf, word_counts,
             hyper_params.word_cutoff);
     for (int i = 0; i < 40000; ++i) {
-        cout << all_word_list.at(i) << " ";
+        cout << all_word_list.at(i) << ":" << all_idf.at(all_word_list.at(i)) << " " <<
+            word_counts.at(all_word_list.at(i)) << endl;
     }
     cout << all_word_list.back() << endl;
 
@@ -782,9 +784,9 @@ int main(int argc, char *argv[]) {
         model_params.left_to_right_encoder_params.init(hyper_params.hidden_dim,
                 2 * hyper_params.word_dim + 2 * hyper_params.hidden_dim);
         model_params.hidden_to_wordvector_params.init(hyper_params.word_dim,
-                2 * hyper_params.hidden_dim + 3 * hyper_params.word_dim, true);
+                2 * hyper_params.hidden_dim + 3 * hyper_params.word_dim, false);
         model_params.hidden_to_keyword_params.init(hyper_params.word_dim,
-                2 * hyper_params.hidden_dim, true);
+                2 * hyper_params.hidden_dim, false);
         model_params.normal_attention_parrams.init(hyper_params.hidden_dim,
                 hyper_params.hidden_dim);
         model_params.keyword_attention_parrams.init(hyper_params.hidden_dim,
@@ -1018,7 +1020,13 @@ int main(int argc, char *argv[]) {
                                     conversation_pair.response_id), model_params.lookup_table);
                         vector<Node*> result_nodes = toNodePointers(
                                 decoder_components.wordvector_to_onehots);
-                        return MaxLogProbabilityLoss(result_nodes, word_ids, 1).first;
+                        const WordIdfInfo &response_idf = response_idf_info_list.at(
+                                conversation_pair.response_id);
+                        auto keyword_nodes_and_ids = keywordNodesAndIds(
+                                decoder_components, response_idf, model_params);
+                        return MaxLogProbabilityLoss(keyword_nodes_and_ids.first,
+                                keyword_nodes_and_ids.second, hyper_params.batch_size).first +
+                            MaxLogProbabilityLoss(result_nodes, word_ids, 1).first;
                     };
                     cout << format("checking grad - conversation_pair size:%1%") %
                         conversation_pair_in_batch.size() << endl;
