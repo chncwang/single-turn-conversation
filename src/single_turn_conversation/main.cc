@@ -666,14 +666,12 @@ int main(int argc, char *argv[]) {
     int i = 0;
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
         auto add_to_train = [&]() {
-            if (default_config.program_mode == ProgramMode::TRAINING) {
                 train_post_and_responses.push_back(post_and_responses);
                 vector<ConversationPair> conversation_pairs =
                     toConversationPairs(post_and_responses);
                 for (ConversationPair &conversation_pair : conversation_pairs) {
                     train_conversation_pairs.push_back(move(conversation_pair));
                 }
-            }
         };
         if (i < default_config.dev_size) {
             dev_post_and_responses.push_back(post_and_responses);
@@ -686,9 +684,7 @@ int main(int argc, char *argv[]) {
                 add_to_train();
             }
         } else {
-            if (default_config.program_mode == ProgramMode::TRAINING) {
                 add_to_train();
-            }
         }
         ++i;
     }
@@ -748,19 +744,20 @@ int main(int argc, char *argv[]) {
         all_sentences.push_back(s);
     }
     cout << "merged" << endl;
+
     cout << "calculating idf" << endl;
     auto all_idf = calculateIdf(all_sentences);
     cout << "idf calculated" << endl;
-
     vector<string> all_word_list = getAllWordsByIdfAscendingly(all_idf, word_counts,
             hyper_params.word_cutoff);
+    cout << "all_word_list size:" << all_word_list.size() << endl;
     for (int i = 0; i < 40000; ++i) {
-        cout << all_word_list.at(i) << ":" << all_idf.at(all_word_list.at(i)) << " " <<
-            word_counts.at(all_word_list.at(i)) << endl;
+        cout << all_word_list.at(i) << ":" ;
+        cout << all_idf.at(all_word_list.at(i)) << " ";
+        cout << word_counts.at(all_word_list.at(i)) << endl;
     }
     cout << all_word_list.back() << endl;
-
-    alphabet.init(all_word_list);
+    alphabet.init(word_counts, hyper_params.word_cutoff);
     cout << boost::format("alphabet size:%1%") % alphabet.size() << endl;
 
     ModelParams model_params;
@@ -784,9 +781,9 @@ int main(int argc, char *argv[]) {
         model_params.left_to_right_encoder_params.init(hyper_params.hidden_dim,
                 2 * hyper_params.word_dim + 2 * hyper_params.hidden_dim);
         model_params.hidden_to_wordvector_params.init(hyper_params.word_dim,
-                2 * hyper_params.hidden_dim + 3 * hyper_params.word_dim, false);
+                2 * hyper_params.hidden_dim + 3 * hyper_params.word_dim, true);
         model_params.hidden_to_keyword_params.init(hyper_params.word_dim,
-                2 * hyper_params.hidden_dim, false);
+                2 * hyper_params.hidden_dim, true);
         model_params.normal_attention_parrams.init(hyper_params.hidden_dim,
                 hyper_params.hidden_dim);
         model_params.keyword_attention_parrams.init(hyper_params.hidden_dim,
