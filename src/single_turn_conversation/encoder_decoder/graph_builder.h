@@ -298,23 +298,17 @@ vector<BeamSearchResult> mostProbableKeywords(
             DecoderComponents &components = beam.at(ii);
 
             ConcatNode *concat_node = new ConcatNode();
-            int context_dim = components.keyword_contexts.at(0)->getDim();
-            concat_node->init(context_dim + hyper_params.hidden_dim);
+            concat_node->init(hyper_params.hidden_dim);
             if (components.decoder_lookups.size() != word_pos) {
                 cerr << boost::format("size:%1% word_pos:%2%") % components.decoder_lookups.size()
                     % word_pos << endl;
                 abort();
             }
-            vector<Node *> concat_inputs = {
-                components.decoder._hiddens.at(word_pos),
-                components.keyword_contexts.at(word_pos)
-            };
-            concat_node->forward(graph, concat_inputs);
 
             UniNode *keyword = new UniNode;
             keyword->init(hyper_params.word_dim);
             keyword->setParam(model_params.hidden_to_keyword_params);
-            keyword->forward(graph, *concat_node);
+            keyword->forward(graph, *components.decoder._hiddens.at(word_pos));
 
             LinearWordVectorNode *keyword_vector_to_onehot = new LinearWordVectorNode;
             keyword_vector_to_onehot->init(model_params.lookup_table.nVSize);
@@ -496,7 +490,7 @@ struct GraphBuilder {
             dropout_node->forward(graph, *input_lookup);
 
             BucketNode *bucket = new BucketNode();
-            bucket->init(2 * hyper_params.hidden_dim);
+            bucket->init(hyper_params.hidden_dim);
             bucket->forward(graph);
 
             LookupNode *keyword_lookup = new LookupNode;
