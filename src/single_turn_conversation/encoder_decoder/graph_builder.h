@@ -12,7 +12,6 @@
 #include <queue>
 #include <algorithm>
 #include <boost/format.hpp>
-#include "single_turn_conversation/def.h"
 #include "N3LDG.h"
 #include "tinyutf8.h"
 #include "model_params.h"
@@ -65,7 +64,7 @@ public:
             }
             ++i;
         }
-        return (final_log_probability + extra_score_) / (unique_words.size() +
+        return (final_log_probability + extra_score_) / (1 + unique_words.size() +
                 unique_keywords.size());
     }
 
@@ -179,8 +178,6 @@ vector<BeamSearchResult> mostProbableResults(
         const vector<BeamSearchResult> &last_results,
         int current_word,
         int k,
-        set<int> &searched_ids,
-        bool is_first,
         const ModelParams &model_params,
         const DefaultConfig &default_config,
         const vector<string> &black_list) {
@@ -215,11 +212,6 @@ vector<BeamSearchResult> mostProbableResults(
         float max_log_prob = -1e20;
         BeamSearchResult beam_search_result;
         for (int j = 0; j < nodes.at(i)->getDim(); ++j) {
-            if (is_first) {
-                if (searched_ids.find(j) != searched_ids.end()) {
-                    continue;
-                }
-            }
             if (j == model_params.lookup_table.getElemId(::unknownkey)) {
                 continue;
             }
@@ -237,19 +229,16 @@ vector<BeamSearchResult> mostProbableResults(
                 beam_search_result =  BeamSearchResult(beam.at(i), word_ids, log_probability);
             }
         }
-                if (queue.size() < k) {
-                    queue.push(beam_search_result);
-                } else if (queue.top().finalScore() < beam_search_result.finalScore()) {
-                    queue.pop();
-                    queue.push(beam_search_result);
-                }
+        if (queue.size() < k) {
+            queue.push(beam_search_result);
+        } else if (queue.top().finalScore() < beam_search_result.finalScore()) {
+            queue.pop();
+            queue.push(beam_search_result);
+        }
     }
 
     while (!queue.empty()) {
         auto &e = queue.top();
-        if (is_first) {
-            searched_ids.insert(e.getPath().at(1).word_id);
-        }
         results.push_back(e);
         queue.pop();
     }
@@ -291,7 +280,8 @@ vector<BeamSearchResult> mostProbableKeywords(
         ModelParams &model_params,
         const HyperParams &hyper_params,
         const DefaultConfig &default_config,
-        bool is_first) {
+        bool is_first,
+        set<int> &searched_ids) {
     vector<Node *> nodes;
     for (int ii = 0; ii < beam.size(); ++ii) {
         bool should_predict_keyword;
@@ -364,6 +354,11 @@ vector<BeamSearchResult> mostProbableKeywords(
             auto tuple = toExp(node);
 
             for (int j = 0; j < nodes.at(i)->getDim(); ++j) {
+                if (is_first) {
+                    if (searched_ids.find(j) != searched_ids.end()) {
+                        continue;
+                    }
+                }
                 if (j == model_params.lookup_table.getElemId(::unknownkey)) {
                     continue;
                 }
@@ -401,6 +396,7 @@ vector<BeamSearchResult> mostProbableKeywords(
                 cerr << boost::format("size is not 1:%1%\n") % size;
                 abort();
             }
+            searched_ids.insert(e.getPath().at(0).word_id);
         }
         results.push_back(e);
         queue.pop();
@@ -684,7 +680,7 @@ struct GraphBuilder {
 
                 most_probable_results = mostProbableKeywords(beam, most_probable_results,
                         word_idf_table, i, k, graph, model_params, hyper_params, default_config,
-                        i == 0);
+                        i == 0, searched_ids);
                 for (int beam_i = 0; beam_i < beam.size(); ++beam_i) {
                     DecoderComponents &decoder_components = beam.at(beam_i);
                     int keyword_id = most_probable_results.at(beam_i).getPath().back().word_id;
@@ -720,8 +716,8 @@ struct GraphBuilder {
                 graph.compute();
 
                 last_answers.clear();
-                most_probable_results = mostProbableResults(beam, most_probable_results, i, left_k,
-                        searched_ids, i == 0, model_params, default_config, black_list);
+                most_probable_results = mostProbableResults(beam, most_probable_results, i,
+                        left_k, model_params, default_config, black_list);
                 cout << boost::format("most_probable_results size:%1%") %
                     most_probable_results.size() << endl;
                 beam.clear();

@@ -43,7 +43,6 @@ using boost::filesystem::directory_iterator;
 void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
     model_params.left_to_right_encoder_params.exportAdaParams(model_update);
     model_params.hidden_to_wordvector_params.exportAdaParams(model_update);
-    model_params.hidden_to_keyword_params.exportAdaParams(model_update);
     model_params.lookup_table.exportAdaParams(model_update);
     model_params.normal_attention_parrams.exportAdaParams(model_update);
     model_params.keyword_attention_parrams.exportAdaParams(model_update);
@@ -52,31 +51,11 @@ void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
 void exportToGradChecker(ModelParams &model_params, CheckGrad &grad_checker) {
     grad_checker.add(model_params.lookup_table.E, "lookup_table");
     grad_checker.add(model_params.hidden_to_wordvector_params.W, "hidden_to_wordvector_params W");
-    grad_checker.add(model_params.hidden_to_keyword_params.W, "hidden_to_keyword_params W");
+    grad_checker.add(model_params.hidden_to_wordvector_params.b, "hidden_to_wordvector_params b");
     grad_checker.add(model_params.left_to_right_encoder_params.cell_hidden.W,
             "left to right encoder cell_hidden W");
     grad_checker.add(model_params.normal_attention_parrams.bi_atten.W1, "attention W1");
     grad_checker.add(model_params.normal_attention_parrams.bi_atten.W2, "attention W2");
-}
-
-vector<string> getAllWordsByIdfAscendingly(const unordered_map<string, float> &idf_table,
-        const unordered_map<string, int> &word_count_table,
-        int word_cutoff) {
-    vector<string> result;
-    for (auto &it : word_count_table) {
-        if (it.second > word_cutoff && it.first != unknownkey) {
-            result.push_back(it.first);
-        }
-    }
-
-    auto cmp = [&idf_table](const string &a, const string &b) -> bool {
-        return idf_table.at(a) < idf_table.at(b);
-    };
-
-    sort(result.begin(), result.end(), cmp);
-    result.push_back(unknownkey);
-
-    return result;
 }
 
 unordered_map<string, float> calculateIdf(const vector<vector<string>> sentences) {
@@ -666,12 +645,14 @@ int main(int argc, char *argv[]) {
     int i = 0;
     for (const PostAndResponses &post_and_responses : post_and_responses_vector) {
         auto add_to_train = [&]() {
+            if (default_config.program_mode == ProgramMode::TRAINING) {
                 train_post_and_responses.push_back(post_and_responses);
                 vector<ConversationPair> conversation_pairs =
                     toConversationPairs(post_and_responses);
                 for (ConversationPair &conversation_pair : conversation_pairs) {
                     train_conversation_pairs.push_back(move(conversation_pair));
                 }
+            }
         };
         if (i < default_config.dev_size) {
             dev_post_and_responses.push_back(post_and_responses);
@@ -684,7 +665,9 @@ int main(int argc, char *argv[]) {
                 add_to_train();
             }
         } else {
+            if (default_config.program_mode == ProgramMode::TRAINING) {
                 add_to_train();
+            }
         }
         ++i;
     }
@@ -694,6 +677,16 @@ int main(int argc, char *argv[]) {
 
     vector<vector<string>> post_sentences = readSentences(default_config.post_file);
     vector<vector<string>> response_sentences = readSentences(default_config.response_file);
+
+    cout << "dev set:" << endl;
+    for (PostAndResponses &i : dev_post_and_responses) {
+        print(post_sentences.at(i.post_id));
+    }
+
+    cout << "test set:" << endl;
+    for (PostAndResponses &i : test_post_and_responses) {
+        print(post_sentences.at(i.post_id));
+    }
 
     Alphabet alphabet;
     shared_ptr<Json::Value> root_ptr;
@@ -733,30 +726,8 @@ int main(int argc, char *argv[]) {
         }
     };
     wordStat();
+
     word_counts[unknownkey] = 1000000000;
-
-    vector<vector<string>> all_sentences;
-    cout << "merging sentences..." << endl;
-    for (auto &s : post_sentences) {
-        all_sentences.push_back(s);
-    }
-    for (auto &s : response_sentences) {
-        all_sentences.push_back(s);
-    }
-    cout << "merged" << endl;
-
-    cout << "calculating idf" << endl;
-    auto all_idf = calculateIdf(all_sentences);
-    cout << "idf calculated" << endl;
-    vector<string> all_word_list = getAllWordsByIdfAscendingly(all_idf, word_counts,
-            hyper_params.word_cutoff);
-    cout << "all_word_list size:" << all_word_list.size() << endl;
-    for (int i = 0; i < 40000; ++i) {
-        cout << all_word_list.at(i) << ":" ;
-        cout << all_idf.at(all_word_list.at(i)) << " ";
-        cout << word_counts.at(all_word_list.at(i)) << endl;
-    }
-    cout << all_word_list.back() << endl;
     alphabet.init(word_counts, hyper_params.word_cutoff);
     cout << boost::format("alphabet size:%1%") % alphabet.size() << endl;
 
@@ -811,7 +782,51 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    vector<vector<string>> all_sentences;
+    cout << "merging sentences..." << endl;
+    for (auto &s : post_sentences) {
+        all_sentences.push_back(s);
+    }
+    for (auto &s : response_sentences) {
+        all_sentences.push_back(s);
+    }
+    cout << "merged" << endl;
+    cout << "calculating idf" << endl;
+    auto all_idf = calculateIdf(all_sentences);
+    cout << "idf calculated" << endl;
     auto black_list = readBlackList(default_config.black_list_file);
+
+//    cout << "post:" << endl;
+//    for (auto &s : post_sentences) {
+//        WordIdfInfo info = getWordIdfInfo(s, all_idf, word_counts, hyper_params.word_cutoff);
+//        print(info.keywords_behind);
+//        bool first = true;
+//        for (float f : info.word_idfs) {
+//            if (first) {
+//                first = false;
+//            } else {
+//                cout << " ";
+//            }
+//            cout << f;
+//        }
+//        cout << endl;
+//    }
+//    cout << "response:" << endl;
+//    for (auto &s : response_sentences) {
+//        WordIdfInfo info = getWordIdfInfo(s, all_idf, word_counts, hyper_params.word_cutoff);
+//        print(info.keywords_behind);
+//        bool first = true;
+//        for (float f : info.word_idfs) {
+//            if (first) {
+//                first = false;
+//            } else {
+//                cout << " ";
+//            }
+//            cout << f;
+//        }
+//        cout << endl;
+//    }
+//    exit(0);
 
     cout << "reading post idf info ..." << endl;
     vector<WordIdfInfo> post_idf_info_list = readWordIdfInfoList(default_config.post_idf_file);
@@ -995,42 +1010,6 @@ int main(int argc, char *argv[]) {
 
                 graph.backward();
 
-                if (default_config.check_grad) {
-                    auto loss_function = [&](const ConversationPair &conversation_pair) -> dtype {
-                        GraphBuilder graph_builder;
-                        Graph graph;
-
-                        graph_builder.forward(graph, post_sentences.at(conversation_pair.post_id),
-                                post_idf_info_list.at(conversation_pair.post_id).keywords_behind,
-                                hyper_params, model_params, true);
-
-                        DecoderComponents decoder_components;
-                        graph_builder.forwardDecoder(graph, decoder_components,
-                                response_sentences.at(conversation_pair.response_id),
-                                response_idf_info_list.at(
-                                    conversation_pair.response_id).keywords_behind,
-                                hyper_params, model_params, true);
-
-                        graph.compute();
-
-                        vector<int> word_ids = toIds(response_sentences.at(
-                                    conversation_pair.response_id), model_params.lookup_table);
-                        vector<Node*> result_nodes = toNodePointers(
-                                decoder_components.wordvector_to_onehots);
-                        const WordIdfInfo &response_idf = response_idf_info_list.at(
-                                conversation_pair.response_id);
-                        auto keyword_nodes_and_ids = keywordNodesAndIds(
-                                decoder_components, response_idf, model_params);
-                        return MaxLogProbabilityLoss(keyword_nodes_and_ids.first,
-                                keyword_nodes_and_ids.second, hyper_params.batch_size).first +
-                            MaxLogProbabilityLoss(result_nodes, word_ids, 1).first;
-                    };
-                    cout << format("checking grad - conversation_pair size:%1%") %
-                        conversation_pair_in_batch.size() << endl;
-                    grad_checker.check<ConversationPair>(loss_function, conversation_pair_in_batch,
-                            "");
-                }
-
                 if (hyper_params.optimizer == Optimizer::ADAM) {
                     model_update.updateAdam(10.0f);
                 } else if (hyper_params.optimizer == Optimizer::ADAGRAD) {
@@ -1084,18 +1063,3 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
-
-//int main() {
-//    vector<float> vec = {0, 1, 2, 3, 4, 5, 6, 7};
-//    Mat matrix(vec.data(), 2, 4);
-//    cout << matrix << endl;
-
-//    MatrixXf result(2, 8), left(2, 2), right(2, 2);
-//    left.setConstant(1);
-//    right.setZero();
-//    result << left, matrix, right;
-
-//    cout << result << endl;
-
-//    return 0;
-//}
