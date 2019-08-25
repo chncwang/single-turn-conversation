@@ -16,6 +16,7 @@
 #include "tinyutf8.h"
 #include "model_params.h"
 #include "hyper_params.h"
+#include "single_turn_conversation/def.h"
 #include "single_turn_conversation/default_config.h"
 #include "single_turn_conversation/encoder_decoder/decoder_components.h"
 
@@ -57,14 +58,14 @@ public:
         set<int> unique_keywords;
         int i = 0;
         for (const auto &p : path_) {
-            if (i % 2 == 1) {
+//            if (i % 2 == 1) {
                 unique_words.insert(p.word_id);
 //            } else {
 //                unique_keywords.insert(p.word_id);
-            }
+//            }
             ++i;
         }
-        return (final_log_probability + extra_score_) / (1 + unique_words.size() +
+        return (final_log_probability + extra_score_) / (unique_words.size() +
                 unique_keywords.size());
     }
 
@@ -353,6 +354,9 @@ vector<BeamSearchResult> mostProbableKeywords(
             const Node &node = *nodes.at(i);
             auto tuple = toExp(node);
 
+            BeamSearchResult beam_search_result;
+            priority_queue<BeamSearchResult, vector<BeamSearchResult>, decltype(cmp)>
+                local_queue(cmp);
             for (int j = 0; j < nodes.at(i)->getDim(); ++j) {
                 if (is_first) {
                     if (searched_ids.find(j) != searched_ids.end()) {
@@ -374,15 +378,58 @@ vector<BeamSearchResult> mostProbableKeywords(
                     log_probability += last_results.at(i).finalLogProbability();
                     word_ids = last_results.at(i).getPath();
                 }
-
                 word_ids.push_back(WordIdAndProbability(j, word_probability));
-                BeamSearchResult beam_search_result(beam.at(i), word_ids, log_probability);
 
-                if (queue.size() < k) {
-                    queue.push(beam_search_result);
-                } else if (queue.top().finalScore() < beam_search_result.finalScore()) {
-                    queue.pop();
-                    queue.push(beam_search_result);
+                beam_search_result = BeamSearchResult(beam.at(i), word_ids, log_probability);
+                if (local_queue.size() < k) {
+                    local_queue.push(beam_search_result);
+                } else if (local_queue.top().finalScore() < beam_search_result.finalScore()) {
+                    local_queue.pop();
+                    local_queue.push(beam_search_result);
+                }
+            }
+
+            vector<BeamSearchResult> local_results;
+            float current_score = -1e10;
+            while (!local_queue.empty()) {
+                auto &e = local_queue.top();
+                if (e.finalScore() < current_score) {
+                    cerr << "e.finalScore() < current_score" << endl;
+                    abort();
+                }
+                current_score = e.finalScore();
+                local_results.push_back(e);
+                local_queue.pop();
+            }
+
+            for (int i = local_results.size(); i > 0; --i) {
+                auto &e = local_results.at(i - 1);
+                if (is_first) {
+                    if (queue.size() < k) {
+                        queue.push(e);
+                    } else if (queue.top().finalScore() < e.finalScore()) {
+                        queue.pop();
+                        queue.push(e);
+                    }
+                } else if (i < local_results.size()) {
+                    int word_id = e.getPath().back().word_id;
+                    float idf =
+                        word_idf_table.at(model_params.lookup_table.elems.from_id(word_id));
+                    if (idf > 6.0f) {
+                        if (queue.size() < k) {
+                            queue.push(e);
+                        } else if (queue.top().finalScore() < e.finalScore()) {
+                            queue.pop();
+                            queue.push(e);
+                        }
+                    }
+                } else {
+                    if (queue.size() < k) {
+                        queue.push(e);
+                    } else if (queue.top().finalScore() < e.finalScore()) {
+                        queue.pop();
+                        queue.push(e);
+                    }
                 }
             }
         }
