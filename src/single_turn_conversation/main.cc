@@ -43,6 +43,7 @@ using boost::filesystem::directory_iterator;
 void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
     model_params.left_to_right_encoder_params.exportAdaParams(model_update);
     model_params.hidden_to_wordvector_params.exportAdaParams(model_update);
+    model_params.hidden_to_keyword_params.exportAdaParams(model_update);
     model_params.lookup_table.exportAdaParams(model_update);
     model_params.normal_attention_parrams.exportAdaParams(model_update);
 }

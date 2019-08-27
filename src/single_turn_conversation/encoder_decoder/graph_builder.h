@@ -65,8 +65,7 @@ public:
 //            }
             ++i;
         }
-        return (final_log_probability + extra_score_) / (unique_words.size() +
-                unique_keywords.size());
+        return final_log_probability / (unique_words.size() + unique_keywords.size());
     }
 
     dtype finalLogProbability() const {
@@ -174,6 +173,10 @@ void updateBeamSearchResultScore(BeamSearchResult &beam_search_result,
     beam_search_result.setNgramCounts(new_counts);
 }
 
+//bool beamSearchResultCmp(const BeamSearchResult &a, const BeamSearchResult &b) {
+//    return a.finalScore() != a.finalScore() ?  a.finalScore() > b.finalScore();
+//}
+
 vector<BeamSearchResult> mostProbableResults(
         const vector<DecoderComponents> &beam,
         const vector<BeamSearchResult> &last_results,
@@ -223,6 +226,10 @@ vector<BeamSearchResult> mostProbableResults(
             if (!last_results.empty()) {
                 log_probability += last_results.at(i).finalLogProbability();
                 word_ids = last_results.at(i).getPath();
+            }
+            if (log_probability != log_probability) {
+                cerr << value << " " << log(get<2>(tuple)) << endl;
+                abort();
             }
             word_ids.push_back(WordIdAndProbability(j, word_probability));
             if (log_probability > max_log_prob) {
@@ -372,6 +379,11 @@ vector<BeamSearchResult> mostProbableKeywords(
                     log_probability += last_results.at(i).finalLogProbability();
                     word_ids = last_results.at(i).getPath();
                 }
+                if (log_probability != log_probability) {
+                    cerr << node.getVal().vec() << endl;
+                    cerr << value << " " << log(get<2>(tuple)) << endl;
+                    abort();
+                }
                 word_ids.push_back(WordIdAndProbability(j, word_probability));
 
                 beam_search_result = BeamSearchResult(beam.at(i), word_ids, log_probability);
@@ -387,10 +399,6 @@ vector<BeamSearchResult> mostProbableKeywords(
             float current_score = -1e10;
             while (!local_queue.empty()) {
                 auto &e = local_queue.top();
-                if (e.finalScore() < current_score) {
-                    cerr << "e.finalScore() < current_score" << endl;
-                    abort();
-                }
                 current_score = e.finalScore();
                 local_results.push_back(e);
                 local_queue.pop();
@@ -409,14 +417,14 @@ vector<BeamSearchResult> mostProbableKeywords(
                     int word_id = e.getPath().back().word_id;
                     float idf =
                         word_idf_table.at(model_params.lookup_table.elems.from_id(word_id));
-                    if (idf > 6.0f) {
+//                    if (idf > 6.0f) {
                         if (queue.size() < k) {
                             queue.push(e);
                         } else if (queue.top().finalScore() < e.finalScore()) {
                             queue.pop();
                             queue.push(e);
                         }
-                    }
+//                    }
                 } else {
                     if (queue.size() < k) {
                         queue.push(e);
@@ -431,6 +439,11 @@ vector<BeamSearchResult> mostProbableKeywords(
 
     while (!queue.empty()) {
         auto &e = queue.top();
+        if (e.finalScore() != e.finalScore()) {
+            printWordIdsWithKeywords(e.getPath(), model_params.lookup_table);
+            cerr << "final score nan" << endl;
+            abort();
+        }
         if (is_first) {
             int size = e.getPath().size();
             if (size != 1) {
