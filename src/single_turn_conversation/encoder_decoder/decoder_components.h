@@ -77,10 +77,14 @@ struct DecoderComponents {
 
         UniNode *keyword;
         if (return_keyword) {
+            ConcatNode *context_concated = new ConcatNode;
+            context_concated->init(2 * hyper_params.hidden_dim);
+            context_concated->forward(graph, {decoder._hiddens.at(i), contexts.at(i)});
+
             keyword = new UniNode;
             keyword->init(hyper_params.word_dim);
             keyword->setParam(model_params.hidden_to_keyword_params);
-            keyword->forward(graph, *decoder._hiddens.at(i));
+            keyword->forward(graph, *context_concated);
         } else {
             keyword = nullptr;
         }
