@@ -290,7 +290,7 @@ vector<BeamSearchResult> mostProbableKeywords(
         const DefaultConfig &default_config,
         bool is_first,
         set<int> &searched_ids) {
-    vector<Node *> nodes;
+    vector<Node *> keyword_nodes, hiddens, nodes;
     for (int ii = 0; ii < beam.size(); ++ii) {
         bool should_predict_keyword;
         if (last_results.empty()) {
@@ -300,7 +300,8 @@ vector<BeamSearchResult> mostProbableKeywords(
             int size = path.size();
             should_predict_keyword = path.at(size - 2).word_id == path.at(size - 1).word_id;
         }
-        Node *node;
+        Node *node, *keyword_node, *hidden;
+        hidden = beam.at(ii).decoder._hiddens.at(word_pos);
         if (should_predict_keyword) {
             DecoderComponents &components = beam.at(ii);
 
@@ -316,6 +317,7 @@ vector<BeamSearchResult> mostProbableKeywords(
             keyword->init(hyper_params.word_dim);
             keyword->setParam(model_params.hidden_to_keyword_params);
             keyword->forward(graph, *components.decoder._hiddens.at(word_pos));
+            keyword_node = keyword;
 
             LinearWordVectorNode *keyword_vector_to_onehot = new LinearWordVectorNode;
             keyword_vector_to_onehot->init(model_params.lookup_table.nVSize);
@@ -325,8 +327,11 @@ vector<BeamSearchResult> mostProbableKeywords(
             node = keyword_vector_to_onehot;
         } else {
             node = nullptr;
+            keyword_node = nullptr;
         }
         nodes.push_back(node);
+        keyword_nodes.push_back(keyword_node);
+        hiddens.push_back(hidden);
     }
     graph.compute();
 
@@ -382,6 +387,13 @@ vector<BeamSearchResult> mostProbableKeywords(
                 if (log_probability != log_probability) {
                     cerr << node.getVal().vec() << endl;
                     cerr << value << " " << log(get<2>(tuple)) << endl;
+                    cerr << "keyword node:" << endl << keyword_nodes.at(i)->getVal().vec() << endl;
+                    cerr << "hidden node:" << endl << hiddens.at(i)->getVal().vec() << endl;
+                    Json::StreamWriterBuilder builder;
+                    builder["commentStyle"] = "None";
+                    builder["indentation"] = "";
+                    string json_str = Json::writeString(builder, model_params.hidden_to_keyword_params.W.toJson());
+                    cerr << "param W:" << endl << json_str << endl;
                     abort();
                 }
                 word_ids.push_back(WordIdAndProbability(j, word_probability));
