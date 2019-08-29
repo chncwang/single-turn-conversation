@@ -114,11 +114,11 @@ void printWordIds(const vector<WordIdAndProbability> &word_ids_with_probability_
 
 void printWordIdsWithKeywords(const vector<WordIdAndProbability> &word_ids_with_probability_vector,
         const LookupTable &lookup_table) {
-    cout << "keywords:" << endl;
-    for (int i = 0; i < word_ids_with_probability_vector.size(); i += 2) {
-        cout << lookup_table.elems.from_id(word_ids_with_probability_vector.at(i).word_id);
-    }
-    cout << endl;
+//    cout << "keywords:" << endl;
+//    for (int i = 0; i < word_ids_with_probability_vector.size(); i += 2) {
+//        cout << lookup_table.elems.from_id(word_ids_with_probability_vector.at(i).word_id);
+//    }
+//    cout << endl;
     cout << "words:" << endl;
     for (int i = 1; i < word_ids_with_probability_vector.size(); i += 2) {
         cout << lookup_table.elems.from_id(word_ids_with_probability_vector.at(i).word_id);
@@ -313,10 +313,15 @@ vector<BeamSearchResult> mostProbableKeywords(
                 abort();
             }
 
+            ConcatNode *context_concated = new ConcatNode;
+            context_concated->init(2 * hyper_params.hidden_dim);
+            context_concated->forward(graph, {components.decoder._hiddens.at(word_pos),
+                    components.contexts.at(word_pos)});
+
             UniNode *keyword = new UniNode;
             keyword->init(hyper_params.word_dim);
             keyword->setParam(model_params.hidden_to_keyword_params);
-            keyword->forward(graph, *components.decoder._hiddens.at(word_pos));
+            keyword->forward(graph, *context_concated);
             keyword_node = keyword;
 
             LinearWordVectorNode *keyword_vector_to_onehot = new LinearWordVectorNode;
@@ -429,14 +434,14 @@ vector<BeamSearchResult> mostProbableKeywords(
                     int word_id = e.getPath().back().word_id;
                     float idf =
                         word_idf_table.at(model_params.lookup_table.elems.from_id(word_id));
-//                    if (idf > 6.0f) {
+                    if (idf >= default_config.keyword_fork_bound) {
                         if (queue.size() < k) {
                             queue.push(e);
                         } else if (queue.top().finalScore() < e.finalScore()) {
                             queue.pop();
                             queue.push(e);
                         }
-//                    }
+                    }
                 } else {
                     if (queue.size() < k) {
                         queue.push(e);

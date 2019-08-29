@@ -175,7 +175,8 @@ DefaultConfig parseDefaultConfig(INIReader &ini_reader) {
     default_config.device_id = ini_reader.GetInteger(SECTION, "device_id", 0);
     default_config.seed = ini_reader.GetInteger(SECTION, "seed", 0);
     default_config.cut_length = ini_reader.GetInteger(SECTION, "cut_length", 30);
-    default_config.keyword_bound = ini_reader.GetReal(SECTION, "keyword_bound", 30);
+    default_config.keyword_bound = ini_reader.GetReal(SECTION, "keyword_bound", 0);
+    default_config.keyword_fork_bound = ini_reader.GetReal(SECTION, "keyword_fork_bound", 0);
     default_config.output_model_file_prefix = ini_reader.Get(SECTION, "output_model_file_prefix",
             "");
     default_config.input_model_file = ini_reader.Get(SECTION, "input_model_file", "");
