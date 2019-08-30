@@ -459,11 +459,11 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
             float avg_perplex = 0.0f;
             cout << "response size:" << response_ids.size() << endl;
             for (int response_id : response_ids) {
-                cout << "response:" << endl;
-                auto response = response_sentences.at(response_id);
-                print(response);
+//                cout << "response:" << endl;
+//                auto response = response_sentences.at(response_id);
+//                print(response);
                 const WordIdfInfo &idf_info = response_idf_info_list.at(response_id);
-                print(idf_info.keywords_behind);
+//                print(idf_info.keywords_behind);
                 Graph graph;
                 GraphBuilder graph_builder;
                 graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id),
@@ -533,7 +533,8 @@ void decodeTestPosts(const HyperParams &hyper_params, ModelParams &model_params,
         cout << "post:" << endl;
         print(post_sentences.at(post_and_responses.post_id));
         cout << "response:" << endl;
-        printWordIdsWithKeywords(word_ids_and_probability, model_params.lookup_table);
+        printWordIdsWithKeywords(word_ids_and_probability, model_params.lookup_table,
+                word_idf_table);
         dtype probability = pair.second;
         cout << format("probability:%1%") % probability << endl;
         if (word_ids_and_probability.empty()) {
