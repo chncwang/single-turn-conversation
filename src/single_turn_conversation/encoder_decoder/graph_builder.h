@@ -551,11 +551,14 @@ struct GraphBuilder {
             const HyperParams &hyper_params,
             ModelParams &model_params,
             bool is_training) {
+        int keyword_bound = model_params.lookup_table.nVSize;
+
         for (int i = 0; i < answer.size(); ++i) {
+            int normal_bound = model_params.lookup_table.elems.from_string(keywords.at(i)) + 1;
             forwardDecoderByOneStep(graph, decoder_components, i,
                     i == 0 ? nullptr : &answer.at(i - 1), keywords.at(i),
                     i == 0 ||  answer.at(i - 1) == keywords.at(i - 1), hyper_params,
-                    model_params, is_training);
+                    model_params, is_training, keyword_bound, normal_bound);
         }
     }
 
@@ -565,7 +568,21 @@ struct GraphBuilder {
             bool should_predict_keyword,
             const HyperParams &hyper_params,
             ModelParams &model_params,
-            bool is_training) {
+            bool is_training,
+            int keyword_word_id_upper_open_bound,
+            int normal_word_id_upper_open_bound) {
+        if (keyword_word_id_upper_open_bound > model_params.lookup_table.nVSize) {
+            cerr << boost::format("word_id_upper_open_bound:%1% vsize:%2%") %
+                keyword_word_id_upper_open_bound % model_params.lookup_table.nVSize << endl;
+            abort();
+        }
+
+        if (normal_word_id_upper_open_bound > keyword_word_id_upper_open_bound) {
+            cerr << boost::format("normal:%1% keyword:%2%") %
+                normal_word_id_upper_open_bound % keyword_word_id_upper_open_bound << endl;
+            abort();
+        }
+
         Node *last_input, *last_keyword;
         if (i > 0) {
             LookupNode* before_dropout(new LookupNode);
@@ -614,7 +631,7 @@ struct GraphBuilder {
         decoder_components.decoder_to_wordvectors.push_back(decoder_to_wordvector);
 
         LinearWordVectorNode *wordvector_to_onehot(new LinearWordVectorNode);
-        wordvector_to_onehot->init(model_params.lookup_table.nVSize);
+        wordvector_to_onehot->init(normal_word_id_upper_open_bound);
         wordvector_to_onehot->setParam(model_params.lookup_table.E);
         wordvector_to_onehot->forward(graph, *decoder_to_wordvector);
         decoder_components.wordvector_to_onehots.push_back(wordvector_to_onehot);
@@ -626,7 +643,7 @@ struct GraphBuilder {
             keyword_vector_to_onehot = nullptr;
         } else {
             keyword_vector_to_onehot = new LinearWordVectorNode;
-            keyword_vector_to_onehot->init(model_params.lookup_table.nVSize);
+            keyword_vector_to_onehot->init(keyword_word_id_upper_open_bound);
             keyword_vector_to_onehot->setParam(model_params.lookup_table.E);
             keyword_vector_to_onehot->forward(graph, *nodes.keyword);
         }

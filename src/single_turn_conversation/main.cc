@@ -606,6 +606,53 @@ unordered_set<string> knownWords(const vector<string> &words) {
     return word_set;
 }
 
+vector<string> getAllWordsByIdfAscendingly(const unordered_map<string, float> &idf_table,
+        const unordered_map<string, int> &word_count_table,
+        int word_cutoff) {
+    vector<string> result;
+    for (auto &it : word_count_table) {
+        if (it.second > word_cutoff && it.first != unknownkey) {
+            result.push_back(it.first);
+        }
+    }
+
+    auto cmp = [&idf_table](const string &a, const string &b) -> bool {
+        return idf_table.at(a) < idf_table.at(b);
+    };
+
+    sort(result.begin(), result.end(), cmp);
+    result.push_back(unknownkey);
+
+    return result;
+}
+
+
+std::pair<dtype, std::vector<int>> MaxLogProbabilityLossWithInconsistentDims(
+        const std::vector<Node*> &result_nodes,
+        const std::vector<int> &ids,
+        int batchsize) {
+    if (ids.size() != result_nodes.size()) {
+        cerr << "ids size is not equal to result_nodes'." << endl;
+        abort();
+    }
+
+    pair<dtype, std::vector<int>> final_result;
+
+    for (int i = 0; i < result_nodes.size(); ++i) {
+        vector<Node *> node = {result_nodes.at(i)};
+        vector<int> id = {ids.at(i)};
+        auto result = MaxLogProbabilityLoss(node, id, batchsize);
+        if (result.second.size() != 1) {
+            cerr << "result second size:" << result.second.size() << endl;
+            abort();
+        }
+        final_result.first += result.first;
+        final_result.second.push_back(result.second.front());
+    }
+
+    return final_result;
+}
+
 int main(int argc, char *argv[]) {
     cout << "dtype size:" << sizeof(dtype) << endl;
 
@@ -730,7 +777,28 @@ int main(int argc, char *argv[]) {
     wordStat();
 
     word_counts[unknownkey] = 1000000000;
-    alphabet.init(word_counts, hyper_params.word_cutoff);
+
+    vector<vector<string>> all_sentences;
+    cout << "merging sentences..." << endl;
+    for (auto &s : post_sentences) {
+        all_sentences.push_back(s);
+    }
+    for (auto &s : response_sentences) {
+        all_sentences.push_back(s);
+    }
+    cout << "merged" << endl;
+    cout << "calculating idf" << endl;
+    auto all_idf = calculateIdf(all_sentences);
+    cout << "idf calculated" << endl;
+    vector<string> all_word_list = getAllWordsByIdfAscendingly(all_idf, word_counts,
+                        hyper_params.word_cutoff);
+    cout << "all_word_list size:" << all_word_list.size() << endl;
+    for (int i = 0; i < 40000; ++i) {
+        cout << all_word_list.at(i) << ":" ;
+        cout << all_idf.at(all_word_list.at(i)) << " ";
+        cout << word_counts.at(all_word_list.at(i)) << endl;
+    }
+    alphabet.init(all_word_list);
     cout << boost::format("alphabet size:%1%") % alphabet.size() << endl;
 
     ModelParams model_params;
@@ -781,19 +849,6 @@ int main(int argc, char *argv[]) {
             word_counts = model_params.lookup_table.elems.m_string_to_id;
         }
     }
-
-    vector<vector<string>> all_sentences;
-    cout << "merging sentences..." << endl;
-    for (auto &s : post_sentences) {
-        all_sentences.push_back(s);
-    }
-    for (auto &s : response_sentences) {
-        all_sentences.push_back(s);
-    }
-    cout << "merged" << endl;
-    cout << "calculating idf" << endl;
-    auto all_idf = calculateIdf(all_sentences);
-    cout << "idf calculated" << endl;
     auto black_list = readBlackList(default_config.black_list_file);
 
 //    cout << "post:" << endl;
@@ -969,7 +1024,7 @@ int main(int argc, char *argv[]) {
                     vector<Node*> result_nodes =
                         toNodePointers(decoder_components_vector.at(i).wordvector_to_onehots);
                     profiler.BeginEvent("loss");
-                    auto result = MaxLogProbabilityLoss(result_nodes, word_ids,
+                    auto result = MaxLogProbabilityLossWithInconsistentDims(result_nodes, word_ids,
                             hyper_params.batch_size);
                     profiler.EndCudaEvent();
                     loss_sum += result.first;
@@ -978,8 +1033,9 @@ int main(int argc, char *argv[]) {
                     auto keyword_nodes_and_ids = keywordNodesAndIds(
                             decoder_components_vector.at(i), response_idf, model_params);
                     profiler.BeginEvent("loss");
-                    auto keyword_result = MaxLogProbabilityLoss(keyword_nodes_and_ids.first,
-                        keyword_nodes_and_ids.second, hyper_params.batch_size);
+                    auto keyword_result = MaxLogProbabilityLossWithInconsistentDims(
+                            keyword_nodes_and_ids.first, keyword_nodes_and_ids.second,
+                            hyper_params.batch_size);
                     profiler.EndCudaEvent();
                     loss_sum += keyword_result.first;
                     analyze(keyword_result.second, keyword_nodes_and_ids.second, *keyword_metric);
