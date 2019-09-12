@@ -630,7 +630,8 @@ vector<string> getAllWordsByIdfAscendingly(const unordered_map<string, float> &i
 std::pair<dtype, std::vector<int>> MaxLogProbabilityLossWithInconsistentDims(
         const std::vector<Node*> &result_nodes,
         const std::vector<int> &ids,
-        int batchsize) {
+        int batchsize,
+        const std::function<bool(int)> &is_unkown) {
     if (ids.size() != result_nodes.size()) {
         cerr << "ids size is not equal to result_nodes'." << endl;
         abort();
@@ -639,8 +640,16 @@ std::pair<dtype, std::vector<int>> MaxLogProbabilityLossWithInconsistentDims(
     pair<dtype, std::vector<int>> final_result;
 
     for (int i = 0; i < result_nodes.size(); ++i) {
-        vector<Node *> node = {result_nodes.at(i)};
         vector<int> id = {ids.at(i)};
+        if (is_unkown(id.front())) {
+            continue;
+        }
+        vector<Node *> node = {result_nodes.at(i)};
+//        LinearWordVectorNode &vector_node =
+//            *static_cast<LinearWordVectorNode*>(result_nodes.at(i));
+//        cout << boost::format("word_id:%1% offset:%2% dim:%3%") % ids.at(i) %
+//            vector_node.getOffset() % vector_node.getDim() << endl;
+
         auto result = MaxLogProbabilityLoss(node, id, batchsize);
         if (result.second.size() != 1) {
             cerr << "result second size:" << result.second.size() << endl;
@@ -1024,18 +1033,27 @@ int main(int argc, char *argv[]) {
                     vector<Node*> result_nodes =
                         toNodePointers(decoder_components_vector.at(i).wordvector_to_onehots);
                     profiler.BeginEvent("loss");
+                    auto is_unkown = [&](int id) {
+                        return model_params.lookup_table.elems.from_string(unknownkey) == id;
+                    };
                     auto result = MaxLogProbabilityLossWithInconsistentDims(result_nodes, word_ids,
-                            hyper_params.batch_size);
+                            hyper_params.batch_size, is_unkown);
                     profiler.EndCudaEvent();
                     loss_sum += result.first;
-                    analyze(result.second, word_ids, *metric);
+                    vector<int> filtered_ids;
+                    for (int id : word_ids) {
+                        if (!is_unkown(id)) {
+                            filtered_ids.push_back(id);
+                        }
+                    }
+                    analyze(result.second, filtered_ids, *metric);
                     const WordIdfInfo &response_idf = response_idf_info_list.at(response_id);
                     auto keyword_nodes_and_ids = keywordNodesAndIds(
                             decoder_components_vector.at(i), response_idf, model_params);
                     profiler.BeginEvent("loss");
                     auto keyword_result = MaxLogProbabilityLossWithInconsistentDims(
                             keyword_nodes_and_ids.first, keyword_nodes_and_ids.second,
-                            hyper_params.batch_size);
+                            hyper_params.batch_size, is_unkown);
                     profiler.EndCudaEvent();
                     loss_sum += keyword_result.first;
                     analyze(keyword_result.second, keyword_nodes_and_ids.second, *keyword_metric);
