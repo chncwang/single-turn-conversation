@@ -249,6 +249,20 @@ HyperParams parseHyperParams(INIReader &ini_reader) {
     }
     hyper_params.learning_rate_decay = learning_rate_decay;
 
+    float warm_up_learning_rate = ini_reader.GetReal("hyper", "warm_up_learning_rate", 1e-6);
+    if (warm_up_learning_rate < 0 || warm_up_learning_rate > 1.0f) {
+        cerr << "warm_up_learning_rate wrong" << endl;
+        abort();
+    }
+    hyper_params.warm_up_learning_rate = warm_up_learning_rate;
+
+    int warm_up_iterations = ini_reader.GetInteger("hyper", "warm_up_iterations", 1000);
+    if (warm_up_iterations < 0) {
+        cerr << "warm_up_iterations wrong" << endl;
+        abort();
+    }
+    hyper_params.warm_up_iterations = warm_up_iterations;
+
     int word_cutoff = ini_reader.GetReal("hyper", "word_cutoff", -1);
     if(word_cutoff == -1){
    	cerr << "word_cutoff read error" << endl;
@@ -969,6 +983,7 @@ int main(int argc, char *argv[]) {
 
         for (int epoch = 0; ; ++epoch) {
             cout << "epoch:" << epoch << endl;
+
             auto cmp = [&] (const ConversationPair &a, const ConversationPair &b)->bool {
                 auto len = [&] (const ConversationPair &pair)->int {
                     return post_sentences.at(pair.post_id).size() +
@@ -995,7 +1010,16 @@ int main(int argc, char *argv[]) {
             profiler.BeginEvent("total");
 
             for (int batch_i = 0; batch_i < batch_count; ++batch_i) {
-                cout << "batch_i:" << batch_i << " iteration:" << iteration << endl;
+                cout << format("batch_i:%1% iteration:%2%") % batch_i % iteration << endl;
+                if (epoch == 0) {
+                    if (iteration < hyper_params.warm_up_iterations) {
+                        model_update._alpha = hyper_params.warm_up_learning_rate;
+                    } else {
+                        model_update._alpha = hyper_params.learning_rate;
+                        cout << "warm up finished, learning rate now:" <<
+                            hyper_params.learning_rate << endl;
+                    }
+                }
                 Graph graph;
                 vector<shared_ptr<GraphBuilder>> graph_builders;
                 vector<DecoderComponents> decoder_components_vector;
