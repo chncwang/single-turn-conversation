@@ -51,7 +51,7 @@ void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
 void exportToGradChecker(ModelParams &model_params, CheckGrad &grad_checker) {
     grad_checker.add(model_params.lookup_table.E, "lookup_table");
     grad_checker.add(model_params.hidden_to_wordvector_params.W, "hidden_to_wordvector_params W");
-    grad_checker.add(model_params.hidden_to_wordvector_params.b, "hidden_to_wordvector_params b");
+//    grad_checker.add(model_params.hidden_to_wordvector_params.b, "hidden_to_wordvector_params b");
     grad_checker.add(model_params.left_to_right_encoder_params.cell_hidden.W,
             "left to right encoder cell_hidden W");
     grad_checker.add(model_params.normal_attention_parrams.bi_atten.W1, "attention W1");
@@ -1083,6 +1083,47 @@ int main(int argc, char *argv[]) {
                 keyword_metric->print();
 
                 graph.backward();
+
+                if (default_config.check_grad) {
+                    auto loss_function = [&](const ConversationPair &conversation_pair) -> dtype {
+                        GraphBuilder graph_builder;
+                        Graph graph;
+
+                        graph_builder.forward(graph, post_sentences.at(conversation_pair.post_id),
+                                post_idf_info_list.at(conversation_pair.post_id).keywords_behind,
+                                hyper_params, model_params, true);
+
+                        DecoderComponents decoder_components;
+                        graph_builder.forwardDecoder(graph, decoder_components,
+                                response_sentences.at(conversation_pair.response_id),
+                                response_idf_info_list.at(
+                                    conversation_pair.response_id).keywords_behind,
+                                hyper_params, model_params, true);
+
+                        graph.compute();
+
+                        vector<int> word_ids = toIds(response_sentences.at(
+                                    conversation_pair.response_id), model_params.lookup_table);
+                        vector<Node*> result_nodes = toNodePointers(
+                                decoder_components.wordvector_to_onehots);
+                        const WordIdfInfo &response_idf = response_idf_info_list.at(
+                                conversation_pair.response_id);
+                        auto keyword_nodes_and_ids = keywordNodesAndIds(
+                                decoder_components, response_idf, model_params);
+                        auto is_unkown = [&](int id) {
+                            return model_params.lookup_table.elems.from_string(unknownkey) == id;
+                        };
+                        return MaxLogProbabilityLossWithInconsistentDims(
+                                keyword_nodes_and_ids.first, keyword_nodes_and_ids.second,
+                                hyper_params.batch_size, is_unkown).first +
+                            MaxLogProbabilityLossWithInconsistentDims( result_nodes, word_ids,
+                                    hyper_params.batch_size, is_unkown).first;
+                    };
+                    cout << format("checking grad - conversation_pair size:%1%") %
+                        conversation_pair_in_batch.size() << endl;
+                    grad_checker.check<ConversationPair>(loss_function, conversation_pair_in_batch,
+                            "");
+                }
 
                 if (hyper_params.optimizer == Optimizer::ADAM) {
                     model_update.updateAdam(10.0f);
