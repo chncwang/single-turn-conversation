@@ -50,7 +50,6 @@ void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
 void exportToGradChecker(ModelParams &model_params, CheckGrad &grad_checker) {
     grad_checker.add(model_params.lookup_table.E, "lookup_table");
     grad_checker.add(model_params.hidden_to_wordvector_params.W, "hidden_to_wordvector_params W");
-    grad_checker.add(model_params.hidden_to_wordvector_params.b, "hidden_to_wordvector_params b");
     grad_checker.add(model_params.left_to_right_encoder_params.cell_hidden.W,
             "left to right encoder cell_hidden W");
     grad_checker.add(model_params.attention_parrams.bi_atten.W1, "attention W1");
