@@ -840,6 +840,7 @@ int main(int argc, char *argv[]) {
                 }
 
                 graph.compute();
+                cout << "graph compute end" << endl;
 
                 for (int i = 0; i < hyper_params.batch_size; ++i) {
                     int instance_index = getSentenceIndex(i);
@@ -856,8 +857,10 @@ int main(int argc, char *argv[]) {
                         losses.push_back(node->getLoss().value);
                     }
                     int dim = result_nodes.at(0)->getDim();
+                    cout << "begin loss" << endl;
                     auto result = n3ldg_cuda::SoftMaxLoss(vals, vals.size(), dim, word_ids,
                             hyper_params.batch_size, losses);
+                    cout << "end loss" << endl;
                     auto result_ids = result.second;
                     for (int id : result_ids) {
                         if (id >= dim) {
@@ -866,6 +869,7 @@ int main(int argc, char *argv[]) {
                         }
                     }
 #if TEST_CUDA
+                    cout << "cpu loss ..." << endl;
                     auto cpu_result = MaxLogProbabilityLoss(result_nodes, word_ids,
                             hyper_params.batch_size);
                     cout << format("result loss:%1% cpu_result loss:%2%") % result.first %
@@ -877,6 +881,7 @@ int main(int argc, char *argv[]) {
                     for (const Node *node : result_nodes) {
                         n3ldg_cuda::Assert(node->getLoss().verify("cross entropy loss"));
                     }
+                    cout << "loss tested" << endl;
 #endif
 #else
                     auto result = MaxLogProbabilityLoss(result_nodes, word_ids,
