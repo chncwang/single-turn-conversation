@@ -857,10 +857,8 @@ int main(int argc, char *argv[]) {
                         losses.push_back(node->getLoss().value);
                     }
                     int dim = result_nodes.at(0)->getDim();
-                    cout << "begin loss" << endl;
                     auto result = n3ldg_cuda::SoftMaxLoss(vals, vals.size(), dim, word_ids,
                             hyper_params.batch_size, losses);
-                    cout << "end loss" << endl;
                     auto result_ids = result.second;
                     for (int id : result_ids) {
                         if (id >= dim) {
