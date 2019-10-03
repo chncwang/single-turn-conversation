@@ -663,8 +663,11 @@ std::pair<dtype, std::vector<int>> MaxLogProbabilityLossWithInconsistentDims(
 //            *static_cast<LinearWordVectorNode*>(result_nodes.at(i));
 //        cout << boost::format("word_id:%1% offset:%2% dim:%3%") % ids.at(i) %
 //            vector_node.getOffset() % vector_node.getDim() << endl;
-
+#if USE_GPU
+        auto result = softMaxLoss(node, id, batchsize);
+#else
         auto result = MaxLogProbabilityLoss(node, id, batchsize);
+#endif
         if (result.second.size() != 1) {
             cerr << "result second size:" << result.second.size() << endl;
             abort();
