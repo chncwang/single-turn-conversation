@@ -52,8 +52,6 @@ void exportToGradChecker(ModelParams &model_params, CheckGrad &grad_checker) {
     grad_checker.add(model_params.hidden_to_wordvector_params.W, "hidden_to_wordvector_params W");
     grad_checker.add(model_params.left_to_right_encoder_params.cell_hidden.W,
             "left to right encoder cell_hidden W");
-    grad_checker.add(model_params.attention_parrams.bi_atten.W1, "attention W1");
-    grad_checker.add(model_params.attention_parrams.bi_atten.W2, "attention W2");
 }
 
 void addWord(unordered_map<string, int> &word_counts, const string &word) {
@@ -868,7 +866,7 @@ int main(int argc, char *argv[]) {
                     }
 #if TEST_CUDA
                     cout << "cpu loss ..." << endl;
-                    auto cpu_result = MaxLogProbabilityLoss(result_nodes, word_ids,
+                    auto cpu_result = maxLogProbabilityLoss(result_nodes, word_ids,
                             hyper_params.batch_size);
                     cout << format("result loss:%1% cpu_result loss:%2%") % result.first %
                         cpu_result.first << endl;
@@ -882,7 +880,7 @@ int main(int argc, char *argv[]) {
                     cout << "loss tested" << endl;
 #endif
 #else
-                    auto result = MaxLogProbabilityLoss(result_nodes, word_ids,
+                    auto result = maxLogProbabilityLoss(result_nodes, word_ids,
                             hyper_params.batch_size);
 #endif
                     loss_sum += result.first;
@@ -929,7 +927,7 @@ int main(int argc, char *argv[]) {
                                     conversation_pair.response_id), model_params.lookup_table);
                         vector<Node*> result_nodes = toNodePointers(
                                 decoder_components.wordvector_to_onehots);
-                        return MaxLogProbabilityLoss(result_nodes, word_ids, 1).first;
+                        return maxLogProbabilityLoss(result_nodes, word_ids, 1).first;
                     };
                     cout << format("checking grad - conversation_pair size:%1%") %
                         conversation_pair_in_batch.size() << endl;
