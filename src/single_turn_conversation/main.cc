@@ -54,8 +54,6 @@ void exportToGradChecker(ModelParams &model_params, CheckGrad &grad_checker) {
 //    grad_checker.add(model_params.hidden_to_wordvector_params.b, "hidden_to_wordvector_params b");
     grad_checker.add(model_params.left_to_right_encoder_params.cell_hidden.W,
             "left to right encoder cell_hidden W");
-    grad_checker.add(model_params.normal_attention_parrams.bi_atten.W1, "attention W1");
-    grad_checker.add(model_params.normal_attention_parrams.bi_atten.W2, "attention W2");
 }
 
 unordered_map<string, float> calculateIdf(const vector<vector<string>> sentences) {
@@ -478,6 +476,8 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
 //                print(response);
                 const WordIdfInfo &idf_info = response_idf_info_list.at(response_id);
 //                print(idf_info.keywords_behind);
+                n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+                profiler.BeginEvent("build computation graph");
                 Graph graph;
                 GraphBuilder graph_builder;
                 graph_builder.forward(graph, post_sentences.at(post_and_responses.post_id),
@@ -488,6 +488,7 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
                         response_sentences.at(response_id),
                         idf_info.keywords_behind,
                         hyper_params, model_params, false);
+                profiler.EndEvent();
                 graph.compute();
                 vector<Node*> nodes = toNodePointers(decoder_components.wordvector_to_onehots);
                 vector<int> word_ids = transferVector<int, string>(
@@ -645,7 +646,8 @@ std::pair<dtype, std::vector<int>> MaxLogProbabilityLossWithInconsistentDims(
         const std::vector<Node*> &result_nodes,
         const std::vector<int> &ids,
         int batchsize,
-        const std::function<bool(int)> &is_unkown) {
+        const std::function<bool(int)> &is_unkown,
+        int vocabulary_size) {
     if (ids.size() != result_nodes.size()) {
         cerr << "ids size is not equal to result_nodes'." << endl;
         abort();
@@ -663,17 +665,18 @@ std::pair<dtype, std::vector<int>> MaxLogProbabilityLossWithInconsistentDims(
 //            *static_cast<LinearWordVectorNode*>(result_nodes.at(i));
 //        cout << boost::format("word_id:%1% offset:%2% dim:%3%") % ids.at(i) %
 //            vector_node.getOffset() % vector_node.getDim() << endl;
-#if USE_GPU
-        auto result = softMaxLoss(node, id, batchsize);
-#else
-        auto result = MaxLogProbabilityLoss(node, id, batchsize);
-#endif
+        auto result = maxLogProbabilityLoss(node, id, batchsize);
         if (result.second.size() != 1) {
             cerr << "result second size:" << result.second.size() << endl;
             abort();
         }
         final_result.first += result.first;
-        final_result.second.push_back(result.second.front());
+        int word_id = result.second.front();
+        if (word_id < 0 || word_id > vocabulary_size) {
+            cerr << "word_id:" << word_id << endl;
+            abort();
+        }
+        final_result.second.push_back(word_id);
     }
 
     return final_result;
@@ -819,11 +822,11 @@ int main(int argc, char *argv[]) {
     vector<string> all_word_list = getAllWordsByIdfAscendingly(all_idf, word_counts,
                         hyper_params.word_cutoff);
     cout << "all_word_list size:" << all_word_list.size() << endl;
-    for (int i = 0; i < 40000; ++i) {
-        cout << all_word_list.at(i) << ":" ;
-        cout << all_idf.at(all_word_list.at(i)) << " ";
-        cout << word_counts.at(all_word_list.at(i)) << endl;
-    }
+//    for (int i = 0; i < 40000; ++i) {
+//        cout << all_word_list.at(i) << ":" ;
+//        cout << all_idf.at(all_word_list.at(i)) << " ";
+//        cout << word_counts.at(all_word_list.at(i)) << endl;
+//    }
     alphabet.init(all_word_list);
     cout << boost::format("alphabet size:%1%") % alphabet.size() << endl;
 
@@ -1064,7 +1067,7 @@ int main(int argc, char *argv[]) {
                         return model_params.lookup_table.elems.from_string(unknownkey) == id;
                     };
                     auto result = MaxLogProbabilityLossWithInconsistentDims(result_nodes, word_ids,
-                            hyper_params.batch_size, is_unkown);
+                            hyper_params.batch_size, is_unkown, model_params.lookup_table.nVSize);
                     profiler.EndCudaEvent();
                     loss_sum += result.first;
                     vector<int> filtered_ids;
@@ -1080,7 +1083,7 @@ int main(int argc, char *argv[]) {
                     profiler.BeginEvent("loss");
                     auto keyword_result = MaxLogProbabilityLossWithInconsistentDims(
                             keyword_nodes_and_ids.first, keyword_nodes_and_ids.second,
-                            hyper_params.batch_size, is_unkown);
+                            hyper_params.batch_size, is_unkown, model_params.lookup_table.nVSize);
                     profiler.EndCudaEvent();
                     loss_sum += keyword_result.first;
                     analyze(keyword_result.second, keyword_nodes_and_ids.second, *keyword_metric);
@@ -1142,9 +1145,11 @@ int main(int argc, char *argv[]) {
                         };
                         return MaxLogProbabilityLossWithInconsistentDims(
                                 keyword_nodes_and_ids.first, keyword_nodes_and_ids.second,
-                                hyper_params.batch_size, is_unkown).first +
+                                hyper_params.batch_size, is_unkown,
+                                model_params.lookup_table.nVSize).first +
                             MaxLogProbabilityLossWithInconsistentDims( result_nodes, word_ids,
-                                    hyper_params.batch_size, is_unkown).first;
+                                    hyper_params.batch_size, is_unkown,
+                                    model_params.lookup_table.nVSize).first;
                     };
                     cout << format("checking grad - conversation_pair size:%1%") %
                         conversation_pair_in_batch.size() << endl;
