@@ -326,10 +326,8 @@ vector<BeamSearchResult> mostProbableKeywords(
             context_concated->forward(graph, {components.decoder._hiddens.at(word_pos),
                     components.contexts.at(word_pos)});
 
-            UniNode *keyword = new UniNode;
-            keyword->init(hyper_params.word_dim);
-            keyword->setParam(model_params.hidden_to_keyword_params);
-            keyword->forward(graph, *context_concated);
+            Node *keyword = n3ldg_plus::uni(graph, model_params.hidden_to_keyword_params,
+                    *context_concated);
             keyword_node = keyword;
 
             LinearWordVectorNode *keyword_vector_to_onehot = new LinearWordVectorNode;

@@ -35,7 +35,6 @@ struct DecoderComponents {
             vector<Node *> &encoder_hiddens,
             bool is_training) {
         shared_ptr<DotAttentionBuilder> attention_builder(new DotAttentionBuilder);
-        attention_builder->init(model_params.normal_attention_parrams);
         Node *guide = decoder.size() == 0 ?
             static_cast<Node*>(bucket(hyper_params.hidden_dim,
                         graph)) : static_cast<Node*>(decoder._hiddens.at(decoder.size() - 1));
@@ -75,16 +74,14 @@ struct DecoderComponents {
         }
         concat_node->forward(graph, concat_inputs);
 
-        UniNode *keyword;
+        Node *keyword;
         if (return_keyword) {
             ConcatNode *context_concated = new ConcatNode;
             context_concated->init(2 * hyper_params.hidden_dim);
             context_concated->forward(graph, {decoder._hiddens.at(i), contexts.at(i)});
 
-            keyword = new UniNode;
-            keyword->init(hyper_params.word_dim);
-            keyword->setParam(model_params.hidden_to_keyword_params);
-            keyword->forward(graph, *context_concated);
+            keyword = n3ldg_plus::uni(graph, model_params.hidden_to_keyword_params,
+                    *context_concated);
         } else {
             keyword = nullptr;
         }
@@ -93,10 +90,8 @@ struct DecoderComponents {
         keyword_concated->init(concat_node->getDim() + hyper_params.word_dim);
         keyword_concated->forward(graph, {concat_node, decoder_keyword_lookups.at(i)});
 
-        UniNode *decoder_to_wordvector(new UniNode);
-        decoder_to_wordvector->init(hyper_params.word_dim);
-        decoder_to_wordvector->setParam(model_params.hidden_to_wordvector_params);
-        decoder_to_wordvector->forward(graph, *keyword_concated);
+        Node *decoder_to_wordvector = n3ldg_plus::uni(graph,
+                model_params.hidden_to_wordvector_params, *keyword_concated);
 
         return {decoder_to_wordvector, keyword};
     }
