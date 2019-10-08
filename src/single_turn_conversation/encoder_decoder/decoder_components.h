@@ -26,7 +26,6 @@ struct DecoderComponents {
             vector<Node *> &encoder_hiddens,
             bool is_training) {
         shared_ptr<DotAttentionBuilder> attention_builder(new DotAttentionBuilder);
-        attention_builder->init(model_params.attention_parrams);
         Node *guide = decoder.size() == 0 ?
             static_cast<Node*>(bucket(hyper_params.hidden_dim,
                         graph)) : static_cast<Node*>(decoder._hiddens.at(decoder.size() - 1));
@@ -55,10 +54,8 @@ struct DecoderComponents {
                 static_cast<Node*>(decoder_lookups.at(i - 1))};
         concat_node->forward(graph, concat_inputs);
 
-        UniNode *decoder_to_wordvector(new UniNode);
-        decoder_to_wordvector->init(hyper_params.word_dim);
-        decoder_to_wordvector->setParam(model_params.hidden_to_wordvector_params);
-        decoder_to_wordvector->forward(graph, *concat_node);
+        Node *decoder_to_wordvector = n3ldg_plus::uni(graph,
+                model_params.hidden_to_wordvector_params, *concat_node);
         return decoder_to_wordvector;
     }
 };

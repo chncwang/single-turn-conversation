@@ -6,7 +6,7 @@
 
 #include "N3LDG.h"
 
-struct ModelParams : public N3LDGSerializable
+struct ModelParams : public N3LDGSerializable, public TunableCombination<BaseParam>
 #if USE_GPU
 , public TransferableComponents
 #endif
@@ -14,14 +14,15 @@ struct ModelParams : public N3LDGSerializable
     LookupTable lookup_table;
     UniParams hidden_to_wordvector_params;
     LSTM1Params left_to_right_encoder_params;
-    DotAttentionParams attention_parrams;
+
+    ModelParams() : hidden_to_wordvector_params("hidden_to_wordvector_params"),
+    left_to_right_encoder_params("lstm") {}
 
     Json::Value toJson() const override {
         Json::Value json;
         json["lookup_table"] = lookup_table.toJson();
         json["hidden_to_wordvector_params"] = hidden_to_wordvector_params.toJson();
         json["left_to_right_encoder_params"] = left_to_right_encoder_params.toJson();
-        json["attention_parrams"] = attention_parrams.toJson();
         return json;
     }
 
@@ -29,15 +30,18 @@ struct ModelParams : public N3LDGSerializable
         lookup_table.fromJson(json["lookup_table"]);
         hidden_to_wordvector_params.fromJson(json["hidden_to_wordvector_params"]);
         left_to_right_encoder_params.fromJson(json["left_to_right_encoder_params"]);
-        attention_parrams.fromJson(json["attention_parrams"]);
     }
 
 #if USE_GPU
     std::vector<n3ldg_cuda::Transferable *> transferablePtrs() override {
-        return {&lookup_table, &hidden_to_wordvector_params, &left_to_right_encoder_params,
-             &attention_parrams };
+        return {&lookup_table, &hidden_to_wordvector_params, &left_to_right_encoder_params};
     }
 #endif
+
+protected:
+    virtual std::vector<Tunable<BaseParam>*> tunableComponents() override {
+        return {&lookup_table, &hidden_to_wordvector_params, &left_to_right_encoder_params};
+    }
 };
 
 #endif

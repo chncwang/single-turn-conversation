@@ -40,22 +40,6 @@ using boost::filesystem::path;
 using boost::filesystem::is_directory;
 using boost::filesystem::directory_iterator;
 
-void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
-    model_params.left_to_right_encoder_params.exportAdaParams(model_update);
-    model_params.hidden_to_wordvector_params.exportAdaParams(model_update);
-    model_params.lookup_table.exportAdaParams(model_update);
-    model_params.attention_parrams.exportAdaParams(model_update);
-}
-
-void exportToGradChecker(ModelParams &model_params, CheckGrad &grad_checker) {
-    grad_checker.add(model_params.lookup_table.E, "lookup_table");
-    grad_checker.add(model_params.hidden_to_wordvector_params.W, "hidden_to_wordvector_params W");
-    grad_checker.add(model_params.left_to_right_encoder_params.cell_hidden.W,
-            "left to right encoder cell_hidden W");
-    grad_checker.add(model_params.attention_parrams.bi_atten.W1, "attention W1");
-    grad_checker.add(model_params.attention_parrams.bi_atten.W2, "attention W2");
-}
-
 void addWord(unordered_map<string, int> &word_counts, const string &word) {
     auto it = word_counts.find(word);
     if (it == word_counts.end()) {
@@ -698,7 +682,6 @@ int main(int argc, char *argv[]) {
                 hyper_params.word_dim + hyper_params.hidden_dim);
         model_params.hidden_to_wordvector_params.init(hyper_params.word_dim,
                 hyper_params.hidden_dim + hyper_params.hidden_dim + hyper_params.word_dim, false);
-        model_params.attention_parrams.init(hyper_params.hidden_dim, hyper_params.hidden_dim);
     };
 
     if (default_config.program_mode != ProgramMode::METRIC) {
@@ -765,11 +748,11 @@ int main(int argc, char *argv[]) {
         ModelUpdate model_update;
         model_update._alpha = hyper_params.learning_rate;
         model_update._reg = hyper_params.l2_reg;
-        exportToOptimizer(model_params, model_update);
+        model_update.setParams(model_params.tunableParams());
 
         CheckGrad grad_checker;
         if (default_config.check_grad) {
-            exportToGradChecker(model_params, grad_checker);
+            grad_checker.init(model_params.tunableParams());
         }
 
         dtype last_loss_sum = 1e10f;
@@ -868,7 +851,7 @@ int main(int argc, char *argv[]) {
                     }
 #if TEST_CUDA
                     cout << "cpu loss ..." << endl;
-                    auto cpu_result = MaxLogProbabilityLoss(result_nodes, word_ids,
+                    auto cpu_result = maxLogProbabilityLoss(result_nodes, word_ids,
                             hyper_params.batch_size);
                     cout << format("result loss:%1% cpu_result loss:%2%") % result.first %
                         cpu_result.first << endl;
@@ -882,7 +865,7 @@ int main(int argc, char *argv[]) {
                     cout << "loss tested" << endl;
 #endif
 #else
-                    auto result = MaxLogProbabilityLoss(result_nodes, word_ids,
+                    auto result = maxLogProbabilityLoss(result_nodes, word_ids,
                             hyper_params.batch_size);
 #endif
                     loss_sum += result.first;
@@ -913,7 +896,7 @@ int main(int argc, char *argv[]) {
                 if (default_config.check_grad) {
                     auto loss_function = [&](const ConversationPair &conversation_pair) -> dtype {
                         GraphBuilder graph_builder;
-                        Graph graph;
+                        Graph graph(false);
 
                         graph_builder.forward(graph, post_sentences.at(conversation_pair.post_id),
                                 hyper_params, model_params, true);
@@ -929,7 +912,7 @@ int main(int argc, char *argv[]) {
                                     conversation_pair.response_id), model_params.lookup_table);
                         vector<Node*> result_nodes = toNodePointers(
                                 decoder_components.wordvector_to_onehots);
-                        return MaxLogProbabilityLoss(result_nodes, word_ids, 1).first;
+                        return maxLogProbabilityLoss(result_nodes, word_ids, 1).first;
                     };
                     cout << format("checking grad - conversation_pair size:%1%") %
                         conversation_pair_in_batch.size() << endl;
