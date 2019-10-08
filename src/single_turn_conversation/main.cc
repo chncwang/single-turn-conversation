@@ -40,20 +40,6 @@ using boost::filesystem::path;
 using boost::filesystem::is_directory;
 using boost::filesystem::directory_iterator;
 
-void exportToOptimizer(ModelParams &model_params, ModelUpdate &model_update) {
-    model_params.left_to_right_encoder_params.exportAdaParams(model_update);
-    model_params.hidden_to_wordvector_params.exportAdaParams(model_update);
-    model_params.lookup_table.exportAdaParams(model_update);
-    model_params.attention_parrams.exportAdaParams(model_update);
-}
-
-void exportToGradChecker(ModelParams &model_params, CheckGrad &grad_checker) {
-    grad_checker.add(model_params.lookup_table.E, "lookup_table");
-    grad_checker.add(model_params.hidden_to_wordvector_params.W, "hidden_to_wordvector_params W");
-    grad_checker.add(model_params.left_to_right_encoder_params.cell_hidden.W,
-            "left to right encoder cell_hidden W");
-}
-
 void addWord(unordered_map<string, int> &word_counts, const string &word) {
     auto it = word_counts.find(word);
     if (it == word_counts.end()) {
@@ -696,7 +682,6 @@ int main(int argc, char *argv[]) {
                 hyper_params.word_dim + hyper_params.hidden_dim);
         model_params.hidden_to_wordvector_params.init(hyper_params.word_dim,
                 hyper_params.hidden_dim + hyper_params.hidden_dim + hyper_params.word_dim, false);
-        model_params.attention_parrams.init(hyper_params.hidden_dim, hyper_params.hidden_dim);
     };
 
     if (default_config.program_mode != ProgramMode::METRIC) {
@@ -763,11 +748,11 @@ int main(int argc, char *argv[]) {
         ModelUpdate model_update;
         model_update._alpha = hyper_params.learning_rate;
         model_update._reg = hyper_params.l2_reg;
-        exportToOptimizer(model_params, model_update);
+        model_update.setParams(model_params.tunableParams());
 
         CheckGrad grad_checker;
         if (default_config.check_grad) {
-            exportToGradChecker(model_params, grad_checker);
+            grad_checker.init(model_params.tunableParams());
         }
 
         dtype last_loss_sum = 1e10f;
@@ -813,6 +798,7 @@ int main(int argc, char *argv[]) {
                             hyper_params.learning_rate << endl;
                     }
                 }
+                profiler.BeginEvent("build braph");
                 Graph graph;
                 vector<shared_ptr<GraphBuilder>> graph_builders;
                 vector<DecoderComponents> decoder_components_vector;
@@ -836,9 +822,9 @@ int main(int argc, char *argv[]) {
                             hyper_params, model_params, true);
                     decoder_components_vector.push_back(decoder_components);
                 }
+                profiler.EndCudaEvent();
 
                 graph.compute();
-                cout << "graph compute end" << endl;
 
                 for (int i = 0; i < hyper_params.batch_size; ++i) {
                     int instance_index = getSentenceIndex(i);
@@ -911,7 +897,7 @@ int main(int argc, char *argv[]) {
                 if (default_config.check_grad) {
                     auto loss_function = [&](const ConversationPair &conversation_pair) -> dtype {
                         GraphBuilder graph_builder;
-                        Graph graph;
+                        Graph graph(false);
 
                         graph_builder.forward(graph, post_sentences.at(conversation_pair.post_id),
                                 hyper_params, model_params, true);
