@@ -798,6 +798,7 @@ int main(int argc, char *argv[]) {
                             hyper_params.learning_rate << endl;
                     }
                 }
+                profiler.BeginEvent("build braph");
                 Graph graph;
                 vector<shared_ptr<GraphBuilder>> graph_builders;
                 vector<DecoderComponents> decoder_components_vector;
@@ -821,9 +822,9 @@ int main(int argc, char *argv[]) {
                             hyper_params, model_params, true);
                     decoder_components_vector.push_back(decoder_components);
                 }
+                profiler.EndCudaEvent();
 
                 graph.compute();
-                cout << "graph compute end" << endl;
 
                 for (int i = 0; i < hyper_params.batch_size; ++i) {
                     int instance_index = getSentenceIndex(i);
