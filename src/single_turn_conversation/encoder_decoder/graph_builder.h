@@ -17,6 +17,7 @@
 #include "hyper_params.h"
 #include "single_turn_conversation/default_config.h"
 #include "single_turn_conversation/encoder_decoder/decoder_components.h"
+#include "single_turn_conversation/def.h"
 
 using namespace std;
 
@@ -308,10 +309,12 @@ struct GraphBuilder {
             const vector<string> &answer,
             const HyperParams &hyper_params,
             ModelParams &model_params,
-            bool is_training) {
+            bool is_training,
+            int max_sentence_len_in_batch) {
         for (int i = 0; i < answer.size(); ++i) {
-            forwardDecoderByOneStep(graph, decoder_components, i,
-                    i == 0 ? nullptr : &answer.at(i - 1), hyper_params, model_params, is_training);
+            forwardDecoderByOneStep(graph, decoder_components, i, i == 0 ? nullptr :
+                    &answer.at(i - 1), hyper_params, model_params, is_training,
+                    max_sentence_len_in_batch);
         }
     }
 
@@ -319,7 +322,8 @@ struct GraphBuilder {
             const string *answer,
             const HyperParams &hyper_params,
             ModelParams &model_params,
-            bool is_training) {
+            bool is_training,
+            int max_sentence_len_in_batch) {
         Node *last_input;
         if (i > 0) {
             LookupNode* before_dropout(new LookupNode);
@@ -340,7 +344,7 @@ struct GraphBuilder {
         }
 
         decoder_components.forward(graph, hyper_params, model_params, *last_input,
-                left_to_right_encoder._hiddens, is_training);
+                left_to_right_encoder._hiddens, is_training, max_sentence_len_in_batch);
 
         Node *decoder_to_wordvector = decoder_components.decoderToWordVectors(graph, hyper_params,
                 model_params, i);
@@ -428,7 +432,7 @@ struct GraphBuilder {
                     DecoderComponents &decoder_components = beam.at(beam_i);
                     forwardDecoderByOneStep(graph, decoder_components, i,
                             i == 0 ? nullptr : &last_answers.at(beam_i), hyper_params,
-                            model_params, false);
+                            model_params, false, 0);
                 }
 
                 graph.compute();
