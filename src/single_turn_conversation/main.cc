@@ -997,7 +997,7 @@ int main(int argc, char *argv[]) {
             profiler.SetEnabled(true);
             profiler.BeginEvent("total");
 
-            for (int batch_i = 0; batch_i < batch_count; ++batch_i) {
+            for (int batch_i = 0; batch_i < 10; ++batch_i) { // TODO
                 cout << format("batch_i:%1% iteration:%2%") % batch_i % iteration << endl;
                 if (epoch == 0) {
                     if (iteration < hyper_params.warm_up_iterations) {
@@ -1157,6 +1157,8 @@ int main(int argc, char *argv[]) {
 
                 ++iteration;
             }
+            profiler.EndCudaEvent();
+            profiler.Print();
 
             cout << "loss_sum:" << loss_sum << " last_loss_sum:" << last_loss_sum << endl;
             if (loss_sum > last_loss_sum) {
@@ -1183,8 +1185,6 @@ int main(int argc, char *argv[]) {
 
             last_loss_sum = loss_sum;
             loss_sum = 0;
-            profiler.EndCudaEvent();
-            profiler.Print();
         }
     } else {
         abort();
