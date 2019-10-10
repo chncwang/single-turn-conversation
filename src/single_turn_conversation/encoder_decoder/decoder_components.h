@@ -33,9 +33,10 @@ struct DecoderComponents {
 
         int left_len = max_sentence_len_in_batch - encoder_hiddens.size();
         vector<Node*> len_fixed_hiddens = encoder_hiddens;
-        if (is_training) {
-            for (int i = 0; i < left_len; ++i) {
-                Node *bucket = n3ldg_plus::bucket(graph, hyper_params.hidden_dim, -1000.0f);
+        if (is_training && left_len > 0) {
+            Node *bucket = n3ldg_plus::bucket(graph, hyper_params.hidden_dim, -1000.0f);
+            len_fixed_hiddens.push_back(bucket);
+            for (int i = 1; i < left_len; ++i) {
                 len_fixed_hiddens.push_back(bucket);
             }
         }
