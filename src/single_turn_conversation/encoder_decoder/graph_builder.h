@@ -53,11 +53,12 @@ public:
             }
 
     dtype finalScore() const {
-        set<int> unique_words;
-        for (const auto &p : path_) {
-            unique_words.insert(p.word_id);
-        }
-        return (final_log_probability + extra_score_) / unique_words.size();
+//        set<int> unique_words;
+//        for (const auto &p : path_) {
+//            unique_words.insert(p.word_id);
+//        }
+//        return (final_log_probability + extra_score_) / unique_words.size();
+        return final_log_probability;
     }
 
     dtype finalLogProbability() const {
