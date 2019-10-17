@@ -24,12 +24,24 @@ struct DecoderComponents {
     void forward(Graph &graph, const HyperParams &hyper_params, ModelParams &model_params,
             Node &input,
             vector<Node *> &encoder_hiddens,
-            bool is_training) {
+            bool is_training,
+            int max_sentence_len_in_batch) {
         shared_ptr<DotAttentionBuilder> attention_builder(new DotAttentionBuilder);
         Node *guide = decoder.size() == 0 ?
             static_cast<Node*>(bucket(hyper_params.hidden_dim,
                         graph)) : static_cast<Node*>(decoder._hiddens.at(decoder.size() - 1));
-        attention_builder->forward(graph, encoder_hiddens, *guide);
+
+        int left_len = max_sentence_len_in_batch - encoder_hiddens.size();
+        vector<Node*> len_fixed_hiddens = encoder_hiddens;
+        if (is_training && left_len > 0) {
+            Node *bucket = n3ldg_plus::bucket(graph, hyper_params.hidden_dim, -1000.0f);
+            len_fixed_hiddens.push_back(bucket);
+            for (int i = 1; i < left_len; ++i) {
+                len_fixed_hiddens.push_back(bucket);
+            }
+        }
+
+        attention_builder->forward(graph, len_fixed_hiddens, *guide);
         contexts.push_back(attention_builder->_hidden);
 
         ConcatNode* concat = new ConcatNode;
