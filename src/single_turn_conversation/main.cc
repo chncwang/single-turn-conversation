@@ -358,7 +358,7 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
                         hyper_params, model_params, false);
                 DecoderComponents decoder_components;
                 graph_builder.forwardDecoder(graph, decoder_components,
-                        response_sentences.at(response_id), hyper_params, model_params, false, 0);
+                        response_sentences.at(response_id), hyper_params, model_params, false);
                 graph.compute();
                 vector<Node*> nodes = toNodePointers(decoder_components.wordvector_to_onehots);
                 vector<int> word_ids = transferVector<int, string>(
@@ -904,7 +904,7 @@ int main(int argc, char *argv[]) {
                         DecoderComponents decoder_components;
                         graph_builder.forwardDecoder(graph, decoder_components,
                                 response_sentences.at(conversation_pair.response_id),
-                                hyper_params, model_params, true, max_post_len);
+                                hyper_params, model_params, true);
 
                         graph.compute();
 

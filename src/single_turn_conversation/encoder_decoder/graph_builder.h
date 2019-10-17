@@ -430,7 +430,7 @@ struct GraphBuilder {
                     DecoderComponents &decoder_components = beam.at(beam_i);
                     forwardDecoderByOneStep(graph, decoder_components, i,
                             i == 0 ? nullptr : &last_answers.at(beam_i), hyper_params,
-                            model_params, false, 0);
+                            model_params, false);
                 }
 
                 graph.compute();
