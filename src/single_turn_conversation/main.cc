@@ -485,10 +485,22 @@ float metricTestPosts(const HyperParams &hyper_params, ModelParams &model_params
                     nodes.push_back(keyword_nodes_and_ids.first.at(i));
                     word_ids.push_back(keyword_nodes_and_ids.second.at(i));
                 }
-                float perplex = computePerplex(nodes, word_ids);
+                vector<int> filtered_word_ids;
+                vector<Node*> filtered_nodes;
+                for (int i = 0; i < word_ids.size(); ++i) {
+                    int word_id = word_ids.at(i);
+                    if (word_id == model_params.lookup_table.nUNKId) {
+                        continue;
+                    }
+                    filtered_word_ids.push_back(word_id);
+                    filtered_nodes.push_back(nodes.at(i));
+                }
+
+                float perplex = computePerplex(filtered_nodes, filtered_word_ids);
                 avg_perplex += perplex;
             }
             avg_perplex /= response_ids.size();
+            cout << "size:" << response_ids.size() << endl;
             cout << "avg_perplex:" << avg_perplex << endl;
             rep_perplex_mutex.lock();
             rep_perplex += avg_perplex;
@@ -997,7 +1009,7 @@ int main(int argc, char *argv[]) {
             profiler.SetEnabled(true);
             profiler.BeginEvent("total");
 
-            for (int batch_i = 0; batch_i < batch_count; ++batch_i) {
+            for (int batch_i = 0; batch_i < 10; ++batch_i) { // TODO
                 cout << format("batch_i:%1% iteration:%2%") % batch_i % iteration << endl;
                 if (epoch == 0) {
                     if (iteration < hyper_params.warm_up_iterations) {
@@ -1157,6 +1169,8 @@ int main(int argc, char *argv[]) {
 
                 ++iteration;
             }
+            profiler.EndCudaEvent();
+            profiler.Print();
 
             cout << "loss_sum:" << loss_sum << " last_loss_sum:" << last_loss_sum << endl;
             if (loss_sum > last_loss_sum) {
@@ -1183,8 +1197,6 @@ int main(int argc, char *argv[]) {
 
             last_loss_sum = loss_sum;
             loss_sum = 0;
-            profiler.EndCudaEvent();
-            profiler.Print();
         }
     } else {
         abort();
