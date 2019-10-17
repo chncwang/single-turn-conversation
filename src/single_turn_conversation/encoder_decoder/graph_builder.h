@@ -310,12 +310,10 @@ struct GraphBuilder {
             const vector<string> &answer,
             const HyperParams &hyper_params,
             ModelParams &model_params,
-            bool is_training,
-            int max_sentence_len_in_batch) {
+            bool is_training) {
         for (int i = 0; i < answer.size(); ++i) {
             forwardDecoderByOneStep(graph, decoder_components, i, i == 0 ? nullptr :
-                    &answer.at(i - 1), hyper_params, model_params, is_training,
-                    max_sentence_len_in_batch);
+                    &answer.at(i - 1), hyper_params, model_params, is_training);
         }
     }
 
@@ -323,8 +321,7 @@ struct GraphBuilder {
             const string *answer,
             const HyperParams &hyper_params,
             ModelParams &model_params,
-            bool is_training,
-            int max_sentence_len_in_batch) {
+            bool is_training) {
         Node *last_input;
         if (i > 0) {
             LookupNode* before_dropout(new LookupNode);
@@ -345,7 +342,7 @@ struct GraphBuilder {
         }
 
         decoder_components.forward(graph, hyper_params, model_params, *last_input,
-                left_to_right_encoder._hiddens, is_training, max_sentence_len_in_batch);
+                left_to_right_encoder._hiddens, is_training);
 
         Node *decoder_to_wordvector = decoder_components.decoderToWordVectors(graph, hyper_params,
                 model_params, i);

@@ -806,15 +806,6 @@ int main(int argc, char *argv[]) {
                 auto getSentenceIndex = [batch_i, batch_count](int i) {
                     return i * batch_count + batch_i;
                 };
-                int max_post_len = -1;
-                for (int i = 0; i < hyper_params.batch_size; ++i) {
-                    int instance_index = getSentenceIndex(i);
-                    int post_id = train_conversation_pairs.at(instance_index).post_id;
-                    int size = post_sentences.at(post_id).size();
-                    if (size > max_post_len) {
-                        max_post_len = size;
-                    }
-                }
                 for (int i = 0; i < hyper_params.batch_size; ++i) {
                     shared_ptr<GraphBuilder> graph_builder(new GraphBuilder);
                     graph_builders.push_back(graph_builder);
@@ -827,8 +818,7 @@ int main(int argc, char *argv[]) {
                     int response_id = train_conversation_pairs.at(instance_index).response_id;
                     DecoderComponents decoder_components;
                     graph_builder->forwardDecoder(graph, decoder_components,
-                            response_sentences.at(response_id), hyper_params, model_params, true,
-                            max_post_len);
+                            response_sentences.at(response_id), hyper_params, model_params, true);
                     decoder_components_vector.push_back(decoder_components);
                 }
                 profiler.EndCudaEvent();
